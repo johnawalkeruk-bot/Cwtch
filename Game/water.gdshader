@@ -17,7 +17,11 @@ uniform float water_time = 0.0;
 uniform sampler2D bed_heights : filter_linear, repeat_disable;
 uniform vec2 height_samples;
 varying vec2 ground_position;
-void vertex() { ground_position = VERTEX.xz; }
+void vertex() {
+ ground_position = VERTEX.xz;
+ vec2 uv=((VERTEX.xz-grid_min)/(grid_size*micro_size)*(height_samples-1.0)+0.5)/height_samples;
+ VERTEX.y += max(0.0,texture(bed_heights,uv).r);
+}
 float hash(vec2 p) { return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
 float noise(vec2 p) {
  vec2 i=floor(p); vec2 f=fract(p); f=f*f*(3.0-2.0*f);

@@ -591,40 +591,53 @@ uniform vec3 sun_direction = vec3(1.0, 0.0, 0.25);
 uniform float daylight = 1.0;
 uniform float cloud_cover = 0.15;
 uniform float cycle_time = 0.0;
-
-float hash(vec2 p) {
-	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+uniform float lightning = 0.0;
+float hash(vec3 p) { return fract(sin(dot(p,vec3(127.1,311.7,74.7)))*43758.5453); }
+float noise(vec3 p) {
+ vec3 i=floor(p),f=fract(p); f=f*f*(3.0-2.0*f);
+ return mix(mix(mix(hash(i),hash(i+vec3(1,0,0)),f.x),mix(hash(i+vec3(0,1,0)),hash(i+vec3(1,1,0)),f.x),f.y),mix(mix(hash(i+vec3(0,0,1)),hash(i+vec3(1,0,1)),f.x),mix(hash(i+vec3(0,1,1)),hash(i+vec3(1,1,1)),f.x),f.y),f.z);
 }
-float noise(vec2 p) {
-	vec2 i = floor(p);
-	vec2 f = fract(p);
-	f = f * f * (3.0 - 2.0 * f);
-	return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x),
-		mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y);
+float clouds(vec3 p) {
+ float value=0.0,weight=0.55;
+ for(int i=0;i<5;i++){value+=noise(p)*weight;p=p*2.03+vec3(17.1,9.2,4.7);weight*=0.48;}
+ return value;
 }
 void sky() {
-	vec3 direction = normalize(EYEDIR);
-	float height = direction.y;
-	vec3 horizon = vec3(0.77, 0.73, 0.65);
-	vec3 zenith = vec3(0.38, 0.49, 0.55);
-	float twilight = (1.0-smoothstep(0.02,0.38,abs(sun_direction.y)))*smoothstep(-0.22,0.02,sun_direction.y);
-	horizon=mix(horizon,vec3(0.95,0.61,0.44),twilight*0.75);
-	zenith=mix(zenith,vec3(0.47,0.40,0.57),twilight*0.7);
-	vec3 sky_color = mix(horizon, zenith, smoothstep(0.0, 0.9, height));
-	// Direction-space noise keeps the panorama seamless, including its poles.
-	vec2 cloud_uv = direction.xz * 3.0 / (0.6 + abs(height)) + vec2(cycle_time * 0.0008, 0.0);
-	float cloud = noise(cloud_uv) * 0.65 + noise(cloud_uv * 2.7) * 0.35;
-	sky_color = mix(sky_color, vec3(0.86, 0.82, 0.73), smoothstep(0.38, 0.8, cloud) * 0.42);
-	// Mountain silhouettes now come from actual distant geometry.
-	sky_color = mix(vec3(0.015, 0.022, 0.045) + sky_color * 0.055, sky_color, daylight);
-	sky_color = mix(sky_color, mix(vec3(0.025,0.035,0.06),vec3(0.39,0.44,0.46),daylight), cloud_cover * 0.65);
-	float sun = smoothstep(0.9993, 0.9998, dot(direction, normalize(sun_direction)));
-	float halo = pow(max(dot(direction, normalize(sun_direction)),0.0), 90.0);
-	float moon = smoothstep(0.9994, 0.9998, dot(direction, -normalize(sun_direction)));
-	float stars = step(0.997, hash(floor(direction.xz / (abs(height)+0.2)*360.0))) * smoothstep(0.1,0.35,height);
-	sky_color += vec3(1.0,0.72,0.36) * (sun * 1.6 + halo * 0.18) * (1.0-cloud_cover*0.8);
-	sky_color += (vec3(0.6,0.72,0.9)*moon + vec3(stars*0.45*pow(1.0-daylight,3.0)))*(1.0-daylight)*(1.0-cloud_cover);
-	COLOR = sky_color;
+ vec3 direction=normalize(EYEDIR),sun_dir=normalize(sun_direction);
+ float elevation=direction.y;
+ float twilight=(1.0-smoothstep(0.02,0.38,abs(sun_dir.y)))*smoothstep(-0.22,0.02,sun_dir.y);
+ vec3 horizon=mix(vec3(0.72,0.76,0.76),vec3(0.92,0.58,0.43),twilight*0.75);
+ vec3 zenith=mix(vec3(0.29,0.43,0.55),vec3(0.40,0.34,0.53),twilight*0.65);
+ vec3 sky_color=mix(horizon,zenith,smoothstep(0.0,0.85,elevation));
+ sky_color=mix(vec3(0.007,0.014,0.035)+sky_color*0.025,sky_color,daylight);
+ // Smooth 3D density has no panorama seam or pinched poles.
+ vec3 p=direction*vec3(5.5,3.0,5.5)+vec3(cycle_time*0.0018,0.0,cycle_time*0.0006);
+ float density=clouds(p);
+ float threshold=mix(0.62,0.23,cloud_cover);
+ float cover=smoothstep(threshold,threshold+0.17,density)*smoothstep(-0.04,0.15,elevation);
+ float wisps=smoothstep(0.57,0.73,clouds(p*1.8+vec3(40.0)))*0.24;
+ cover=clamp(cover+wisps*smoothstep(0.0,0.3,elevation),0.0,1.0);
+ // Fine, softly filtered star points with warmer and cooler individual colours.
+ vec2 star_grid=vec2(atan(direction.z,direction.x)/6.2831853+0.5,acos(clamp(elevation,-1.0,1.0))/3.14159265)*vec2(800.0,400.0);
+ vec2 cell=floor(star_grid);
+ float seed=hash(vec3(mod(cell.x,800.0),cell.y,11.0));
+ vec2 centre=vec2(hash(vec3(cell,23.0)),hash(vec3(cell,49.0)))*0.5+0.25;
+ vec2 offset=fract(star_grid)-centre;
+ float star=exp(-dot(offset,offset)*160.0)*step(0.995,seed);
+ star*=0.8+0.2*sin(cycle_time*1.2+seed*900.0);
+ vec3 star_color=mix(vec3(0.64,0.77,1.0),vec3(1.0,0.88,0.67),hash(vec3(cell,8.0)));
+ sky_color+=star_color*star*pow(1.0-daylight,3.0)*smoothstep(0.02,0.3,elevation)*1.7;
+ float sun=smoothstep(0.9993,0.9998,dot(direction,sun_dir));
+ float halo=pow(max(dot(direction,sun_dir),0.0),60.0);
+ float moon=smoothstep(0.9994,0.9998,dot(direction,-sun_dir));
+ sky_color+=vec3(1.0,0.76,0.47)*(sun*1.3+halo*0.15)*daylight;
+ sky_color+=vec3(0.53,0.65,0.85)*moon*(1.0-daylight);
+ float lit=clamp(0.45+(density-clouds(p+sun_dir*0.18))*3.0,0.0,1.0);
+ vec3 cloud_day=mix(vec3(0.39,0.46,0.49),vec3(0.89,0.89,0.82),lit);
+ cloud_day=mix(cloud_day,vec3(0.81,0.58,0.50),twilight*0.32);
+ vec3 cloud_color=mix(vec3(0.023,0.033,0.055),cloud_day,daylight);
+ sky_color=mix(sky_color,cloud_color,cover*0.97);
+ COLOR=mix(sky_color,vec3(0.80,0.87,0.98),clamp(lightning,0.0,1.0)*0.4);
 }
 
 ```
@@ -2426,6 +2439,7 @@ func build(owner_garden: Node3D) -> void:
 	samples = garden.chunk_count * RESOLUTION + Vector2i.ONE
 	heights = Image.create(samples.x, samples.y, false, Image.FORMAT_RF)
 	heights.fill(Color(0.0, 0.0, 0.0))
+	_sculpt_meadow()
 	_sculpt_pond()
 	height_texture = ImageTexture.create_from_image(heights)
 	for z in range(garden.chunk_count.y):
@@ -2433,6 +2447,24 @@ func build(owner_garden: Node3D) -> void:
 			_build_chunk(Vector2i(x, z))
 	_build_water()
 	_build_skirts()
+
+func _sculpt_meadow() -> void:
+	var noise := FastNoiseLite.new()
+	noise.seed = 1891
+	noise.frequency = 0.16
+	noise.fractal_octaves = 3
+	var half: Vector2 = Vector2(garden.chunk_count)
+	for z in range(samples.y):
+		for x in range(samples.x):
+			var p: Vector2 = garden.grid_min + Vector2(x, z) * spacing
+			# A smooth level join to the surrounding meadow, and a stable cottage pad.
+			var edge := smoothstep(0.0, 2.0, minf(half.x-absf(p.x), half.y-absf(p.y)))
+			var pad := (p-Vector2(-6,-5)).abs()-Vector2(3.5,3.3)
+			var cottage_blend := smoothstep(0.0, 1.5, pad.max(Vector2.ZERO).length())
+			var working_plot := lerpf(0.22, 1.0, smoothstep(2.0, 5.0, p.length()))
+			var rolling := 0.32 + noise.get_noise_2dv(p)*0.65
+			rolling += 0.07*sin(p.x*0.75)*cos(p.y*0.65)
+			heights.set_pixel(x,z,Color(maxf(0.0,rolling)*edge*cottage_blend*working_plot,0,0))
 
 func _sculpt_pond() -> void:
 	var banks: Array[PackedVector2Array] = []
@@ -2531,6 +2563,8 @@ func _build_chunk(cell: Vector2i) -> void:
 func _build_water() -> void:
 	var plane := PlaneMesh.new()
 	plane.size = Vector2(garden.chunk_count) * 2.0
+	plane.subdivide_width = samples.x - 2
+	plane.subdivide_depth = samples.y - 2
 	var water := MeshInstance3D.new()
 	water.name = "PondSurface"
 	water.position.y = WATER_LEVEL
@@ -3469,6 +3503,7 @@ func build(world: Node3D) -> void:
 			for i in range(batch.instance_count):
 				var point := Vector3(x * 4.0 + rng.randf_range(0.12, 3.88), 0.008, z * 4.0 + rng.randf_range(0.12, 3.88))
 				var scale_factor := rng.randf_range(0.65, 1.3)
+				point.y += world.heightfield.height_at(Vector2(point.x, point.z))
 				var basis := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3.ONE * scale_factor)
 				batch.set_instance_transform(i, Transform3D(basis, point))
 				batch.set_instance_color(i, Color(rng.randf_range(0.8, 1.13), rng.randf_range(0.9, 1.1), 0.9))
@@ -4279,10 +4314,12 @@ uniform bool background_surface = false;
 uniform sampler2D brush_weights : filter_linear, repeat_disable;
 uniform float background_width = 160.0;
 varying vec2 ground_position;
+varying float ground_height;
 varying vec3 eye_position;
 varying vec3 orthographic_direction;
 void vertex() {
  ground_position = (world_to_grid * MODEL_MATRIX * vec4(VERTEX, 1.0)).xz;
+ ground_height = (world_to_grid * MODEL_MATRIX * vec4(VERTEX, 1.0)).y;
  eye_position = (world_to_grid * vec4(CAMERA_POSITION_WORLD, 1.0)).xyz;
  orthographic_direction = (world_to_grid * INV_VIEW_MATRIX * vec4(0.0, 0.0, 1.0, 0.0)).xyz;
 }
@@ -4322,7 +4359,7 @@ void fragment() {
  vec2 uv = ground_position*repeats_per_metre;
  vec2 dx = dFdx(uv);
  vec2 dy = dFdy(uv);
- vec3 view = normalize(eye_position-vec3(ground_position.x,0,ground_position.y));
+ vec3 view = normalize(eye_position-vec3(ground_position.x,ground_height,ground_position.y));
  if(orthographic_view) { view=normalize(orthographic_direction); }
  if(pom_enabled) {
   float count = floor(mix(28.0,10.0,abs(view.y)));
@@ -4359,7 +4396,8 @@ void fragment() {
  vec3 data=details(uv,layers,w,dx,dy);
  float moisture=max(wetness,background_surface ? 0.0 : texture(watered_tiles,(ground_position-grid_min)/(grid_size*micro_size)).r);
  ALBEDO=color * (1.0 - moisture * 0.28);
- ROUGHNESS=mix(clamp(data.g,0.25,1.0),0.32,moisture*0.65);
+ ROUGHNESS=mix(clamp(data.g,0.88,1.0),0.73,moisture*0.6);
+ SPECULAR=0.12;
  AO=mix(1.0,data.b,0.65);
  // UVs increase in world +X/+Z: OpenGL map green points toward -Z.
  vec3 normal=normalize(vec3(mapped_normal.x*0.65,mapped_normal.z,-mapped_normal.y*0.65));
@@ -5039,10 +5077,10 @@ float noise(vec2 p) {
 }
 void fragment() {
  vec2 q=UV*2.0-1.0;
- float edge=pow(max(0.0,1.0-dot(q,q)),softness);
+ float edge=pow(1.0-smoothstep(0.05,1.0,dot(q,q)),max(2.0,softness));
  float cloud=noise(UV*vec2(6,3)+vec2(drift_time*0.004,0))*0.6+noise(UV*vec2(13,5)-vec2(drift_time*0.002,0))*0.4;
  ALBEDO=tint;
- ALPHA=edge*(0.35+0.65*smoothstep(0.1,0.8,cloud))*opacity;
+ ALPHA=edge*smoothstep(0.26,0.72,cloud)*opacity;
 }
 
 ```
@@ -5851,7 +5889,11 @@ uniform float water_time = 0.0;
 uniform sampler2D bed_heights : filter_linear, repeat_disable;
 uniform vec2 height_samples;
 varying vec2 ground_position;
-void vertex() { ground_position = VERTEX.xz; }
+void vertex() {
+ ground_position = VERTEX.xz;
+ vec2 uv=((VERTEX.xz-grid_min)/(grid_size*micro_size)*(height_samples-1.0)+0.5)/height_samples;
+ VERTEX.y += max(0.0,texture(bed_heights,uv).r);
+}
 float hash(vec2 p) { return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }
 float noise(vec2 p) {
  vec2 i=floor(p); vec2 f=fract(p); f=f*f*(3.0-2.0*f);

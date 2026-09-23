@@ -18,10 +18,12 @@ uniform bool background_surface = false;
 uniform sampler2D brush_weights : filter_linear, repeat_disable;
 uniform float background_width = 160.0;
 varying vec2 ground_position;
+varying float ground_height;
 varying vec3 eye_position;
 varying vec3 orthographic_direction;
 void vertex() {
  ground_position = (world_to_grid * MODEL_MATRIX * vec4(VERTEX, 1.0)).xz;
+ ground_height = (world_to_grid * MODEL_MATRIX * vec4(VERTEX, 1.0)).y;
  eye_position = (world_to_grid * vec4(CAMERA_POSITION_WORLD, 1.0)).xyz;
  orthographic_direction = (world_to_grid * INV_VIEW_MATRIX * vec4(0.0, 0.0, 1.0, 0.0)).xyz;
 }
@@ -61,7 +63,7 @@ void fragment() {
  vec2 uv = ground_position*repeats_per_metre;
  vec2 dx = dFdx(uv);
  vec2 dy = dFdy(uv);
- vec3 view = normalize(eye_position-vec3(ground_position.x,0,ground_position.y));
+ vec3 view = normalize(eye_position-vec3(ground_position.x,ground_height,ground_position.y));
  if(orthographic_view) { view=normalize(orthographic_direction); }
  if(pom_enabled) {
   float count = floor(mix(28.0,10.0,abs(view.y)));
@@ -98,7 +100,8 @@ void fragment() {
  vec3 data=details(uv,layers,w,dx,dy);
  float moisture=max(wetness,background_surface ? 0.0 : texture(watered_tiles,(ground_position-grid_min)/(grid_size*micro_size)).r);
  ALBEDO=color * (1.0 - moisture * 0.28);
- ROUGHNESS=mix(clamp(data.g,0.25,1.0),0.32,moisture*0.65);
+ ROUGHNESS=mix(clamp(data.g,0.88,1.0),0.73,moisture*0.6);
+ SPECULAR=0.12;
  AO=mix(1.0,data.b,0.65);
  // UVs increase in world +X/+Z: OpenGL map green points toward -Z.
  vec3 normal=normalize(vec3(mapped_normal.x*0.65,mapped_normal.z,-mapped_normal.y*0.65));

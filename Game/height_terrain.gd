@@ -15,6 +15,7 @@ func build(owner_garden: Node3D) -> void:
 	samples = garden.chunk_count * RESOLUTION + Vector2i.ONE
 	heights = Image.create(samples.x, samples.y, false, Image.FORMAT_RF)
 	heights.fill(Color(0.0, 0.0, 0.0))
+	_sculpt_meadow()
 	_sculpt_pond()
 	height_texture = ImageTexture.create_from_image(heights)
 	for z in range(garden.chunk_count.y):
@@ -22,6 +23,24 @@ func build(owner_garden: Node3D) -> void:
 			_build_chunk(Vector2i(x, z))
 	_build_water()
 	_build_skirts()
+
+func _sculpt_meadow() -> void:
+	var noise := FastNoiseLite.new()
+	noise.seed = 1891
+	noise.frequency = 0.16
+	noise.fractal_octaves = 3
+	var half: Vector2 = Vector2(garden.chunk_count)
+	for z in range(samples.y):
+		for x in range(samples.x):
+			var p: Vector2 = garden.grid_min + Vector2(x, z) * spacing
+			# A smooth level join to the surrounding meadow, and a stable cottage pad.
+			var edge := smoothstep(0.0, 2.0, minf(half.x-absf(p.x), half.y-absf(p.y)))
+			var pad := (p-Vector2(-6,-5)).abs()-Vector2(3.5,3.3)
+			var cottage_blend := smoothstep(0.0, 1.5, pad.max(Vector2.ZERO).length())
+			var working_plot := lerpf(0.22, 1.0, smoothstep(2.0, 5.0, p.length()))
+			var rolling := 0.32 + noise.get_noise_2dv(p)*0.65
+			rolling += 0.07*sin(p.x*0.75)*cos(p.y*0.65)
+			heights.set_pixel(x,z,Color(maxf(0.0,rolling)*edge*cottage_blend*working_plot,0,0))
 
 func _sculpt_pond() -> void:
 	var banks: Array[PackedVector2Array] = []
@@ -120,6 +139,8 @@ func _build_chunk(cell: Vector2i) -> void:
 func _build_water() -> void:
 	var plane := PlaneMesh.new()
 	plane.size = Vector2(garden.chunk_count) * 2.0
+	plane.subdivide_width = samples.x - 2
+	plane.subdivide_depth = samples.y - 2
 	var water := MeshInstance3D.new()
 	water.name = "PondSurface"
 	water.position.y = WATER_LEVEL

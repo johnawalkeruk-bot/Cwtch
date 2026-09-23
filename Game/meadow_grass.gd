@@ -33,6 +33,7 @@ func build(world: Node3D) -> void:
 			for i in range(batch.instance_count):
 				var point := Vector3(x * 4.0 + rng.randf_range(0.12, 3.88), 0.008, z * 4.0 + rng.randf_range(0.12, 3.88))
 				var scale_factor := rng.randf_range(0.65, 1.3)
+				point.y += world.heightfield.height_at(Vector2(point.x, point.z))
 				var basis := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3.ONE * scale_factor)
 				batch.set_instance_transform(i, Transform3D(basis, point))
 				batch.set_instance_color(i, Color(rng.randf_range(0.8, 1.13), rng.randf_range(0.9, 1.1), 0.9))

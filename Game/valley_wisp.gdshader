@@ -11,8 +11,8 @@ float noise(vec2 p) {
 }
 void fragment() {
  vec2 q=UV*2.0-1.0;
- float edge=pow(max(0.0,1.0-dot(q,q)),softness);
+ float edge=pow(1.0-smoothstep(0.05,1.0,dot(q,q)),max(2.0,softness));
  float cloud=noise(UV*vec2(6,3)+vec2(drift_time*0.004,0))*0.6+noise(UV*vec2(13,5)-vec2(drift_time*0.002,0))*0.4;
  ALBEDO=tint;
- ALPHA=edge*(0.35+0.65*smoothstep(0.1,0.8,cloud))*opacity;
+ ALPHA=edge*smoothstep(0.26,0.72,cloud)*opacity;
 }
