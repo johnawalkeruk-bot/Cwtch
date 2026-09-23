@@ -13,6 +13,7 @@ void fragment(){
  vec3 grass=texture(color_maps,vec3(point.xz,1.0)).rgb;
  vec3 soil=texture(color_maps,vec3(point.xz*0.8,0.0)).rgb;
  vec3 rock=texture(color_maps,vec3(point.yz*0.45,2.0)).rgb*blend.x+texture(color_maps,vec3(point.xz*0.45,2.0)).rgb*blend.y+texture(color_maps,vec3(point.xy*0.45,2.0)).rgb*blend.z;
+ rock=mix(rock,texture(color_maps,vec3(point.xz*0.055,2.0)).rgb,0.28);
  float steep=smoothstep(0.12,0.58,1.0-abs(slope_normal.y));
  float altitude=smoothstep(12.0,40.0,point.y);
  vec3 ground=mix(grass,soil,steep*0.35);

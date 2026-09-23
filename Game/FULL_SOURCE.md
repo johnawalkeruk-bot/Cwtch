@@ -1324,7 +1324,7 @@ func equip(index: int) -> void:
 func use_at(cell: Vector2i) -> bool:
 	if busy or selected==3: return false
 	target_cell = cell
-	target_point = garden.cell_center(cell)
+	target_point = garden.player.position if cell==garden.player.cell else garden.cell_center(cell)
 	busy = true
 	elapsed = 0
 	applied = false
@@ -1560,20 +1560,7 @@ func _create_view() -> void:
 
 func _create_terrain() -> void:
 	super._create_terrain()
-	var offset := (grid_size - Vector2i(9, 9)) / 2
-	for z in range(grid_size.y):
-		for x in range(grid_size.x):
-			var patch := Vector2i(x, z) - offset
-			var kind: int = Terrain.GRASS
-			if patch.x >= 0 and patch.x <= 8 and patch.y >= 0 and patch.y <= 8 and (patch.x == 0 or patch.y == 0 or patch.x == 8):
-				kind = Terrain.LONG_GRASS
-			if patch.y == 7 and patch.x >= 0 and patch.x <= 8:
-				kind = Terrain.PATH
-			if patch.x >= 1 and patch.x <= 3 and patch.y >= 3 and patch.y <= 5:
-				kind = Terrain.HARD_DIRT
-			if patch.x >= 0 and patch.x <= 1 and patch.y == 6:
-				kind = Terrain.STONE
-			terrain_image.set_pixel(x, z, Color(float(kind) / 255.0, 0.0, 0.0))
+	terrain_image.fill(Color(float(Terrain.HARD_DIRT)/255.0,0,0))
 	terrain_texture.update(terrain_image)
 	terrain_material.set_shader_parameter("color_maps", load("res://assets/textures/terrain_colors.res"))
 	terrain_material.set_shader_parameter("normal_maps", load("res://assets/textures/terrain_normals.res"))
@@ -1669,12 +1656,12 @@ func _physics_process(delta: float) -> void:
 	elif is_instance_valid(selected_target):
 		cursor.follow_object(to_local(selected_target.subject.global_position),selected_target.selection_size(),delta)
 	else:
-		cursor.follow_object(player.position,Vector2.ONE*MICRO_SIZE,delta)
+		cursor.follow_feet(player.position,Vector2.ONE*MICRO_SIZE,delta)
 	if action_pending:
 		action_pending=false
 		if is_instance_valid(selected_target) and not contains_cell(selected_target.crop_cell):
 			message = selected_target.subject.get_meta("inspection_text",selected_target.label+" is enjoying the valley.")
-		elif player.is_settled() and cursor.is_settled():
+		elif contains_cell(target):
 			if is_instance_valid(selected_target): target=selected_target.crop_cell
 			if blocked_cells.has(target): message="This ground is occupied."
 			elif tool==Tool.NONE: message="Choose a tool from the wheel to tend the ground."
@@ -2782,6 +2769,7 @@ void fragment(){
  vec3 grass=texture(color_maps,vec3(point.xz,1.0)).rgb;
  vec3 soil=texture(color_maps,vec3(point.xz*0.8,0.0)).rgb;
  vec3 rock=texture(color_maps,vec3(point.yz*0.45,2.0)).rgb*blend.x+texture(color_maps,vec3(point.xz*0.45,2.0)).rgb*blend.y+texture(color_maps,vec3(point.xy*0.45,2.0)).rgb*blend.z;
+ rock=mix(rock,texture(color_maps,vec3(point.xz*0.055,2.0)).rgb,0.28);
  float steep=smoothstep(0.12,0.58,1.0-abs(slope_normal.y));
  float altitude=smoothstep(12.0,40.0,point.y);
  vec3 ground=mix(grass,soil,steep*0.35);
@@ -3370,7 +3358,7 @@ func _save_garden() -> bool:
 		var crop: Dictionary = garden.crops[cell]
 		crops.append({"x":cell.x,"z":cell.y,"age":crop.age,"watered":crop.watered})
 	var data := {"version":1,"terrain":terrain,"crops":crops,"harvested":garden.harvested,
-		"player":[garden.player.cell.x,garden.player.cell.y],"elapsed":garden.valley_cycle.elapsed,
+		"player":[garden.player.cell.x,garden.player.cell.y],"player_position":[garden.player.position.x,garden.player.position.z],"elapsed":garden.valley_cycle.elapsed,
 		"weather":garden.valley_cycle.weather_index,"weather_elapsed":garden.valley_cycle.weather_elapsed,
 		"wetness":garden.valley_cycle.wetness,"watered":_saved_watered(),"coins":coins,"purchases":purchases}
 	var file := FileAccess.open(SAVE_PATH,FileAccess.WRITE)
@@ -3405,6 +3393,9 @@ func _restore_garden() -> void:
 		garden.player.cell = cell
 		garden.player.target_cell = cell
 		garden.player.position = garden.cell_center(cell)
+	var free_position = data.get("player_position",[])
+	if free_position is Array and free_position.size()==2:
+		garden.player.restore_position(Vector3(float(free_position[0]),0,float(free_position[1])))
 	garden.valley_cycle.elapsed = float(data.get("elapsed",0))
 	garden.valley_cycle.weather_index = clampi(int(data.get("weather",0)),0,6)
 	garden.valley_cycle.weather_elapsed = float(data.get("weather_elapsed",0))
@@ -3616,6 +3607,7 @@ uniform sampler2D terrain_ids : filter_nearest, repeat_disable;
 uniform sampler2D exclusions : filter_nearest, repeat_disable;
 uniform vec2 grid_min;
 uniform vec2 grid_size;
+uniform bool scenery_only = false;
 uniform float micro_size = 0.6666667;
 varying float present;
 varying float tint;
@@ -3623,7 +3615,7 @@ varying float tint;
 void vertex() {
 	vec3 root = (MODEL_MATRIX * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
 	vec2 cell = (root.xz - grid_min) / micro_size;
-	bool inside = all(greaterThanEqual(cell, vec2(0.0))) && all(lessThan(cell, grid_size));
+	bool inside = !scenery_only && all(greaterThanEqual(cell, vec2(0.0))) && all(lessThan(cell, grid_size));
 	vec2 map_uv = (floor(cell) + 0.5) / grid_size;
 	float kind = floor(texture(terrain_ids, map_uv).r * 255.0 + 0.5);
 	present = inside ? ((kind == 2.0 || kind == 3.0) ? 1.0 : 0.0) : 1.0;
@@ -3884,7 +3876,8 @@ func _build_mountain() -> void:
 			builder.set_normal(Vector3.DOWN)
 			builder.set_color(Color("31555c"))
 			builder.add_vertex(point)
-	_finish(builder,"SnowcapMountain3D")
+	var mountain := _finish(builder,"SnowcapMountain3D")
+	preload("res://scenery_grass.gd").plant(self,mountain.mesh,"MenuHillsideGrass",0.5,22.0)
 
 func _build_ground() -> void:
 	var builder := SurfaceTool.new()
@@ -4445,6 +4438,64 @@ environment/defaults/default_clear_color=Color(0.12, 0.15, 0.17, 1)
 
 ```
 
+## scenery_grass.gd
+
+```gd
+extends RefCounted
+## Scatter on actual mesh triangles, never on an approximate hillside height.
+static func plant(parent: Node3D, terrain: Mesh, label: String, density: float, max_height: float) -> void:
+ var random:=RandomNumberGenerator.new()
+ random.seed=1896
+ var groups: Dictionary={}
+ var arrays:=terrain.surface_get_arrays(0)
+ var vertices: PackedVector3Array=arrays[Mesh.ARRAY_VERTEX]
+ var indices: PackedInt32Array=arrays[Mesh.ARRAY_INDEX] if arrays[Mesh.ARRAY_INDEX]!=null else PackedInt32Array()
+ var count:=indices.size() if not indices.is_empty() else vertices.size()
+ for i in range(0,count,3):
+  var a:=vertices[indices[i] if not indices.is_empty() else i]
+  var b:=vertices[indices[i+1] if not indices.is_empty() else i+1]
+  var c:=vertices[indices[i+2] if not indices.is_empty() else i+2]
+  var cross: Vector3=(b-a).cross(c-a)
+  var area:=cross.length()*0.5
+  if area<0.001:continue
+  var normal:=cross.normalized()
+  if normal.y<0:normal=-normal
+  if normal.y<0.78 or (a.y+b.y+c.y)/3.0>max_height:continue
+  var expected:=area*density
+  var amount:=mini(100,floori(expected)+(1 if random.randf()<fposmod(expected,1.0) else 0))
+  for j in range(amount):
+   var u:=sqrt(random.randf())
+   var v:=random.randf()
+   var point: Vector3=(1.0-u)*a+u*(1.0-v)*b+u*v*c+Vector3.UP*0.01
+   var key:=Vector2i(floori(point.x/16),floori(point.z/16))
+   if not groups.has(key):groups[key]=[]
+   var scale_factor:=random.randf_range(1.3,2.7)
+   groups[key].append(Transform3D(Basis(Vector3.UP,random.randf()*TAU).scaled(Vector3.ONE*scale_factor),point))
+ var generator:=preload("res://meadow_grass.gd").new()
+ var tuft:=generator._tuft()
+ generator.free()
+ var material:=ShaderMaterial.new()
+ material.shader=preload("res://meadow_grass.gdshader")
+ material.set_shader_parameter("scenery_only",true)
+ material.set_shader_parameter("grid_size",Vector2(36,36))
+ for key: Vector2i in groups:
+  var batch:=MultiMesh.new()
+  batch.transform_format=MultiMesh.TRANSFORM_3D
+  batch.mesh=tuft
+  batch.instance_count=groups[key].size()
+  for i in range(batch.instance_count):batch.set_instance_transform(i,groups[key][i])
+  var node:=MultiMeshInstance3D.new()
+  node.name=label+"_%d_%d"%[key.x,key.y]
+  node.multimesh=batch
+  node.material_override=material
+  node.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+  node.extra_cull_margin=0.8
+  node.visibility_range_end=220.0
+  parent.add_child(node)
+
+
+```
+
 ## selection_target.gd
 
 ```gd
@@ -4627,52 +4678,61 @@ void fragment() {
 ## third_person_player.gd
 
 ```gd
-extends Node3D
-
-# Invisible movement controller; the spirit ring is the only player visual.
-const SPEED := 1.1
+extends CharacterBody3D
+## Continuous spirit movement; cells are only used to choose the soil being worked.
+const SPEED := 3.0
+const RADIUS := 0.16
 var garden: Node3D
-var cell := Vector2i(2, 5)
-var target_cell := Vector2i(2, 5)
-var start := Vector3.ZERO
-var goal := Vector3.ZERO
-var progress := 1.0
-var duration := 1.0
+var cell := Vector2i(2,5)
+var target_cell := Vector2i(2,5)
 
-func setup(owner_garden: Node3D) -> void:
-	garden = owner_garden
-	cell += (garden.grid_size - Vector2i(9, 9)) / 2
-	cell = cell.clamp(Vector2i.ZERO, garden.grid_size - Vector2i.ONE)
-	target_cell = cell
-	position = garden.cell_center(cell)
+func setup(world: Node3D) -> void:
+ garden=world
+ collision_layer=0
+ collision_mask=4
+ var shape:=CollisionShape3D.new()
+ var capsule:=CapsuleShape3D.new()
+ capsule.radius=RADIUS
+ capsule.height=0.5
+ shape.shape=capsule
+ shape.position.y=0.35
+ add_child(shape)
+ cell+=(garden.grid_size-Vector2i(9,9))/2
+ cell=cell.clamp(Vector2i.ZERO,garden.grid_size-Vector2i.ONE)
+ target_cell=cell
+ position=garden.cell_center(cell)
+
+func _allowed(point: Vector3) -> bool:
+ for offset in [Vector2(-RADIUS,-RADIUS),Vector2(RADIUS,-RADIUS),Vector2(-RADIUS,RADIUS),Vector2(RADIUS,RADIUS)]:
+  var candidate: Vector2i=garden.local_to_cell(point+Vector3(offset.x,0,offset.y))
+  if not garden.contains_cell(candidate) or garden.blocked_cells.has(candidate):return false
+ return true
+
+func restore_position(point: Vector3) -> void:
+ if not point.is_finite() or not _allowed(point):return
+ position=point
+ position.y=garden.heightfield.height_at(Vector2(position.x,position.z))
+ velocity=Vector3.ZERO
+ cell=garden.local_to_cell(position)
+ target_cell=cell
 
 func advance(delta: float, input: Vector2, camera_yaw: float) -> void:
-	if is_settled() and input.length() > 0.1:
-		var movement := Basis(Vector3.UP, camera_yaw) * Vector3(input.x, 0.0, input.y).normalized()
-		var offset := Vector2i.ZERO
-		if absf(movement.x) > 0.4:
-			offset.x = 1 if movement.x > 0.0 else -1
-		if absf(movement.z) > 0.4:
-			offset.y = 1 if movement.z > 0.0 else -1
-		var next := cell + offset
-		var corner_blocked := false
-		if offset.x != 0 and offset.y != 0:
-			corner_blocked = garden.blocked_cells.has(cell + Vector2i(offset.x, 0)) or garden.blocked_cells.has(cell + Vector2i(0, offset.y))
-		if garden.contains_cell(next) and next != cell and not garden.blocked_cells.has(next) and not corner_blocked:
-			target_cell = next
-			start = position
-			goal = garden.cell_center(next)
-			duration = start.distance_to(goal) / SPEED
-			progress = 0.0
-	if not is_settled():
-		progress = minf(1.0, progress + delta / duration)
-		var t := progress * progress * (3.0 - 2.0 * progress)
-		position = start.lerp(goal, t)
-		position.y = garden.heightfield.height_at(Vector2(position.x, position.z))
-		if is_settled():
-			cell = target_cell
+ if garden.floating_tool!=null and garden.floating_tool.busy:
+  velocity=Vector3.ZERO
+  return
+ var wanted:=Basis(Vector3.UP,camera_yaw)*Vector3(input.x,0,input.y).limit_length()*SPEED
+ velocity=velocity.lerp(wanted,1.0-exp(-12.0*delta))
+ if wanted.length_squared()<0.001 and velocity.length()<0.01:velocity=Vector3.ZERO
+ var motion:=velocity*delta
+ # Axis sliding also respects reserved shop-building footprints without grid snapping.
+ for step in [Vector3(motion.x,0,0),Vector3(0,0,motion.z)]:
+  if _allowed(position+step):move_and_collide(step)
+ position.y=garden.heightfield.height_at(Vector2(position.x,position.z))
+ cell=garden.local_to_cell(position)
+ target_cell=cell
+
 func is_settled() -> bool:
-	return progress >= 1.0
+ return velocity.length()<0.05
 
 ```
 
@@ -5105,6 +5165,7 @@ func _ridge(far: bool) -> void:
  mesh.mesh = builder.commit()
  mesh.material_override = terrain_material
  add_child(mesh)
+ preload("res://scenery_grass.gd").plant(self,mesh.mesh,"MountainGrass" if far else "RidgeGrass",0.025 if far else 1.2,26.0 if far else 11.0)
 
 func _append(builder: SurfaceTool, mesh: Mesh, transform: Transform3D, color: Color) -> void:
  var data := mesh.surface_get_arrays(0)

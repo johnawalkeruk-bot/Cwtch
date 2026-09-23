@@ -351,7 +351,7 @@ func _save_garden() -> bool:
 		var crop: Dictionary = garden.crops[cell]
 		crops.append({"x":cell.x,"z":cell.y,"age":crop.age,"watered":crop.watered})
 	var data := {"version":1,"terrain":terrain,"crops":crops,"harvested":garden.harvested,
-		"player":[garden.player.cell.x,garden.player.cell.y],"elapsed":garden.valley_cycle.elapsed,
+		"player":[garden.player.cell.x,garden.player.cell.y],"player_position":[garden.player.position.x,garden.player.position.z],"elapsed":garden.valley_cycle.elapsed,
 		"weather":garden.valley_cycle.weather_index,"weather_elapsed":garden.valley_cycle.weather_elapsed,
 		"wetness":garden.valley_cycle.wetness,"watered":_saved_watered(),"coins":coins,"purchases":purchases}
 	var file := FileAccess.open(SAVE_PATH,FileAccess.WRITE)
@@ -386,6 +386,9 @@ func _restore_garden() -> void:
 		garden.player.cell = cell
 		garden.player.target_cell = cell
 		garden.player.position = garden.cell_center(cell)
+	var free_position = data.get("player_position",[])
+	if free_position is Array and free_position.size()==2:
+		garden.player.restore_position(Vector3(float(free_position[0]),0,float(free_position[1])))
 	garden.valley_cycle.elapsed = float(data.get("elapsed",0))
 	garden.valley_cycle.weather_index = clampi(int(data.get("weather",0)),0,6)
 	garden.valley_cycle.weather_elapsed = float(data.get("weather_elapsed",0))

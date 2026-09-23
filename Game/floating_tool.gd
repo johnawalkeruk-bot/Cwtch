@@ -83,7 +83,7 @@ func equip(index: int) -> void:
 func use_at(cell: Vector2i) -> bool:
 	if busy or selected==3: return false
 	target_cell = cell
-	target_point = garden.cell_center(cell)
+	target_point = garden.player.position if cell==garden.player.cell else garden.cell_center(cell)
 	busy = true
 	elapsed = 0
 	applied = false

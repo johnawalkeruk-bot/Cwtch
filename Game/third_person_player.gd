@@ -1,46 +1,55 @@
-extends Node3D
-
-# Invisible movement controller; the spirit ring is the only player visual.
-const SPEED := 1.1
+extends CharacterBody3D
+## Continuous spirit movement; cells are only used to choose the soil being worked.
+const SPEED := 3.0
+const RADIUS := 0.16
 var garden: Node3D
-var cell := Vector2i(2, 5)
-var target_cell := Vector2i(2, 5)
-var start := Vector3.ZERO
-var goal := Vector3.ZERO
-var progress := 1.0
-var duration := 1.0
+var cell := Vector2i(2,5)
+var target_cell := Vector2i(2,5)
 
-func setup(owner_garden: Node3D) -> void:
-	garden = owner_garden
-	cell += (garden.grid_size - Vector2i(9, 9)) / 2
-	cell = cell.clamp(Vector2i.ZERO, garden.grid_size - Vector2i.ONE)
-	target_cell = cell
-	position = garden.cell_center(cell)
+func setup(world: Node3D) -> void:
+ garden=world
+ collision_layer=0
+ collision_mask=4
+ var shape:=CollisionShape3D.new()
+ var capsule:=CapsuleShape3D.new()
+ capsule.radius=RADIUS
+ capsule.height=0.5
+ shape.shape=capsule
+ shape.position.y=0.35
+ add_child(shape)
+ cell+=(garden.grid_size-Vector2i(9,9))/2
+ cell=cell.clamp(Vector2i.ZERO,garden.grid_size-Vector2i.ONE)
+ target_cell=cell
+ position=garden.cell_center(cell)
+
+func _allowed(point: Vector3) -> bool:
+ for offset in [Vector2(-RADIUS,-RADIUS),Vector2(RADIUS,-RADIUS),Vector2(-RADIUS,RADIUS),Vector2(RADIUS,RADIUS)]:
+  var candidate: Vector2i=garden.local_to_cell(point+Vector3(offset.x,0,offset.y))
+  if not garden.contains_cell(candidate) or garden.blocked_cells.has(candidate):return false
+ return true
+
+func restore_position(point: Vector3) -> void:
+ if not point.is_finite() or not _allowed(point):return
+ position=point
+ position.y=garden.heightfield.height_at(Vector2(position.x,position.z))
+ velocity=Vector3.ZERO
+ cell=garden.local_to_cell(position)
+ target_cell=cell
 
 func advance(delta: float, input: Vector2, camera_yaw: float) -> void:
-	if is_settled() and input.length() > 0.1:
-		var movement := Basis(Vector3.UP, camera_yaw) * Vector3(input.x, 0.0, input.y).normalized()
-		var offset := Vector2i.ZERO
-		if absf(movement.x) > 0.4:
-			offset.x = 1 if movement.x > 0.0 else -1
-		if absf(movement.z) > 0.4:
-			offset.y = 1 if movement.z > 0.0 else -1
-		var next := cell + offset
-		var corner_blocked := false
-		if offset.x != 0 and offset.y != 0:
-			corner_blocked = garden.blocked_cells.has(cell + Vector2i(offset.x, 0)) or garden.blocked_cells.has(cell + Vector2i(0, offset.y))
-		if garden.contains_cell(next) and next != cell and not garden.blocked_cells.has(next) and not corner_blocked:
-			target_cell = next
-			start = position
-			goal = garden.cell_center(next)
-			duration = start.distance_to(goal) / SPEED
-			progress = 0.0
-	if not is_settled():
-		progress = minf(1.0, progress + delta / duration)
-		var t := progress * progress * (3.0 - 2.0 * progress)
-		position = start.lerp(goal, t)
-		position.y = garden.heightfield.height_at(Vector2(position.x, position.z))
-		if is_settled():
-			cell = target_cell
+ if garden.floating_tool!=null and garden.floating_tool.busy:
+  velocity=Vector3.ZERO
+  return
+ var wanted:=Basis(Vector3.UP,camera_yaw)*Vector3(input.x,0,input.y).limit_length()*SPEED
+ velocity=velocity.lerp(wanted,1.0-exp(-12.0*delta))
+ if wanted.length_squared()<0.001 and velocity.length()<0.01:velocity=Vector3.ZERO
+ var motion:=velocity*delta
+ # Axis sliding also respects reserved shop-building footprints without grid snapping.
+ for step in [Vector3(motion.x,0,0),Vector3(0,0,motion.z)]:
+  if _allowed(position+step):move_and_collide(step)
+ position.y=garden.heightfield.height_at(Vector2(position.x,position.z))
+ cell=garden.local_to_cell(position)
+ target_cell=cell
+
 func is_settled() -> bool:
-	return progress >= 1.0
+ return velocity.length()<0.05

@@ -4,6 +4,7 @@ uniform sampler2D terrain_ids : filter_nearest, repeat_disable;
 uniform sampler2D exclusions : filter_nearest, repeat_disable;
 uniform vec2 grid_min;
 uniform vec2 grid_size;
+uniform bool scenery_only = false;
 uniform float micro_size = 0.6666667;
 varying float present;
 varying float tint;
@@ -11,7 +12,7 @@ varying float tint;
 void vertex() {
 	vec3 root = (MODEL_MATRIX * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
 	vec2 cell = (root.xz - grid_min) / micro_size;
-	bool inside = all(greaterThanEqual(cell, vec2(0.0))) && all(lessThan(cell, grid_size));
+	bool inside = !scenery_only && all(greaterThanEqual(cell, vec2(0.0))) && all(lessThan(cell, grid_size));
 	vec2 map_uv = (floor(cell) + 0.5) / grid_size;
 	float kind = floor(texture(terrain_ids, map_uv).r * 255.0 + 0.5);
 	present = inside ? ((kind == 2.0 || kind == 3.0) ? 1.0 : 0.0) : 1.0;

@@ -92,6 +92,7 @@ func _ridge(far: bool) -> void:
  mesh.mesh = builder.commit()
  mesh.material_override = terrain_material
  add_child(mesh)
+ preload("res://scenery_grass.gd").plant(self,mesh.mesh,"MountainGrass" if far else "RidgeGrass",0.025 if far else 1.2,26.0 if far else 11.0)
 
 func _append(builder: SurfaceTool, mesh: Mesh, transform: Transform3D, color: Color) -> void:
  var data := mesh.surface_get_arrays(0)

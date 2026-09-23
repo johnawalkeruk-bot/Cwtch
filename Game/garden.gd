@@ -187,20 +187,7 @@ func _create_view() -> void:
 
 func _create_terrain() -> void:
 	super._create_terrain()
-	var offset := (grid_size - Vector2i(9, 9)) / 2
-	for z in range(grid_size.y):
-		for x in range(grid_size.x):
-			var patch := Vector2i(x, z) - offset
-			var kind: int = Terrain.GRASS
-			if patch.x >= 0 and patch.x <= 8 and patch.y >= 0 and patch.y <= 8 and (patch.x == 0 or patch.y == 0 or patch.x == 8):
-				kind = Terrain.LONG_GRASS
-			if patch.y == 7 and patch.x >= 0 and patch.x <= 8:
-				kind = Terrain.PATH
-			if patch.x >= 1 and patch.x <= 3 and patch.y >= 3 and patch.y <= 5:
-				kind = Terrain.HARD_DIRT
-			if patch.x >= 0 and patch.x <= 1 and patch.y == 6:
-				kind = Terrain.STONE
-			terrain_image.set_pixel(x, z, Color(float(kind) / 255.0, 0.0, 0.0))
+	terrain_image.fill(Color(float(Terrain.HARD_DIRT)/255.0,0,0))
 	terrain_texture.update(terrain_image)
 	terrain_material.set_shader_parameter("color_maps", load("res://assets/textures/terrain_colors.res"))
 	terrain_material.set_shader_parameter("normal_maps", load("res://assets/textures/terrain_normals.res"))
@@ -296,12 +283,12 @@ func _physics_process(delta: float) -> void:
 	elif is_instance_valid(selected_target):
 		cursor.follow_object(to_local(selected_target.subject.global_position),selected_target.selection_size(),delta)
 	else:
-		cursor.follow_object(player.position,Vector2.ONE*MICRO_SIZE,delta)
+		cursor.follow_feet(player.position,Vector2.ONE*MICRO_SIZE,delta)
 	if action_pending:
 		action_pending=false
 		if is_instance_valid(selected_target) and not contains_cell(selected_target.crop_cell):
 			message = selected_target.subject.get_meta("inspection_text",selected_target.label+" is enjoying the valley.")
-		elif player.is_settled() and cursor.is_settled():
+		elif contains_cell(target):
 			if is_instance_valid(selected_target): target=selected_target.crop_cell
 			if blocked_cells.has(target): message="This ground is occupied."
 			elif tool==Tool.NONE: message="Choose a tool from the wheel to tend the ground."

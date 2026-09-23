@@ -85,7 +85,8 @@ func _build_mountain() -> void:
 			builder.set_normal(Vector3.DOWN)
 			builder.set_color(Color("31555c"))
 			builder.add_vertex(point)
-	_finish(builder,"SnowcapMountain3D")
+	var mountain := _finish(builder,"SnowcapMountain3D")
+	preload("res://scenery_grass.gd").plant(self,mountain.mesh,"MenuHillsideGrass",0.5,22.0)
 
 func _build_ground() -> void:
 	var builder := SurfaceTool.new()
