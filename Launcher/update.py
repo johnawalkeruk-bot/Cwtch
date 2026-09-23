@@ -6,6 +6,7 @@ import re
 import shutil
 import sys
 import uuid
+import time
 from contextlib import contextmanager
 import urllib.request
 import zipfile
@@ -44,7 +45,11 @@ def download_directory(root):
             raise ValueError('Unexpected temporary directory location.')
         shutil.rmtree(target)
 
-def install(root, repository):
+def install(root, repository, progress=None):
+    def report(stage, **values):
+        if progress:
+            progress(dict(stage=stage, **values))
+    report('checking')
     if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repository):
         raise ValueError('Invalid repository setting.')
     root = Path(root).resolve()
@@ -53,6 +58,7 @@ def install(root, repository):
     version = release['tag_name']
     if not re.fullmatch(r'v\d+\.\d+\.\d+', version):
         raise ValueError('Unsupported release version.')
+    report('available', version=version)
     assets = {asset['name']: asset for asset in release['assets']}
     destination = root / 'Versions' / version
     if not (destination / 'CWTCH.exe').is_file() or not (destination / 'CWTCH.pck').is_file():
@@ -63,12 +69,26 @@ def install(root, repository):
             archive = Path(temporary) / 'release.zip'
             request = urllib.request.Request(assets['CWTCH-Windows.zip']['browser_download_url'], headers=HEADERS)
             with urllib.request.urlopen(request, timeout=120) as response, open(archive, 'wb') as output:
-                shutil.copyfileobj(response, output)
+                total = int(response.headers.get('Content-Length') or assets['CWTCH-Windows.zip'].get('size') or 0)
+                received = 0
+                started = time.monotonic()
+                last_report = started
+                report('downloading', downloaded=0, total=total, speed=0)
+                while chunk := response.read(256 * 1024):
+                    output.write(chunk)
+                    received += len(chunk)
+                    now = time.monotonic()
+                    if now - last_report >= 0.1:
+                        report('downloading', downloaded=received, total=total, speed=received / max(now-started, 0.001))
+                        last_report = now
+                report('downloading', downloaded=received, total=total, speed=received / max(time.monotonic()-started, 0.001))
+            report('verifying')
             with open(archive, 'rb') as source:
                 actual = hashlib.file_digest(source, 'sha256').hexdigest()
             if actual != expected:
                 raise ValueError('Download verification failed. The installed game was not changed.')
             stage = Path(temporary) / 'game'
+            report('installing')
             safe_extract(archive, stage)
             if not (stage / 'CWTCH.exe').is_file() or not (stage / 'CWTCH.pck').is_file():
                 raise ValueError('Game files are missing from this release.')
@@ -80,16 +100,19 @@ def install(root, repository):
     pending = root / 'installed.tmp.json'
     pending.write_text(json.dumps(result), encoding='utf-8')
     pending.replace(root / 'installed.json')
+    report('ready', version=version)
     return result
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--root', required=True)
     parser.add_argument('--result', required=True)
+    parser.add_argument('--progress', action='store_true')
     args = parser.parse_args()
     try:
         config = json.loads((Path(__file__).parent / 'repository.json').read_text(encoding='utf-8-sig'))
-        result = install(args.root, config['repository'])
+        progress = (lambda event: print(json.dumps(event), flush=True)) if args.progress else None
+        result = install(args.root, config['repository'], progress)
         result['ok'] = True
     except Exception as error:
         result = {'ok': False, 'message': str(error)}

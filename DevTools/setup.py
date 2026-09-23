@@ -18,4 +18,4 @@ for url,destination in RUNTIMES:
 
 import subprocess,os
 compiler=Path(os.environ['WINDIR'])/'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
-subprocess.run([str(compiler),'/nologo','/target:winexe','/out:'+str(ROOT/'Launcher/CWTCHLauncher.exe'),'/reference:System.Windows.Forms.dll','/reference:System.Drawing.dll','/reference:System.Web.Extensions.dll',str(ROOT/'Launcher/Launcher.cs')],check=True)
+subprocess.run([str(compiler),'/nologo','/target:winexe','/out:'+str(ROOT/'Launcher/CWTCHLauncher.exe'),'/win32icon:'+str(ROOT/'Launcher/cwtch.ico'),'/reference:System.Windows.Forms.dll','/reference:System.Drawing.dll','/reference:System.Web.Extensions.dll',str(ROOT/'Launcher/Launcher.cs')],check=True)

@@ -1,6 +1,8 @@
 """Build a checked portable game and native Windows launcher."""
-import argparse,hashlib,json,os,shutil,subprocess,zipfile
+import argparse,hashlib,json,os,shutil,subprocess,zipfile,sys
 from pathlib import Path
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+from windows_icon import apply_icon
 ROOT=Path(__file__).resolve().parents[1]
 
 def fingerprint():
@@ -41,6 +43,7 @@ def build(version):
  engine('export',['--headless','--path',ROOT/'Game','--export-pack','Windows Portable',stage/'CWTCH.pck'])
  if not (stage/'CWTCH.pck').is_file():raise RuntimeError('Game pack missing.')
  shutil.copy2(ROOT/'Game/runtime/Godot_v4.6.2-stable_win64.exe',stage/'CWTCH.exe')
+ apply_icon(stage/'CWTCH.exe',ROOT/'Game/assets/branding/cwtch.ico')
  (stage/'VERSION').write_text(version+'\n')
  for license in (ROOT/'Game/runtime').glob('*.txt'):shutil.copy2(license,stage/license.name)
  engine('smoke',['--headless','--path',stage,'--main-pack',stage/'CWTCH.pck','--quit-after','15'])

@@ -1,8 +1,8 @@
-# CWTCH — Full Source
+# CWTCH — full game source
 
 ## angus_npc.gd
 
-```
+```gd
 extends "res://cycling_npc.gd"
 ## Angus performs his supplied long clip in place, rather than sliding to a walk.
 func _create_visual() -> void:
@@ -38,7 +38,7 @@ func advance(delta: float) -> void:
 
 ## animated_visitor.gd
 
-```
+```gd
 extends "res://wandering_npc.gd"
 ## Uses the model's native rig and clips; no Arthur rig repair or retargeting.
 const VISITOR_MODEL = preload("res://assets/test.glb")
@@ -156,7 +156,7 @@ func advance(delta: float) -> void:
 
 ## background_meadow.gd
 
-```
+```gd
 extends Node3D
 ## Continuous surface-brush weights outside the editable grid.
 const WIDTH := 512.0
@@ -216,7 +216,7 @@ func _process(_delta: float) -> void:
 
 ## bake_desktop_textures.gd
 
-```
+```gd
 extends SceneTree
 ## Run once with Godot --path . --script bake_desktop_textures.gd.
 ## A graphics renderer is required to save Texture2DArray image data.
@@ -267,7 +267,7 @@ func _initialize() -> void:
 
 ## bake_tool_icons.gd
 
-```
+```gd
 extends SceneTree
 func _initialize() -> void: run.call_deferred()
 func run() -> void:
@@ -314,7 +314,7 @@ func run() -> void:
 
 ## blender_tile.py
 
-```
+```py
 import bpy
 from pathlib import Path
 
@@ -361,7 +361,7 @@ print(f"Exported 2m x 2m ground tile: {target}")
 
 ## book_opening.gd
 
-```
+```gd
 extends Control
 ## Perspective-like hinged leaves, drawn in the same coordinates as the spread.
 signal finished
@@ -467,7 +467,7 @@ func _gold(text: String, y: float, font_size: int) -> void:
 
 ## chicken_npc.gd
 
-```
+```gd
 extends "res://wandering_npc.gd"
 
 const CHICKEN = preload("res://assets/chicken_rig.glb")
@@ -519,7 +519,7 @@ func advance(delta: float) -> void:
 
 ## controller_input.gd
 
-```
+```gd
 extends Node
 ## Common mapped controllers: left stick moves, right stick aims.
 signal mode_changed
@@ -585,7 +585,7 @@ func focus_first(parent) -> void:
 
 ## cosy_sky.gdshader
 
-```
+```gdshader
 shader_type sky;
 uniform vec3 sun_direction = vec3(1.0, 0.0, 0.25);
 uniform float daylight = 1.0;
@@ -631,7 +631,7 @@ void sky() {
 
 ## cursor.gdshader
 
-```
+```gdshader
 shader_type spatial;
 render_mode unshaded, cull_disabled, depth_draw_never;
 
@@ -651,7 +651,7 @@ void fragment() {
 
 ## cwtch_theme.gd
 
-```
+```gd
 extends RefCounted
 const INK := Color("172d2a")
 const GOLD := Color("e5c17c")
@@ -700,7 +700,7 @@ static func make() -> Theme:
 
 ## cycling_npc.gd
 
-```
+```gd
 extends "res://wandering_npc.gd"
 ## Supplied FBX clips follow locomotion; the collision body owns world motion.
 var model_scene: PackedScene
@@ -809,7 +809,7 @@ func advance(delta: float) -> void:
 
 ## diorama_camera.gd
 
-```
+```gd
 extends RefCounted
 
 const CAMERA_HEIGHT := 1.5
@@ -835,7 +835,7 @@ static func follow(camera: Camera3D, feet: Vector3, yaw: float, pitch: float = P
 
 ## export_presets.cfg
 
-```
+```cfg
 [preset.0]
 name="Windows Portable"
 platform="Windows Desktop"
@@ -864,7 +864,7 @@ texture_format/etc2_astc=false
 
 ## field_book.gd
 
-```
+```gd
 extends Control
 ## A separate lit 3D world keeps book previews independent of the paused garden.
 signal closed
@@ -1123,7 +1123,7 @@ func _input(event: InputEvent) -> void:
 
 ## first_person.gd
 
-```
+```gd
 extends Node3D
 
 const HOVER_HEIGHT := 0.10
@@ -1204,7 +1204,7 @@ func is_settled() -> bool:
 
 ## floating_tool.gd
 
-```
+```gd
 extends Node3D
 signal effect_applied(cell: Vector2i, tool: int)
 const KEYS := ["hoe","seeds","water"]
@@ -1335,7 +1335,7 @@ func _process(delta: float) -> void:
 
 ## garden.gd
 
-```
+```gd
 extends "res://main.gd"
 
 enum Tool { HOE, SEEDS, WATER }
@@ -1482,6 +1482,9 @@ func _ready() -> void:
 		animal.setup(self)
 		SelectionTarget.attach(animal,entry[0],Vector3(0.7,0.45,0.7) if entry[1]=="badger" else Vector3(1.1,0.65,0.8))
 		additional_visitors.append(animal)
+	var meadow_grass := preload("res://meadow_grass.gd").new()
+	add_child(meadow_grass)
+	meadow_grass.build(self)
 	_refresh_ui()
 
 func _create_chunks() -> void:
@@ -1902,7 +1905,7 @@ func _controller_prompts() -> void:
 
 ## garden_cottage.gd
 
-```
+```gd
 extends Node3D
 const COTTAGE = preload("res://assets/cottage.glb")
 const SelectionTarget = preload("res://selection_target.gd")
@@ -1937,7 +1940,7 @@ func build(garden: Node3D) -> void:
 
 ## garden_wall.gd
 
-```
+```gd
 extends Node3D
 ## A continuous physical perimeter, with staggered dry-stone courses.
 const HEIGHT := 0.72
@@ -2004,7 +2007,7 @@ func build(garden: Node3D) -> void:
 
 ## generate_ambience.py
 
-```
+```py
 """Generate original, deterministic environmental sound effects. Run with Python 3."""
 import math
 import random
@@ -2073,7 +2076,7 @@ print('Generated wind, rain, thunder, birds and crickets.')
 
 ## gliding_cursor.gd
 
-```
+```gd
 extends Node3D
 
 const FOLLOW_RATE := 12.0
@@ -2210,7 +2213,7 @@ func clear() -> void:
 
 ## grass.gdshader
 
-```
+```gdshader
 shader_type spatial;
 render_mode cull_disabled;
 uniform float wind_time = 0.0;
@@ -2250,7 +2253,7 @@ void fragment() {
 
 ## grass_field.gd
 
-```
+```gd
 extends Node3D
 ## Instanced mesh blades, without selection or movement colliders.
 var garden: Node3D
@@ -2343,7 +2346,7 @@ func _process(delta: float) -> void:
 
 ## hedgehog_npc.gd
 
-```
+```gd
 extends "res://wandering_npc.gd"
 const HEDGEHOG = preload("res://assets/hedgehog.glb")
 var body: Node3D
@@ -2405,7 +2408,7 @@ func advance(delta: float) -> void:
 
 ## height_terrain.gd
 
-```
+```gd
 extends Node3D
 
 const RESOLUTION := 12
@@ -2584,7 +2587,7 @@ func _build_skirts() -> void:
 
 ## import_angus.py
 
-```
+```py
 """Run with Blender --background --python import_angus.py."""
 import bpy
 from pathlib import Path
@@ -2607,7 +2610,7 @@ print('EXPORTED',out)
 
 ## import_garden_npcs.py
 
-```
+```py
 """Combine the supplied NPC FBX clips and textures into portable Godot GLBs.
 Run with Blender --background --python import_garden_npcs.py.
 """
@@ -2662,7 +2665,7 @@ for name in ('Arthur', 'Meera'):
 
 ## imported_trees.gd
 
-```
+```gd
 extends RefCounted
 ## Shared textured ash/birch models, batched in small groups for efficient drawing.
 static var prototypes: Dictionary = {}
@@ -2710,7 +2713,7 @@ static func plant(parent: Node3D, placements: Array[Transform3D], kind: String) 
 
 ## main.gd
 
-```
+```gd
 extends Node3D
 
 signal micro_tile_hovered(cell: Vector2i, terrain: int)
@@ -2913,7 +2916,7 @@ func _update_status() -> void:
 
 ## main.tscn
 
-```
+```tscn
 [gd_scene load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://garden.gd" id="1"]
@@ -2926,7 +2929,7 @@ chunk_count = Vector2i(12, 12)
 
 ## main_menu.gd
 
-```
+```gd
 extends Node3D
 ## The menu stays alive while the garden runs, preserving its scene and clock.
 const Ambience = preload("res://valley_ambience.gd")
@@ -3418,7 +3421,7 @@ func purchase_village_item(id: String) -> String:
 
 ## main_menu.tscn
 
-```
+```tscn
 [gd_scene load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://main_menu.gd" id="1"]
@@ -3428,9 +3431,132 @@ script = ExtResource("1")
 
 ```
 
-## menu_illustration.gd
+## meadow_grass.gd
+
+```gd
+extends Node3D
+## Batched, deterministic grass. Terrain textures keep it in sync with tools and saves.
+var garden: Node3D
+var exclusions: Image
+var exclusion_texture: ImageTexture
+var refresh_time := 0.0
+
+func build(world: Node3D) -> void:
+	garden = world
+	name = "MeadowGrass"
+	exclusions = Image.create(world.grid_size.x, world.grid_size.y, false, Image.FORMAT_R8)
+	exclusion_texture = ImageTexture.create_from_image(exclusions)
+	_refresh_exclusions()
+	var material := ShaderMaterial.new()
+	material.shader = preload("res://meadow_grass.gdshader")
+	material.set_shader_parameter("terrain_ids", world.terrain_texture)
+	material.set_shader_parameter("exclusions", exclusion_texture)
+	material.set_shader_parameter("grid_min", world.grid_min)
+	material.set_shader_parameter("grid_size", Vector2(world.grid_size))
+	material.set_shader_parameter("micro_size", world.MICRO_SIZE)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 1891
+	var blade_mesh := _tuft()
+	# One batch per 4 m patch allows Godot to cull distant patches independently.
+	for z in range(-5, 5):
+		for x in range(-5, 5):
+			var batch := MultiMesh.new()
+			batch.transform_format = MultiMesh.TRANSFORM_3D
+			batch.use_colors = true
+			batch.mesh = blade_mesh
+			batch.instance_count = 140
+			for i in range(batch.instance_count):
+				var point := Vector3(x * 4.0 + rng.randf_range(0.12, 3.88), 0.008, z * 4.0 + rng.randf_range(0.12, 3.88))
+				var scale_factor := rng.randf_range(0.65, 1.3)
+				var basis := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3.ONE * scale_factor)
+				batch.set_instance_transform(i, Transform3D(basis, point))
+				batch.set_instance_color(i, Color(rng.randf_range(0.8, 1.13), rng.randf_range(0.9, 1.1), 0.9))
+			var patch := MultiMeshInstance3D.new()
+			patch.multimesh = batch
+			patch.material_override = material
+			patch.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			patch.extra_cull_margin = 0.6
+			patch.visibility_range_end = 32.0
+			add_child(patch)
+
+func _tuft() -> ArrayMesh:
+	var surface := SurfaceTool.new()
+	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for i in range(4):
+		var angle := float(i) * 2.39996
+		var side := Vector3(cos(angle), 0, sin(angle)) * 0.025
+		var lean := Vector3(-sin(angle), 0, cos(angle)) * 0.035
+		var base := lean * 0.3
+		var mid := base + lean + Vector3.UP * 0.10
+		var tip := base + lean * 2.2 + Vector3.UP * (0.17 + float(i) * 0.014)
+		var vertices := [base-side, base+side, mid-side*0.55, base+side, mid+side*0.55, mid-side*0.55, mid-side*0.55, mid+side*0.55, tip]
+		for vertex: Vector3 in vertices:
+			surface.set_normal(Vector3.UP)
+			surface.set_uv(Vector2(0.5, vertex.y / 0.22))
+			surface.add_vertex(vertex)
+	return surface.commit()
+
+func _refresh_exclusions() -> void:
+	exclusions.fill(Color.BLACK)
+	for cell: Vector2i in garden.blocked_cells:
+		if garden.contains_cell(cell):
+			exclusions.set_pixel(cell.x, cell.y, Color.WHITE)
+	for cell: Vector2i in garden.crops:
+		if garden.contains_cell(cell):
+			exclusions.set_pixel(cell.x, cell.y, Color.WHITE)
+	exclusion_texture.update(exclusions)
+
+func _process(delta: float) -> void:
+	refresh_time += delta
+	if refresh_time >= 0.5:
+		refresh_time = 0.0
+		_refresh_exclusions()
 
 ```
+
+## meadow_grass.gdshader
+
+```gdshader
+shader_type spatial;
+render_mode cull_disabled;
+uniform sampler2D terrain_ids : filter_nearest, repeat_disable;
+uniform sampler2D exclusions : filter_nearest, repeat_disable;
+uniform vec2 grid_min;
+uniform vec2 grid_size;
+uniform float micro_size = 0.6666667;
+varying float present;
+varying float tint;
+
+void vertex() {
+	vec3 root = (MODEL_MATRIX * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+	vec2 cell = (root.xz - grid_min) / micro_size;
+	bool inside = all(greaterThanEqual(cell, vec2(0.0))) && all(lessThan(cell, grid_size));
+	vec2 map_uv = (floor(cell) + 0.5) / grid_size;
+	float kind = floor(texture(terrain_ids, map_uv).r * 255.0 + 0.5);
+	present = inside ? ((kind == 2.0 || kind == 3.0) ? 1.0 : 0.0) : 1.0;
+	if (inside && texture(exclusions, map_uv).r > 0.5) { present = 0.0; }
+	float height_scale = inside ? (kind == 3.0 ? 1.9 : 0.75) : 1.45;
+	float tip_weight = UV.y * UV.y;
+	VERTEX.y *= height_scale;
+	VERTEX.x += sin(TIME * 1.4 + root.x * 0.7 + root.z * 0.4) * 0.035 * tip_weight;
+	VERTEX.z += sin(TIME * 1.0 + root.z * 0.8) * 0.022 * tip_weight;
+	VERTEX *= present;
+	tint = sin(root.x * 12.3 + root.z * 7.1) * 0.5 + 0.5;
+}
+
+void fragment() {
+	if (present < 0.5) { discard; }
+	vec3 base = mix(vec3(0.15, 0.22, 0.075), vec3(0.28, 0.34, 0.12), tint);
+	ALBEDO = mix(base * 0.7, base * 1.3, clamp(UV.y, 0.0, 1.0)) * COLOR.rgb;
+	ROUGHNESS = 0.95;
+	SPECULAR = 0.05;
+}
+
+```
+
+## menu_illustration.gd
+
+```gd
 extends Node3D
 ## Layered native meshes give the title scene an illustrated, cut-paper finish.
 var material: ShaderMaterial
@@ -3515,7 +3641,7 @@ func animate(time: float, daylight: float, rain: float) -> void:
 
 ## menu_illustration.gdshader
 
-```
+```gdshader
 shader_type spatial;
 render_mode unshaded, cull_disabled, fog_disabled;
 uniform float daylight = 1.0;
@@ -3529,7 +3655,7 @@ void fragment() {
 
 ## menu_mountain.gdshader
 
-```
+```gdshader
 shader_type spatial;
 uniform float rain_strength = 0.0;
 void fragment() {
@@ -3541,7 +3667,7 @@ void fragment() {
 
 ## menu_paper_sky.gdshader
 
-```
+```gdshader
 shader_type sky;
 uniform vec3 sun_direction = vec3(0.5,0.5,0.0);
 uniform float daylight = 1.0;
@@ -3560,7 +3686,7 @@ void sky() {
 
 ## menu_stream.gdshader
 
-```
+```gdshader
 shader_type spatial;
 render_mode cull_disabled;
 varying vec3 point;
@@ -3577,7 +3703,7 @@ void fragment() {
 
 ## menu_valley_3d.gd
 
-```
+```gd
 extends Node3D
 ## Perspective landscape: a closed mountain mesh, rolling ground and forest.
 var material: ShaderMaterial
@@ -3764,7 +3890,7 @@ func animate(time: float, daylight: float, rain: float) -> void:
 
 ## optimize_tools.py
 
-```
+```py
 import bpy
 from pathlib import Path
 root=Path(__file__).resolve().parent/'assets'/'tools'
@@ -3786,7 +3912,7 @@ for name in ['hoe','seeds','water']:
 
 ## optimize_trees.py
 
-```
+```py
 import bpy
 from pathlib import Path
 root=Path(__file__).resolve().parent / 'assets' / 'trees'
@@ -3809,7 +3935,7 @@ for name in ['ash','birch']:
 
 ## Play Aberglen.cmd
 
-```
+```cmd
 @echo off
 setlocal
 set "APPDATA=%~dp0runtime\data"
@@ -3819,7 +3945,7 @@ start "CWTCH" "%~dp0runtime\Godot_v4.6.2-stable_win64.exe" --path "%~dp0." --log
 
 ## pom_material.gd
 
-```
+```gd
 extends RefCounted
 
 # For meshes with regular UVs and tangents. All maps must be aligned.
@@ -3872,7 +3998,7 @@ static func generate_heights(size: int = 256) -> ImageTexture:
 
 ## procedural_animal.gd
 
-```
+```gd
 extends "res://wandering_npc.gd"
 ## Repaired animal rigs with procedural gait, breathing and idle motions.
 var species := "badger"
@@ -4027,7 +4153,7 @@ func advance(delta: float) -> void:
 
 ## project.godot
 
-```
+```godot
 ; Engine configuration file.
 ; It's best edited using the editor UI and not directly,
 ; since the parameters that go here are not all obvious.
@@ -4041,6 +4167,8 @@ config_version=5
 [application]
 
 config/name="CWTCH"
+config/icon="res://assets/branding/cwtch.png"
+config/windows_native_icon="res://assets/branding/cwtch.ico"
 run/main_scene="res://main_menu.tscn"
 config/features=PackedStringArray("4.6")
 
@@ -4065,7 +4193,7 @@ environment/defaults/default_clear_color=Color(0.12, 0.15, 0.17, 1)
 
 ## selection_target.gd
 
-```
+```gd
 extends Area3D
 ## Attach to a model root. Layer 2 is selection-only, never player collision.
 var subject: Node3D
@@ -4099,7 +4227,7 @@ func selection_size() -> Vector2:
 
 ## stone_wall.gdshader
 
-```
+```gdshader
 shader_type spatial;
 render_mode diffuse_burley;
 uniform sampler2D stone_color : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
@@ -4129,7 +4257,7 @@ void fragment() {
 
 ## terrain.gdshader
 
-```
+```gdshader
 shader_type spatial;
 uniform sampler2D watered_tiles : filter_linear, repeat_disable;
 uniform sampler2D terrain_ids : filter_nearest, repeat_disable;
@@ -4241,7 +4369,7 @@ void fragment() {
 
 ## third_person_player.gd
 
-```
+```gd
 extends Node3D
 
 # Invisible movement controller; the spirit ring is the only player visual.
@@ -4293,7 +4421,7 @@ func is_settled() -> bool:
 
 ## tool_wheel.gd
 
-```
+```gd
 extends Control
 signal tool_selected(index: int)
 signal cancelled
@@ -4418,7 +4546,7 @@ func _input(event: InputEvent) -> void:
 
 ## valley_ambience.gd
 
-```
+```gd
 extends Node
 ## Original synthesized environmental loops; independent from NPC dialogue.
 var layers: Dictionary = {}
@@ -4460,7 +4588,7 @@ func thunder() -> void:
 
 ## valley_cycle.gd
 
-```
+```gd
 extends Node3D
 ## 06:00–18:00 is 1200 real seconds; 18:00–06:00 another 1200.
 const DAY_SECONDS := 1200.0
@@ -4625,7 +4753,7 @@ func _advance_storm(delta: float) -> void:
 
 ## valley_landscape.gd
 
-```
+```gd
 extends Node3D
 ## Real geometry at distinct distances creates parallax as the spirit moves.
 var garden: Node3D
@@ -4867,7 +4995,7 @@ func update_atmosphere() -> void:
 
 ## valley_scenery.gdshader
 
-```
+```gdshader
 shader_type spatial;
 render_mode cull_disabled;
 uniform vec3 haze_color : source_color = vec3(0.53,0.62,0.66);
@@ -4896,7 +5024,7 @@ void fragment() {
 
 ## valley_wisp.gdshader
 
-```
+```gdshader
 shader_type spatial;
 render_mode unshaded, cull_disabled, depth_draw_never, fog_disabled;
 uniform vec3 tint : source_color = vec3(0.8,0.83,0.83);
@@ -4920,7 +5048,7 @@ void fragment() {
 
 ## village.gd
 
-```
+```gd
 extends Node3D
 const Stock=preload("res://village_stock.gd")
 const SHOPS=["THE ANIMAL KEEPER","THE PLANT NURSERY","THE DECORATOR","THE BUILDER"]
@@ -5314,7 +5442,7 @@ func _notification(what: int) -> void:
 
 ## village.tscn
 
-```
+```tscn
 [gd_scene load_steps=2 format=3]
 
 [ext_resource type="Script" path="res://village.gd" id="1"]
@@ -5326,7 +5454,7 @@ script = ExtResource("1")
 
 ## village_stock.gd
 
-```
+```gd
 extends RefCounted
 ## Shop stock and deterministic delivery shared by the village and save loader.
 const STOCK := [
@@ -5457,7 +5585,7 @@ static func model(id: String) -> Node3D:
 
 ## wandering_npc.gd
 
-```
+```gd
 extends CharacterBody3D
 ## A walking visitor. The imported animation is an in-place walk cycle.
 const MODEL = preload("res://assets/arthur.glb")
@@ -5702,7 +5830,7 @@ func _choose_destination() -> void:
 
 ## water.gdshader
 
-```
+```gdshader
 shader_type spatial;
 uniform sampler2D watered_tiles : filter_linear, repeat_disable;
 render_mode cull_disabled;
@@ -5769,7 +5897,7 @@ void fragment() {
 
 ## welsh_sky.gd
 
-```
+```gd
 extends RefCounted
 
 static func apply(world: WorldEnvironment, sun: DirectionalLight3D) -> void:
@@ -5824,3 +5952,4 @@ static func generate_cloud_cover() -> ImageTexture:
 	return ImageTexture.create_from_image(image)
 
 ```
+

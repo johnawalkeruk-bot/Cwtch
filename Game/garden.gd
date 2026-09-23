@@ -144,6 +144,9 @@ func _ready() -> void:
 		animal.setup(self)
 		SelectionTarget.attach(animal,entry[0],Vector3(0.7,0.45,0.7) if entry[1]=="badger" else Vector3(1.1,0.65,0.8))
 		additional_visitors.append(animal)
+	var meadow_grass := preload("res://meadow_grass.gd").new()
+	add_child(meadow_grass)
+	meadow_grass.build(self)
 	_refresh_ui()
 
 func _create_chunks() -> void:
