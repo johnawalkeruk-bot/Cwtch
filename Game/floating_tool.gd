@@ -73,14 +73,15 @@ func setup(world: Node3D) -> void:
 	equip(0)
 
 func equip(index: int) -> void:
-	selected = clampi(index,0,2)
+	if busy: return
+	selected = clampi(index,0,3)
 	for i in range(models.size()): models[i].visible = i==selected
 	pivot.rotation = Vector3.ZERO
 	particles.emitting = false
 	particles.color = Color("84e45a") if selected==1 else Color("58bbed")
 
 func use_at(cell: Vector2i) -> bool:
-	if busy: return false
+	if busy or selected==3: return false
 	target_cell = cell
 	target_point = garden.cell_center(cell)
 	busy = true

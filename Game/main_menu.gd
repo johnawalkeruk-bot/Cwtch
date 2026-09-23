@@ -53,6 +53,9 @@ func _ready() -> void:
 	_load_options()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_update_weather(0.0)
+	var model_weather := preload("res://model_weather.gd").new()
+	stage.add_child(model_weather)
+	model_weather.setup(self)
 
 func _material(color: Color) -> StandardMaterial3D:
 	var result := StandardMaterial3D.new()

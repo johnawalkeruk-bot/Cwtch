@@ -3,9 +3,12 @@ extends Node3D
 const WIDTH := 512.0
 var material: ShaderMaterial
 var garden: Node3D
+var contours := FastNoiseLite.new()
 
 func build(world: Node3D) -> void:
 	garden = world
+	contours.seed = 1891
+	contours.frequency = 0.14
 	name = "BackgroundMeadow"
 	material = garden.terrain_material.duplicate() as ShaderMaterial
 	material.set_shader_parameter("background_surface", true)
@@ -23,8 +26,20 @@ func build(world: Node3D) -> void:
 func _add_surface(size: Vector2, center: Vector2) -> void:
 	var plane := PlaneMesh.new()
 	plane.size = size
+	plane.subdivide_width = maxi(1,ceili(size.x/2.0)-1)
+	plane.subdivide_depth = maxi(1,ceili(size.y/2.0)-1)
 	var mesh := MeshInstance3D.new()
-	mesh.mesh = plane
+	var arrays := plane.surface_get_arrays(0)
+	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	for i in range(vertices.size()):
+		vertices[i].y = height_at(Vector2(vertices[i].x,vertices[i].z)+center)
+	arrays[Mesh.ARRAY_VERTEX] = vertices
+	var surface := SurfaceTool.new()
+	var sculpted := ArrayMesh.new()
+	sculpted.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,arrays)
+	surface.create_from(sculpted,0)
+	surface.generate_normals()
+	mesh.mesh = surface.commit()
 	mesh.position = Vector3(center.x, 0, center.y)
 	mesh.material_override = material
 	mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -52,3 +67,9 @@ func _paint_surface() -> ImageTexture:
 func _process(_delta: float) -> void:
 	if is_instance_valid(garden):
 		material.set_shader_parameter("wetness", garden.valley_cycle.wetness)
+
+func height_at(point: Vector2) -> float:
+	var half: Vector2 = Vector2(garden.chunk_count)
+	var outside := (point.abs()-half).max(Vector2.ZERO).length()
+	var fade := smoothstep(0.0,3.0,outside)*(1.0-smoothstep(20.0,24.0,point.length()))
+	return maxf(0.0,0.3+contours.get_noise_2dv(point)*0.55)*fade

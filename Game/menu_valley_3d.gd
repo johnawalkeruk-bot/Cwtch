@@ -18,11 +18,13 @@ func ground_height(x: float, z: float) -> float:
 func build() -> void:
 	rng.seed = 1941
 	material = ShaderMaterial.new()
-	material.shader = preload("res://menu_mountain.gdshader")
+	material.shader = preload("res://landscape_surface.gdshader")
+	material.set_shader_parameter("color_maps",load("res://assets/textures/terrain_colors.res"))
 	_build_mountain()
 	_build_ground()
 	_build_stream()
 	_build_forest()
+	_build_meadow_details()
 	_build_birds()
 
 func _triangle(builder: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, color: Color) -> void:
@@ -120,11 +122,11 @@ func _build_stream() -> void:
 func _build_forest() -> void:
 	for kind in ["ash","birch"]:
 		var placements: Array[Transform3D] = []
-		for i in range(110):
+		for i in range(180):
 			var x := rng.randf_range(-150,150)
 			var z := rng.randf_range(-45,100)
 			if absf(x-(14+sin(z*0.045)*7))<6: continue
-			if absf(x)<24 and z>20: continue
+			if absf(x)<12 and z>20: continue
 			if Vector2((x+5)/87,(z+87)/73).length()<1: continue
 			var size := rng.randf_range(0.75,1.6)
 			var basis := Basis(Vector3.UP,rng.randf()*TAU).scaled(Vector3.ONE*size)
@@ -179,3 +181,37 @@ func animate(time: float, daylight: float, rain: float) -> void:
 		bird.rotation.y = -phase
 		for wing in range(2):
 			bird.get_child(wing).rotation.z = sin(time*4+i)*0.5*(-1 if wing==0 else 1)
+
+func _build_meadow_details() -> void:
+	var source := preload("res://valley_landscape.gd").new()
+	var grass_source := preload("res://meadow_grass.gd").new()
+	for kind in ["grass","fern","heather","gorse"]:
+		var prototype: ArrayMesh = grass_source._tuft() if kind=="grass" else source._prototype(kind)
+		var positions: Array[Transform3D] = []
+		for i in range(14000 if kind=="grass" else 300):
+			var x := rng.randf_range(-90,95)
+			var z := rng.randf_range(8,110)
+			var river_distance := absf(x-(14+sin(z*0.045)*7))
+			if river_distance<3.3: continue
+			if kind!="grass" and sin(x*0.13+z*0.16)<0.0: continue
+			var scale_factor := rng.randf_range(1.5,3.0) if kind=="grass" else rng.randf_range(0.8,1.9)
+			positions.append(Transform3D(Basis(Vector3.UP,rng.randf()*TAU).scaled(Vector3.ONE*scale_factor),Vector3(x,ground_height(x,z),z)))
+		var batch := MultiMesh.new()
+		batch.transform_format = MultiMesh.TRANSFORM_3D
+		batch.mesh = prototype
+		batch.instance_count = positions.size()
+		for i in range(positions.size()): batch.set_instance_transform(i,positions[i])
+		var node := MultiMeshInstance3D.new()
+		node.name = "Menu"+kind.capitalize()
+		node.multimesh = batch
+		var foliage := StandardMaterial3D.new()
+		foliage.roughness = 1.0
+		foliage.metallic_specular = 0.1
+		foliage.cull_mode = BaseMaterial3D.CULL_DISABLED
+		foliage.vertex_color_use_as_albedo = kind!="grass"
+		foliage.albedo_color = Color("6b7a3a") if kind=="grass" else Color.WHITE
+		node.material_override = foliage
+		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(node)
+	source.free()
+	grass_source.free()

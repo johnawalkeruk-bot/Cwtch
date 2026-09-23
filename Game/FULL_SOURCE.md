@@ -162,9 +162,12 @@ extends Node3D
 const WIDTH := 512.0
 var material: ShaderMaterial
 var garden: Node3D
+var contours := FastNoiseLite.new()
 
 func build(world: Node3D) -> void:
 	garden = world
+	contours.seed = 1891
+	contours.frequency = 0.14
 	name = "BackgroundMeadow"
 	material = garden.terrain_material.duplicate() as ShaderMaterial
 	material.set_shader_parameter("background_surface", true)
@@ -182,8 +185,20 @@ func build(world: Node3D) -> void:
 func _add_surface(size: Vector2, center: Vector2) -> void:
 	var plane := PlaneMesh.new()
 	plane.size = size
+	plane.subdivide_width = maxi(1,ceili(size.x/2.0)-1)
+	plane.subdivide_depth = maxi(1,ceili(size.y/2.0)-1)
 	var mesh := MeshInstance3D.new()
-	mesh.mesh = plane
+	var arrays := plane.surface_get_arrays(0)
+	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	for i in range(vertices.size()):
+		vertices[i].y = height_at(Vector2(vertices[i].x,vertices[i].z)+center)
+	arrays[Mesh.ARRAY_VERTEX] = vertices
+	var surface := SurfaceTool.new()
+	var sculpted := ArrayMesh.new()
+	sculpted.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,arrays)
+	surface.create_from(sculpted,0)
+	surface.generate_normals()
+	mesh.mesh = surface.commit()
 	mesh.position = Vector3(center.x, 0, center.y)
 	mesh.material_override = material
 	mesh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
@@ -211,6 +226,12 @@ func _paint_surface() -> ImageTexture:
 func _process(_delta: float) -> void:
 	if is_instance_valid(garden):
 		material.set_shader_parameter("wetness", garden.valley_cycle.wetness)
+
+func height_at(point: Vector2) -> float:
+	var half: Vector2 = Vector2(garden.chunk_count)
+	var outside := (point.abs()-half).max(Vector2.ZERO).length()
+	var fade := smoothstep(0.0,3.0,outside)*(1.0-smoothstep(20.0,24.0,point.length()))
+	return maxf(0.0,0.3+contours.get_noise_2dv(point)*0.55)*fade
 
 ```
 
@@ -1293,14 +1314,15 @@ func setup(world: Node3D) -> void:
 	equip(0)
 
 func equip(index: int) -> void:
-	selected = clampi(index,0,2)
+	if busy: return
+	selected = clampi(index,0,3)
 	for i in range(models.size()): models[i].visible = i==selected
 	pivot.rotation = Vector3.ZERO
 	particles.emitting = false
 	particles.color = Color("84e45a") if selected==1 else Color("58bbed")
 
 func use_at(cell: Vector2i) -> bool:
-	if busy: return false
+	if busy or selected==3: return false
 	target_cell = cell
 	target_point = garden.cell_center(cell)
 	busy = true
@@ -1351,8 +1373,8 @@ func _process(delta: float) -> void:
 ```gd
 extends "res://main.gd"
 
-enum Tool { HOE, SEEDS, WATER }
-const TOOL_NAMES := ["Hoe", "Seed packet", "Watering can"]
+enum Tool { HOE, SEEDS, WATER, NONE }
+const TOOL_NAMES := ["Hoe", "Seed packet", "Watering can", "No tool equipped"]
 const GROW_SECONDS := 12.0
 const HARVEST_GOAL := 6
 const REACH := 100.0
@@ -1371,11 +1393,9 @@ const BackgroundMeadow = preload("res://background_meadow.gd")
 const ValleyLandscape = preload("res://valley_landscape.gd")
 var valley_landscape: Node3D
 const CyclingNPC = preload("res://cycling_npc.gd")
-const GardenCottage = preload("res://garden_cottage.gd")
 const ProceduralAnimal = preload("res://procedural_animal.gd")
 const HedgehogNPC = preload("res://hedgehog_npc.gd")
 var blocked_cells: Dictionary = {}
-var cottage: Node3D
 var hedgehog: Node3D
 var additional_visitors: Array[Node3D] = []
 var background_meadow: Node3D
@@ -1440,9 +1460,6 @@ func _ready() -> void:
 	floating_tool.effect_applied.connect(_apply_tool)
 	ambience = ValleyAmbience.new()
 	add_child(ambience)
-	cottage = GardenCottage.new()
-	add_child(cottage)
-	cottage.build(self)
 	hedgehog = HedgehogNPC.new()
 	hedgehog.name = "Hedgehog"
 	add_child(hedgehog)
@@ -1498,6 +1515,9 @@ func _ready() -> void:
 	var meadow_grass := preload("res://meadow_grass.gd").new()
 	add_child(meadow_grass)
 	meadow_grass.build(self)
+	var model_weather := preload("res://model_weather.gd").new()
+	add_child(model_weather)
+	model_weather.setup(self)
 	_refresh_ui()
 
 func _create_chunks() -> void:
@@ -1656,7 +1676,8 @@ func _physics_process(delta: float) -> void:
 			message = selected_target.subject.get_meta("inspection_text",selected_target.label+" is enjoying the valley.")
 		elif player.is_settled() and cursor.is_settled():
 			if is_instance_valid(selected_target): target=selected_target.crop_cell
-			if blocked_cells.has(target): message="The cottage occupies this ground."
+			if blocked_cells.has(target): message="This ground is occupied."
+			elif tool==Tool.NONE: message="Choose a tool from the wheel to tend the ground."
 			else: floating_tool.use_at(target)
 		else:
 			message="Let the spirit settle, then tend this square."
@@ -1893,7 +1914,7 @@ func _set_guide(open: bool) -> void:
 	Input.mouse_mode=Input.MOUSE_MODE_VISIBLE if open else Input.MOUSE_MODE_CAPTURED
 
 func _select_tool(index: int) -> void:
-	tool=clampi(index,0,2)
+	tool=clampi(index,0,3)
 	action_pending=false
 	if is_instance_valid(floating_tool): floating_tool.equip(tool)
 	_refresh_ui()
@@ -2457,14 +2478,12 @@ func _sculpt_meadow() -> void:
 	for z in range(samples.y):
 		for x in range(samples.x):
 			var p: Vector2 = garden.grid_min + Vector2(x, z) * spacing
-			# A smooth level join to the surrounding meadow, and a stable cottage pad.
+			# A smooth level join to the surrounding meadow, with gently rolling ground throughout.
 			var edge := smoothstep(0.0, 2.0, minf(half.x-absf(p.x), half.y-absf(p.y)))
-			var pad := (p-Vector2(-6,-5)).abs()-Vector2(3.5,3.3)
-			var cottage_blend := smoothstep(0.0, 1.5, pad.max(Vector2.ZERO).length())
 			var working_plot := lerpf(0.22, 1.0, smoothstep(2.0, 5.0, p.length()))
 			var rolling := 0.32 + noise.get_noise_2dv(p)*0.65
 			rolling += 0.07*sin(p.x*0.75)*cos(p.y*0.65)
-			heights.set_pixel(x,z,Color(maxf(0.0,rolling)*edge*cottage_blend*working_plot,0,0))
+			heights.set_pixel(x,z,Color(maxf(0.0,rolling)*edge*working_plot,0,0))
 
 func _sculpt_pond() -> void:
 	var banks: Array[PackedVector2Array] = []
@@ -2745,6 +2764,40 @@ static func plant(parent: Node3D, placements: Array[Transform3D], kind: String) 
 
 ```
 
+## landscape_surface.gdshader
+
+```gdshader
+shader_type spatial;
+render_mode cull_disabled;
+uniform sampler2DArray color_maps : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform vec3 haze_color : source_color = vec3(0.53,0.62,0.66);
+uniform float daylight = 1.0;
+uniform float rain_strength = 0.0;
+uniform float scenery_time = 0.0;
+varying vec3 point;
+varying vec3 slope_normal;
+void vertex(){point=(MODEL_MATRIX*vec4(VERTEX,1.0)).xyz;slope_normal=normalize(mat3(MODEL_MATRIX)*NORMAL);}
+void fragment(){
+ vec3 blend=pow(abs(slope_normal),vec3(4.0));blend/=max(dot(blend,vec3(1.0)),0.0001);
+ vec3 grass=texture(color_maps,vec3(point.xz,1.0)).rgb;
+ vec3 soil=texture(color_maps,vec3(point.xz*0.8,0.0)).rgb;
+ vec3 rock=texture(color_maps,vec3(point.yz*0.45,2.0)).rgb*blend.x+texture(color_maps,vec3(point.xz*0.45,2.0)).rgb*blend.y+texture(color_maps,vec3(point.xy*0.45,2.0)).rgb*blend.z;
+ float steep=smoothstep(0.12,0.58,1.0-abs(slope_normal.y));
+ float altitude=smoothstep(12.0,40.0,point.y);
+ vec3 ground=mix(grass,soil,steep*0.35);
+ ground=mix(ground,rock,max(steep,altitude));
+ ground*=mix(vec3(1.0),vec3(0.72,0.82,0.96),altitude);
+ float snow=smoothstep(43.0,67.0,point.y+sin(point.x*0.17)*3.0)*smoothstep(0.2,0.75,abs(slope_normal.y));
+ ground=mix(ground,vec3(0.79,0.83,0.83),snow);
+ float distance_haze=(1.0-exp(-max(distance(CAMERA_POSITION_WORLD,point)-45.0,0.0)*0.003));
+ ALBEDO=mix(ground*(1.0-rain_strength*0.16),haze_color,distance_haze*0.24);
+ ROUGHNESS=0.96;
+ SPECULAR=0.1;
+ if(!FRONT_FACING){NORMAL=-NORMAL;}
+}
+
+```
+
 ## main.gd
 
 ```gd
@@ -3019,6 +3072,9 @@ func _ready() -> void:
 	_load_options()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_update_weather(0.0)
+	var model_weather := preload("res://model_weather.gd").new()
+	stage.add_child(model_weather)
+	model_weather.setup(self)
 
 func _material(color: Color) -> StandardMaterial3D:
 	var result := StandardMaterial3D.new()
@@ -3503,7 +3559,8 @@ func build(world: Node3D) -> void:
 			for i in range(batch.instance_count):
 				var point := Vector3(x * 4.0 + rng.randf_range(0.12, 3.88), 0.008, z * 4.0 + rng.randf_range(0.12, 3.88))
 				var scale_factor := rng.randf_range(0.65, 1.3)
-				point.y += world.heightfield.height_at(Vector2(point.x, point.z))
+				var ground_point := Vector2(point.x, point.z)
+				point.y += world.heightfield.height_at(ground_point) if world.contains_cell(world.local_to_cell(point)) else world.background_meadow.height_at(ground_point)
 				var basis := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3.ONE * scale_factor)
 				batch.set_instance_transform(i, Transform3D(basis, point))
 				batch.set_instance_color(i, Color(rng.randf_range(0.8, 1.13), rng.randf_range(0.9, 1.1), 0.9))
@@ -3760,11 +3817,13 @@ func ground_height(x: float, z: float) -> float:
 func build() -> void:
 	rng.seed = 1941
 	material = ShaderMaterial.new()
-	material.shader = preload("res://menu_mountain.gdshader")
+	material.shader = preload("res://landscape_surface.gdshader")
+	material.set_shader_parameter("color_maps",load("res://assets/textures/terrain_colors.res"))
 	_build_mountain()
 	_build_ground()
 	_build_stream()
 	_build_forest()
+	_build_meadow_details()
 	_build_birds()
 
 func _triangle(builder: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, color: Color) -> void:
@@ -3862,11 +3921,11 @@ func _build_stream() -> void:
 func _build_forest() -> void:
 	for kind in ["ash","birch"]:
 		var placements: Array[Transform3D] = []
-		for i in range(110):
+		for i in range(180):
 			var x := rng.randf_range(-150,150)
 			var z := rng.randf_range(-45,100)
 			if absf(x-(14+sin(z*0.045)*7))<6: continue
-			if absf(x)<24 and z>20: continue
+			if absf(x)<12 and z>20: continue
 			if Vector2((x+5)/87,(z+87)/73).length()<1: continue
 			var size := rng.randf_range(0.75,1.6)
 			var basis := Basis(Vector3.UP,rng.randf()*TAU).scaled(Vector3.ONE*size)
@@ -3921,6 +3980,165 @@ func animate(time: float, daylight: float, rain: float) -> void:
 		bird.rotation.y = -phase
 		for wing in range(2):
 			bird.get_child(wing).rotation.z = sin(time*4+i)*0.5*(-1 if wing==0 else 1)
+
+func _build_meadow_details() -> void:
+	var source := preload("res://valley_landscape.gd").new()
+	var grass_source := preload("res://meadow_grass.gd").new()
+	for kind in ["grass","fern","heather","gorse"]:
+		var prototype: ArrayMesh = grass_source._tuft() if kind=="grass" else source._prototype(kind)
+		var positions: Array[Transform3D] = []
+		for i in range(14000 if kind=="grass" else 300):
+			var x := rng.randf_range(-90,95)
+			var z := rng.randf_range(8,110)
+			var river_distance := absf(x-(14+sin(z*0.045)*7))
+			if river_distance<3.3: continue
+			if kind!="grass" and sin(x*0.13+z*0.16)<0.0: continue
+			var scale_factor := rng.randf_range(1.5,3.0) if kind=="grass" else rng.randf_range(0.8,1.9)
+			positions.append(Transform3D(Basis(Vector3.UP,rng.randf()*TAU).scaled(Vector3.ONE*scale_factor),Vector3(x,ground_height(x,z),z)))
+		var batch := MultiMesh.new()
+		batch.transform_format = MultiMesh.TRANSFORM_3D
+		batch.mesh = prototype
+		batch.instance_count = positions.size()
+		for i in range(positions.size()): batch.set_instance_transform(i,positions[i])
+		var node := MultiMeshInstance3D.new()
+		node.name = "Menu"+kind.capitalize()
+		node.multimesh = batch
+		var foliage := StandardMaterial3D.new()
+		foliage.roughness = 1.0
+		foliage.metallic_specular = 0.1
+		foliage.cull_mode = BaseMaterial3D.CULL_DISABLED
+		foliage.vertex_color_use_as_albedo = kind!="grass"
+		foliage.albedo_color = Color("6b7a3a") if kind=="grass" else Color.WHITE
+		node.material_override = foliage
+		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(node)
+	source.free()
+	grass_source.free()
+
+```
+
+## model_weather.gd
+
+```gd
+extends Node
+## Per-scene material copies preserve imported meshes and animation resources.
+var scene: Node
+var materials: Dictionary = {}
+var seen: Dictionary = {}
+var scan_time := 0.0
+var wetness := 0.0
+
+func setup(root: Node) -> void:
+ scene=root
+ _scan(scene)
+
+func _channel(index: int) -> Vector4:
+ return [Vector4(1,0,0,0),Vector4(0,1,0,0),Vector4(0,0,1,0),Vector4(0,0,0,1),Vector4(0.333,0.333,0.333,0)][clampi(index,0,4)]
+
+func _convert(source: Material) -> Material:
+ if not source is StandardMaterial3D: return source
+ if source.shading_mode==BaseMaterial3D.SHADING_MODE_UNSHADED: return source
+ if source.emission_enabled or source.uv1_triplanar or source.billboard_mode!=BaseMaterial3D.BILLBOARD_DISABLED: return source
+ if source.transparency not in [BaseMaterial3D.TRANSPARENCY_DISABLED,BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR]: return source
+ var key := source.get_instance_id()
+ if materials.has(key): return materials[key]
+ var result := ShaderMaterial.new()
+ result.shader=preload("res://model_weather.gdshader")
+ result.set_shader_parameter("base_color",source.albedo_color)
+ result.set_shader_parameter("vertex_tint",source.vertex_color_use_as_albedo)
+ result.set_shader_parameter("double_sided",source.cull_mode==BaseMaterial3D.CULL_DISABLED)
+ result.set_shader_parameter("cutoff",source.alpha_scissor_threshold if source.transparency==BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR else 0.001)
+ result.set_shader_parameter("roughness_value",source.roughness)
+ result.set_shader_parameter("metal_value",source.metallic)
+ result.set_shader_parameter("rough_channel",_channel(source.roughness_texture_channel))
+ result.set_shader_parameter("metal_channel",_channel(source.metallic_texture_channel))
+ result.set_shader_parameter("normal_strength",source.normal_scale)
+ result.set_shader_parameter("has_ao",source.ao_enabled and source.ao_texture!=null)
+ if source.ao_texture!=null:result.set_shader_parameter("ao_map",source.ao_texture)
+ result.set_shader_parameter("ao_channel",_channel(source.ao_texture_channel))
+ result.set_shader_parameter("uv_scale",Vector2(source.uv1_scale.x,source.uv1_scale.y))
+ result.set_shader_parameter("uv_offset",Vector2(source.uv1_offset.x,source.uv1_offset.y))
+ for pair in [["albedo",source.albedo_texture],["normal",source.normal_texture if source.normal_enabled else null],["rough",source.roughness_texture],["metal",source.metallic_texture]]:
+  result.set_shader_parameter("has_"+pair[0],pair[1]!=null)
+  if pair[1]!=null:result.set_shader_parameter(pair[0]+"_map",pair[1])
+ materials[key]=result
+ return result
+
+func _scan(node: Node) -> void:
+ if not seen.has(node.get_instance_id()):
+  if node is MeshInstance3D and node.mesh:
+   if node.material_override:
+    node.material_override=_convert(node.material_override)
+   else:
+    for i in range(node.mesh.get_surface_count()):
+     node.set_surface_override_material(i,_convert(node.get_active_material(i)))
+  elif node is MultiMeshInstance3D and node.multimesh and node.multimesh.mesh:
+   if node.material_override:node.material_override=_convert(node.material_override)
+   else:
+    var mesh: Mesh = node.multimesh.mesh.duplicate()
+    for i in range(mesh.get_surface_count()):mesh.surface_set_material(i,_convert(mesh.surface_get_material(i)))
+    node.multimesh.mesh=mesh
+  seen[node.get_instance_id()]=true
+ for child in node.get_children(): _scan(child)
+
+func _process(delta: float) -> void:
+ if not is_instance_valid(scene):return
+ scan_time+=delta
+ if scan_time>=2.0:
+  scan_time=0.0
+  _scan(scene)
+ var rain: float = scene.valley_cycle.rain_strength if scene.get("valley_cycle")!=null else scene.rain_strength
+ wetness=move_toward(wetness,rain,delta/(25.0 if rain>wetness else 80.0))
+ for material: ShaderMaterial in materials.values():material.set_shader_parameter("wetness",wetness)
+
+```
+
+## model_weather.gdshader
+
+```gdshader
+shader_type spatial;
+render_mode cull_disabled;
+uniform vec4 base_color : source_color = vec4(1.0);
+uniform sampler2D albedo_map : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D normal_map : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D rough_map : filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D metal_map : filter_linear_mipmap_anisotropic, repeat_enable;
+uniform bool has_albedo = false;
+uniform bool has_normal = false;
+uniform bool has_rough = false;
+uniform bool has_metal = false;
+uniform bool has_ao = false;
+uniform sampler2D ao_map : filter_linear_mipmap_anisotropic, repeat_enable;
+uniform vec4 ao_channel = vec4(1,0,0,0);
+uniform bool vertex_tint = false;
+uniform bool double_sided = false;
+uniform float cutoff = 0.001;
+uniform float normal_strength = 1.0;
+uniform float roughness_value = 1.0;
+uniform float metal_value = 0.0;
+uniform float wetness = 0.0;
+uniform vec4 rough_channel = vec4(0,1,0,0);
+uniform vec4 metal_channel = vec4(0,0,1,0);
+uniform vec2 uv_scale = vec2(1.0);
+uniform vec2 uv_offset = vec2(0.0);
+void fragment(){
+ if(!double_sided && !FRONT_FACING){discard;}
+ vec2 uv=UV*uv_scale+uv_offset;
+ vec4 paint=base_color;
+ if(has_albedo){paint*=texture(albedo_map,uv);}
+ if(vertex_tint){paint*=COLOR;}
+ float metal=metal_value*(has_metal ? dot(texture(metal_map,uv),metal_channel) : 1.0);
+ float dry=roughness_value*(has_rough ? dot(texture(rough_map,uv),rough_channel) : 1.0);
+ ALBEDO=paint.rgb*(1.0-wetness*0.17*(1.0-metal));
+ ALPHA=paint.a;
+ ALPHA_SCISSOR_THRESHOLD=cutoff;
+ METALLIC=metal;
+ ROUGHNESS=mix(max(dry,mix(0.72,0.27,metal)),mix(0.48,0.22,metal),wetness*0.65);
+ SPECULAR=mix(0.22,0.36,wetness);
+ if(has_ao){AO=dot(texture(ao_map,uv),ao_channel);}
+ if(!FRONT_FACING){NORMAL=-NORMAL;}
+ if(has_normal){NORMAL_MAP=texture(normal_map,uv).rgb;NORMAL_MAP_DEPTH=normal_strength;}
+}
 
 ```
 
@@ -4464,8 +4682,8 @@ func is_settled() -> bool:
 extends Control
 signal tool_selected(index: int)
 signal cancelled
-const LABELS := ["Hoe", "Seed packet", "Watering can"]
-const NOTES := ["Turn grass into earth", "Scatter a little green", "Give the ground a drink"]
+const LABELS := ["Hoe", "Seed packet", "Watering can", "Put away"]
+const NOTES := ["Turn grass into earth", "Scatter a little green", "Give the ground a drink", "Stow your tool and wander"]
 var selected := 0
 var hovered := -1
 var title: Label
@@ -4519,7 +4737,7 @@ func _gui_input(event: InputEvent) -> void:
 		if offset.length()<65 or offset.length()>220:
 			hovered = -1
 		else:
-			hovered = int(floor(fposmod(offset.angle()+PI/2+PI/3,TAU)/(TAU/3)))
+			hovered = int(floor(fposmod(offset.angle()+PI/2+PI/4,TAU)/(TAU/4)))
 		_refresh()
 	if event is InputEventMouseButton and event.pressed:
 		if event.button_index==MOUSE_BUTTON_LEFT and hovered>=0:
@@ -4536,10 +4754,10 @@ func _refresh() -> void:
 
 func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO,size),Color(0.015,0.045,0.04,0.64))
-	for i in range(3):
-		var angle := -PI/2+i*TAU/3
-		var start := angle-PI/3+0.028
-		var end := angle+PI/3-0.028
+	for i in range(4):
+		var angle := -PI/2+i*TAU/4
+		var start := angle-PI/4+0.028
+		var end := angle+PI/4-0.028
 		var polygon := PackedVector2Array()
 		for j in range(41): polygon.append(center+Vector2.from_angle(lerpf(start,end,j/40.0))*198)
 		for j in range(40,-1,-1): polygon.append(center+Vector2.from_angle(lerpf(start,end,j/40.0))*72)
@@ -4560,7 +4778,7 @@ func _process(_delta: float) -> void:
 	if not visible: return
 	var stick := ControllerInput.movement()
 	if stick.length()>0.35:
-		hovered=int(floor(fposmod(stick.angle()+PI/2+PI/3,TAU)/(TAU/3)))
+		hovered=int(floor(fposmod(stick.angle()+PI/2+PI/4,TAU)/(TAU/4)))
 	_refresh()
 
 func _input(event: InputEvent) -> void:
@@ -4570,13 +4788,13 @@ func _input(event: InputEvent) -> void:
 	elif event.is_action_pressed("ui_cancel"):
 		cancelled.emit()
 	elif event.is_action_pressed("ui_left"):
-		hovered=posmod(hovered-1,3)
+		hovered=posmod(hovered-1,4)
 	elif event.is_action_pressed("ui_right"):
-		hovered=posmod(hovered+1,3)
+		hovered=posmod(hovered+1,4)
 	elif event.is_action_pressed("ui_up"):
 		hovered=0
 	elif event.is_action_pressed("ui_down"):
-		hovered=1 if hovered!=1 else 2
+		hovered=2
 	else: return
 	_refresh()
 	get_viewport().set_input_as_handled()
@@ -4815,6 +5033,8 @@ func build(world: Node3D) -> void:
  terrain_material.shader = preload("res://valley_scenery.gdshader")
  plants_material = terrain_material.duplicate()
  plants_material.set_shader_parameter("vegetation", true)
+ terrain_material.shader = preload("res://landscape_surface.gdshader")
+ terrain_material.set_shader_parameter("color_maps",load("res://assets/textures/terrain_colors.res"))
  _ridge(false)
  _ridge(true)
  _forest()
@@ -4987,7 +5207,7 @@ func _wild_edge() -> void:
    var outside: float=maxf(absf(point.x)-half.x,absf(point.y)-half.y)
    if outside<1.2 or point.length()>33: continue
    if rng.randf()>lerpf(0.12,0.85,smoothstep(1.2,14.0,outside)): continue
-   var height:=_ridge_height(point.length(),atan2(point.y,point.x),false) if point.length()>24 else 0.0
+   var height: float = _ridge_height(point.length(),atan2(point.y,point.x),false) if point.length()>24 else garden.background_meadow.height_at(point)
    var size:=rng.randf_range(0.6,1.25)
    placements.append(Transform3D(Basis(Vector3.UP,rng.randf()*TAU).scaled(Vector3.ONE*size),Vector3(point.x,maxf(0,height-0.1),point.y)))
   wild_count+=placements.size()
@@ -5029,6 +5249,7 @@ func update_atmosphere() -> void:
   var origin: Vector3=cloud.get_meta("origin")
   cloud.position=origin+Vector3(sin(cycle.elapsed*0.002+origin.z)*9.0,0,cos(cycle.elapsed*0.0015+origin.x)*5.0)
   cloud.rotation.y=atan2(garden.camera.global_position.x-cloud.global_position.x,garden.camera.global_position.z-cloud.global_position.z)
+
 
 ```
 

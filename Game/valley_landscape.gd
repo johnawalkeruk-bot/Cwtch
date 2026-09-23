@@ -20,6 +20,8 @@ func build(world: Node3D) -> void:
  terrain_material.shader = preload("res://valley_scenery.gdshader")
  plants_material = terrain_material.duplicate()
  plants_material.set_shader_parameter("vegetation", true)
+ terrain_material.shader = preload("res://landscape_surface.gdshader")
+ terrain_material.set_shader_parameter("color_maps",load("res://assets/textures/terrain_colors.res"))
  _ridge(false)
  _ridge(true)
  _forest()
@@ -192,7 +194,7 @@ func _wild_edge() -> void:
    var outside: float=maxf(absf(point.x)-half.x,absf(point.y)-half.y)
    if outside<1.2 or point.length()>33: continue
    if rng.randf()>lerpf(0.12,0.85,smoothstep(1.2,14.0,outside)): continue
-   var height:=_ridge_height(point.length(),atan2(point.y,point.x),false) if point.length()>24 else 0.0
+   var height: float = _ridge_height(point.length(),atan2(point.y,point.x),false) if point.length()>24 else garden.background_meadow.height_at(point)
    var size:=rng.randf_range(0.6,1.25)
    placements.append(Transform3D(Basis(Vector3.UP,rng.randf()*TAU).scaled(Vector3.ONE*size),Vector3(point.x,maxf(0,height-0.1),point.y)))
   wild_count+=placements.size()
@@ -234,3 +236,4 @@ func update_atmosphere() -> void:
   var origin: Vector3=cloud.get_meta("origin")
   cloud.position=origin+Vector3(sin(cycle.elapsed*0.002+origin.z)*9.0,0,cos(cycle.elapsed*0.0015+origin.x)*5.0)
   cloud.rotation.y=atan2(garden.camera.global_position.x-cloud.global_position.x,garden.camera.global_position.z-cloud.global_position.z)
+

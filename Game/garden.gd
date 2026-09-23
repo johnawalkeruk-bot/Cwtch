@@ -1,7 +1,7 @@
 extends "res://main.gd"
 
-enum Tool { HOE, SEEDS, WATER }
-const TOOL_NAMES := ["Hoe", "Seed packet", "Watering can"]
+enum Tool { HOE, SEEDS, WATER, NONE }
+const TOOL_NAMES := ["Hoe", "Seed packet", "Watering can", "No tool equipped"]
 const GROW_SECONDS := 12.0
 const HARVEST_GOAL := 6
 const REACH := 100.0
@@ -20,11 +20,9 @@ const BackgroundMeadow = preload("res://background_meadow.gd")
 const ValleyLandscape = preload("res://valley_landscape.gd")
 var valley_landscape: Node3D
 const CyclingNPC = preload("res://cycling_npc.gd")
-const GardenCottage = preload("res://garden_cottage.gd")
 const ProceduralAnimal = preload("res://procedural_animal.gd")
 const HedgehogNPC = preload("res://hedgehog_npc.gd")
 var blocked_cells: Dictionary = {}
-var cottage: Node3D
 var hedgehog: Node3D
 var additional_visitors: Array[Node3D] = []
 var background_meadow: Node3D
@@ -89,9 +87,6 @@ func _ready() -> void:
 	floating_tool.effect_applied.connect(_apply_tool)
 	ambience = ValleyAmbience.new()
 	add_child(ambience)
-	cottage = GardenCottage.new()
-	add_child(cottage)
-	cottage.build(self)
 	hedgehog = HedgehogNPC.new()
 	hedgehog.name = "Hedgehog"
 	add_child(hedgehog)
@@ -147,6 +142,9 @@ func _ready() -> void:
 	var meadow_grass := preload("res://meadow_grass.gd").new()
 	add_child(meadow_grass)
 	meadow_grass.build(self)
+	var model_weather := preload("res://model_weather.gd").new()
+	add_child(model_weather)
+	model_weather.setup(self)
 	_refresh_ui()
 
 func _create_chunks() -> void:
@@ -305,7 +303,8 @@ func _physics_process(delta: float) -> void:
 			message = selected_target.subject.get_meta("inspection_text",selected_target.label+" is enjoying the valley.")
 		elif player.is_settled() and cursor.is_settled():
 			if is_instance_valid(selected_target): target=selected_target.crop_cell
-			if blocked_cells.has(target): message="The cottage occupies this ground."
+			if blocked_cells.has(target): message="This ground is occupied."
+			elif tool==Tool.NONE: message="Choose a tool from the wheel to tend the ground."
 			else: floating_tool.use_at(target)
 		else:
 			message="Let the spirit settle, then tend this square."
@@ -542,7 +541,7 @@ func _set_guide(open: bool) -> void:
 	Input.mouse_mode=Input.MOUSE_MODE_VISIBLE if open else Input.MOUSE_MODE_CAPTURED
 
 func _select_tool(index: int) -> void:
-	tool=clampi(index,0,2)
+	tool=clampi(index,0,3)
 	action_pending=false
 	if is_instance_valid(floating_tool): floating_tool.equip(tool)
 	_refresh_ui()

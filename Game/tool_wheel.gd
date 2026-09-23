@@ -1,8 +1,8 @@
 extends Control
 signal tool_selected(index: int)
 signal cancelled
-const LABELS := ["Hoe", "Seed packet", "Watering can"]
-const NOTES := ["Turn grass into earth", "Scatter a little green", "Give the ground a drink"]
+const LABELS := ["Hoe", "Seed packet", "Watering can", "Put away"]
+const NOTES := ["Turn grass into earth", "Scatter a little green", "Give the ground a drink", "Stow your tool and wander"]
 var selected := 0
 var hovered := -1
 var title: Label
@@ -56,7 +56,7 @@ func _gui_input(event: InputEvent) -> void:
 		if offset.length()<65 or offset.length()>220:
 			hovered = -1
 		else:
-			hovered = int(floor(fposmod(offset.angle()+PI/2+PI/3,TAU)/(TAU/3)))
+			hovered = int(floor(fposmod(offset.angle()+PI/2+PI/4,TAU)/(TAU/4)))
 		_refresh()
 	if event is InputEventMouseButton and event.pressed:
 		if event.button_index==MOUSE_BUTTON_LEFT and hovered>=0:
@@ -73,10 +73,10 @@ func _refresh() -> void:
 
 func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO,size),Color(0.015,0.045,0.04,0.64))
-	for i in range(3):
-		var angle := -PI/2+i*TAU/3
-		var start := angle-PI/3+0.028
-		var end := angle+PI/3-0.028
+	for i in range(4):
+		var angle := -PI/2+i*TAU/4
+		var start := angle-PI/4+0.028
+		var end := angle+PI/4-0.028
 		var polygon := PackedVector2Array()
 		for j in range(41): polygon.append(center+Vector2.from_angle(lerpf(start,end,j/40.0))*198)
 		for j in range(40,-1,-1): polygon.append(center+Vector2.from_angle(lerpf(start,end,j/40.0))*72)
@@ -97,7 +97,7 @@ func _process(_delta: float) -> void:
 	if not visible: return
 	var stick := ControllerInput.movement()
 	if stick.length()>0.35:
-		hovered=int(floor(fposmod(stick.angle()+PI/2+PI/3,TAU)/(TAU/3)))
+		hovered=int(floor(fposmod(stick.angle()+PI/2+PI/4,TAU)/(TAU/4)))
 	_refresh()
 
 func _input(event: InputEvent) -> void:
@@ -107,13 +107,13 @@ func _input(event: InputEvent) -> void:
 	elif event.is_action_pressed("ui_cancel"):
 		cancelled.emit()
 	elif event.is_action_pressed("ui_left"):
-		hovered=posmod(hovered-1,3)
+		hovered=posmod(hovered-1,4)
 	elif event.is_action_pressed("ui_right"):
-		hovered=posmod(hovered+1,3)
+		hovered=posmod(hovered+1,4)
 	elif event.is_action_pressed("ui_up"):
 		hovered=0
 	elif event.is_action_pressed("ui_down"):
-		hovered=1 if hovered!=1 else 2
+		hovered=2
 	else: return
 	_refresh()
 	get_viewport().set_input_as_handled()
