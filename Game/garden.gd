@@ -23,7 +23,7 @@ const CyclingNPC = preload("res://cycling_npc.gd")
 const ProceduralAnimal = preload("res://procedural_animal.gd")
 const HedgehogNPC = preload("res://hedgehog_npc.gd")
 var blocked_cells: Dictionary = {}
-var hedgehog: Node3D
+var wildlife: Node
 var additional_visitors: Array[Node3D] = []
 var background_meadow: Node3D
 var valley_cycle: Node3D
@@ -87,21 +87,11 @@ func _ready() -> void:
 	floating_tool.effect_applied.connect(_apply_tool)
 	ambience = ValleyAmbience.new()
 	add_child(ambience)
-	hedgehog = HedgehogNPC.new()
-	hedgehog.name = "Hedgehog"
-	add_child(hedgehog)
-	hedgehog.setup(self)
-	SelectionTarget.attach(hedgehog, "Hedgehog", Vector3(0.3,0.30,0.38))
 	visitor = WanderingNPC.new()
 	visitor.name = "WanderingVisitor"
 	add_child(visitor)
 	visitor.setup(self)
 	SelectionTarget.attach(visitor, "Valley visitor", Vector3(0.65, 1.5, 0.65))
-	chicken = ChickenNPC.new()
-	chicken.name = "WanderingChicken"
-	add_child(chicken)
-	chicken.setup(self)
-	SelectionTarget.attach(chicken, "Chicken", Vector3(0.40, 0.48, 0.45))
 	valley_cycle = ValleyCycle.new()
 	valley_cycle.name = "DayNightWeather"
 	add_child(valley_cycle)
@@ -130,15 +120,9 @@ func _ready() -> void:
 	angus.setup(self)
 	SelectionTarget.attach(angus,"Angus McDoogal",Vector3(0.8,1.5,0.8))
 	additional_visitors.append(angus)
-	for entry in [["Badger","badger",Vector2i(0,4)],["Dragon","dragon",Vector2i(7,5)]]:
-		var animal := ProceduralAnimal.new()
-		animal.name = entry[0]
-		animal.species = entry[1]
-		animal.cell = entry[2]
-		add_child(animal)
-		animal.setup(self)
-		SelectionTarget.attach(animal,entry[0],Vector3(0.7,0.45,0.7) if entry[1]=="badger" else Vector3(1.1,0.65,0.8))
-		additional_visitors.append(animal)
+	wildlife=preload("res://garden_wildlife.gd").new()
+	add_child(wildlife)
+	wildlife.setup(self)
 	var meadow_grass := preload("res://meadow_grass.gd").new()
 	add_child(meadow_grass)
 	meadow_grass.build(self)

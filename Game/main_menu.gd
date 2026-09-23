@@ -353,7 +353,7 @@ func _save_garden() -> bool:
 	var data := {"version":1,"terrain":terrain,"crops":crops,"harvested":garden.harvested,
 		"player":[garden.player.cell.x,garden.player.cell.y],"player_position":[garden.player.position.x,garden.player.position.z],"elapsed":garden.valley_cycle.elapsed,
 		"weather":garden.valley_cycle.weather_index,"weather_elapsed":garden.valley_cycle.weather_elapsed,
-		"wetness":garden.valley_cycle.wetness,"watered":_saved_watered(),"coins":coins,"purchases":purchases}
+		"wildlife":garden.wildlife.save_data(),"wetness":garden.valley_cycle.wetness,"watered":_saved_watered(),"coins":coins,"purchases":purchases}
 	var file := FileAccess.open(SAVE_PATH,FileAccess.WRITE)
 	if not file: return false
 	file.store_string(JSON.stringify(data))
@@ -400,6 +400,7 @@ func _restore_garden() -> void:
 			garden.watered_image.set_pixel(wet_cell.x,wet_cell.y,Color(garden.watered_cells[wet_cell],0,0))
 	garden.watered_texture.update(garden.watered_image)
 	coins=maxi(0,int(data.get("coins",500)))
+	garden.wildlife.restore(data.get("wildlife",{}))
 	purchases.clear()
 	for record in data.get("purchases",[]):
 		if not record is Dictionary or not record.has_all(["id","x","z"]): continue
@@ -478,6 +479,7 @@ func return_from_village() -> void:
 func purchase_village_item(id: String) -> String:
 	var item: Dictionary=preload("res://village_stock.gd").item(id)
 	if item.is_empty(): return "That item is unavailable."
+	if id=="hedgehog" and garden.wildlife.grass_ratio()<0.01:return "Hedgehogs need at least 1% grass before visiting your garden."
 	if coins<int(item.price): return "There are not enough coins in your purse."
 	var cell: Vector2i=preload("res://village_stock.gd").find_space(garden,id)
 	if cell.x<0: return "Your garden needs more clear ground for this delivery."
@@ -489,4 +491,5 @@ func purchase_village_item(id: String) -> String:
 		purchases.pop_back()
 		return "The purchase could not be saved. No coins were spent."
 	preload("res://village_stock.gd").deliver(garden,record)
+	_save_garden()
 	return "%s delivered to your garden.\n%d coins remaining."%[item.name,coins]

@@ -7,6 +7,7 @@ const ENTRIES := [
  ["People","Meera","A familiar face among the garden paths. Meera wanders between the plots and the wild edge, taking in the changing light.","Meera"],
  ["People","Angus McDoogal","There is always a little movement where Angus stands. His lively gestures bring a welcome touch of company to a quiet afternoon.","Angus"],
  ["People","The visitor","A traveller passing through the valley. Stop for a moment and watch: even an unhurried garden has its small conversations.","WanderingVisitor"],
+ ["Animals","Peacock","A colourful garden companion, with an iridescent neck and a magnificent tail.","Peacock"],
  ["Animals","Chicken","A small, busy companion on the garden paths. Watch those quick steps and curious pauses as it explores the ground.","WanderingChicken"],
  ["Animals","Hedgehog","Low to the ground and never in a hurry. The hedgehog noses around the garden, stopping now and then before continuing its little journey.","Hedgehog"],
  ["Animals","Badger","A sturdy visitor with a distinctive striped face. The badger takes slow turns around the plots and shares the paths with its neighbours.","Badger"],
@@ -21,6 +22,7 @@ var entries: Array[int] = []
 var spread: Control
 var title: Label
 var description: Label
+var visit_notes: Label
 var folio: Label
 var section: Label
 var viewport: SubViewport
@@ -57,7 +59,7 @@ func _ready() -> void:
 	title=_text("",Vector2(580,139),Vector2(405,65),35)
 	description=_text("",Vector2(580,232),Vector2(395,210),21)
 	description.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
-	_text("Notes from your slice of the valley.",Vector2(580,463),Vector2(400,32),16)
+	visit_notes=_text("",Vector2(580,446),Vector2(410,76),16)
 	folio=_text("",Vector2(450,542),Vector2(160,28),15)
 	folio.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
 	previous=_button("‹  Previous",Vector2(80,533),Vector2(150,38),func(): _turn(-1))
@@ -200,18 +202,32 @@ func _category(value: String) -> void:
 		tab.modulate=Color("ffe5ae") if tab.text==category else Color("b9aa8c")
 	entries.clear()
 	for i in ENTRIES.size():
-		if ENTRIES[i][0]==category: entries.append(i)
+		if ENTRIES[i][0]==category:
+			if category!="Animals" or garden.wildlife.records.has(str(ENTRIES[i][1]).to_lower()): entries.append(i)
 	page=0
 	_show_entry()
 
 func _turn(direction: int) -> void:
+	if entries.is_empty():return
 	page=posmod(page+direction,entries.size())
 	_show_entry()
 
 func _show_entry() -> void:
+	visit_notes.text=""
+	if entries.is_empty():
+		title.text="No animal visits yet"
+		description.text="Make a little grass and watch the wild edge. Your first visitor will appear here after entering the garden."
+		section.text=category.to_upper()
+		folio.text="-"
+		if is_instance_valid(preview):preview.free();preview=null
+		return
 	var entry: Array=ENTRIES[entries[page]]
 	title.text=entry[1]
 	description.text=entry[2]
+	if category=="Animals":
+		var record: Dictionary=garden.wildlife.records[str(entry[1]).to_lower()]
+		visit_notes.text="First visit: Day %d\n"%int(record.visit_day)
+		visit_notes.text+=("Resident since: Day %d"%int(record.resident_day)) if int(record.resident_day)>0 else ("Resident requirement: 5% grass" if entry[1]=="Hedgehog" else "Not yet resident")
 	section.text=category.to_upper()+"   /   OBSERVATIONS FROM THE VALLEY"
 	folio.text="%02d   /   %02d" % [page+1,entries.size()]
 	if is_instance_valid(preview): preview.free()
@@ -221,7 +237,9 @@ func _show_entry() -> void:
 	if str(entry[3]).begins_with("res://"):
 		model=load(entry[3]).instantiate()
 	else:
-		model=garden.get_node(entry[3]).visual.duplicate(0)
+		var actor: Node3D=garden.wildlife.actor_for(str(entry[1]).to_lower()) if category=="Animals" else garden.get_node_or_null(entry[3])
+		if not is_instance_valid(actor):return
+		model=actor.visual.duplicate(0)
 		model.rotation=Vector3.ZERO
 	preview.add_child(model)
 	for animation in model.find_children("*","AnimationPlayer",true,false): animation.stop(true)

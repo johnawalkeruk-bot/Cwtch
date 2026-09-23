@@ -1,8 +1,9 @@
 extends RefCounted
 ## Shop stock and deterministic delivery shared by the village and save loader.
 const STOCK := [
+ {"id":"peacock","shop":0,"name":"Peacock","price":65,"note":"A colourful resident with a magnificent tail."},
  {"id":"chicken","shop":0,"name":"Chicken","price":25,"note":"A busy new companion for your garden."},
- {"id":"hedgehog","shop":0,"name":"Hedgehog","price":40,"note":"A small visitor with a curious nose."},
+ {"id":"hedgehog","shop":0,"name":"Hedgehog","price":40,"note":"Needs 1% grass to visit; 5% to become resident."},
  {"id":"birch","shop":1,"name":"Young birch","price":35,"note":"A pale-trunked tree for an open patch."},
  {"id":"ash","shop":1,"name":"Young ash","price":35,"note":"A leafy addition to the garden."},
  {"id":"planter","shop":2,"name":"Flower planter","price":15,"note":"A terracotta pot of valley flowers."},
@@ -46,8 +47,8 @@ static func find_space(garden: Node3D, id: String) -> Vector2i:
 static func deliver(garden: Node3D, record: Dictionary) -> Node3D:
  var id: String=record.id
  var cell:=Vector2i(int(record.x),int(record.z))
- if id in ["chicken","hedgehog"]:
-  var actor: Node3D=load("res://chicken_npc.gd" if id=="chicken" else "res://hedgehog_npc.gd").new()
+ if id in ["chicken","hedgehog","peacock"]:
+  var actor: Node3D=load("res://peacock_npc.gd" if id=="peacock" else ("res://chicken_npc.gd" if id=="chicken" else "res://hedgehog_npc.gd")).new()
   garden.add_child(actor)
   actor.setup(garden)
   actor.cell=cell
@@ -55,7 +56,9 @@ static func deliver(garden: Node3D, record: Dictionary) -> Node3D:
   actor.position=garden.cell_center(cell)
   actor.destination=actor.position
   preload("res://selection_target.gd").attach(actor,item(id).name,Vector3(0.5,0.5,0.5))
+  actor.set_meta("animal_id",id)
   garden.additional_visitors.append(actor)
+  garden.wildlife.purchased(id)
   return actor
  var node:=model(id)
  garden.add_child(node)
@@ -100,6 +103,8 @@ static func model(id: String) -> Node3D:
  var width:=1.0
  if id=="cottage": path="res://assets/cottage.glb"; width=3.8
  elif id in ["ash","birch"]: path="res://assets/trees/%s_forest.glb"%id; width=2.2
+ elif id=="peacock": path="res://assets/animals/Peacock/Peacock.fbx"; width=0.85
+ elif id=="hedgehog": path="res://assets/hedgehog.glb"; width=0.35
  elif id=="chicken": path="res://assets/chicken_rig.glb"; width=0.5
  if path!="":
   var imported: Node3D=load(path).instantiate()
