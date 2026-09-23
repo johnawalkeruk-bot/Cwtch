@@ -4,6 +4,7 @@ var garden: Node3D
 var exclusions: Image
 var exclusion_texture: ImageTexture
 var refresh_time := 0.0
+const TUFTS_PER_PATCH := 320
 
 func build(world: Node3D) -> void:
 	garden = world
@@ -28,7 +29,7 @@ func build(world: Node3D) -> void:
 			batch.transform_format = MultiMesh.TRANSFORM_3D
 			batch.use_colors = true
 			batch.mesh = blade_mesh
-			batch.instance_count = 140
+			batch.instance_count = TUFTS_PER_PATCH
 			for i in range(batch.instance_count):
 				var point := Vector3(x * 4.0 + rng.randf_range(0.12, 3.88), 0.008, z * 4.0 + rng.randf_range(0.12, 3.88))
 				var scale_factor := rng.randf_range(0.65, 1.3)
@@ -48,7 +49,7 @@ func _tuft() -> ArrayMesh:
 	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for i in range(4):
 		var angle := float(i) * 2.39996
-		var side := Vector3(cos(angle), 0, sin(angle)) * 0.025
+		var side := Vector3(cos(angle), 0, sin(angle)) * 0.017
 		var lean := Vector3(-sin(angle), 0, cos(angle)) * 0.035
 		var base := lean * 0.3
 		var mid := base + lean + Vector3.UP * 0.10
