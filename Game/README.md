@@ -1,3 +1,7 @@
+## Garden edge blending
+
+The meadow continues live garden edge textures and blends into its surface brush over 1.5 metres. Colour, normal detail, roughness, parallax and watering share the same boundary, including corners. Tool changes appear immediately; tile types and land percentages are unchanged.
+
 # Shovel, continuous tools and TARDIS shortcuts
 
 Ctrl+T or clicking the right stick (R3) lands the TARDIS just north of the
@@ -19,7 +23,7 @@ in its original mode. Keys 1–4 equip hoe, grass seeds, watering can and shovel
 - Pick: make a small, dry planting hole. Grass seeds planted there close the
   hole and grow the existing grass ground type.
 - Pour: restore the local original ground height and fill the hollow with dirt.
-- Thump: flatten the centre of the brush to its original central elevation,
+- Thump: flatten the entire selected tile, including all edges and corners, to its original central elevation (zero at the garden boundary),
   with a smooth transition at its edge. Holding repeats the levelling action.
 
 Each mode has a distinct procedural model animation and its matching sound.

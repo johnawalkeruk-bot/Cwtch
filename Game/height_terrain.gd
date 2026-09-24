@@ -251,6 +251,12 @@ func sculpt(cell: Vector2i, mode: int) -> bool:
  var rect:=_sample_rect(center,radius)
  var sample: Vector2i=Vector2i(((center-garden.grid_min)/spacing).round()).clamp(Vector2i.ZERO,samples-Vector2i.ONE)
  var baseline: float=original_heights.get_pixel(sample.x,sample.y).r
+ # Integer bounds include every shared edge and corner of the selected tile.
+ var tile_steps:=roundi(float(garden.MICRO_SIZE)/spacing)
+ var tile_low:=cell*tile_steps
+ var tile_high:=tile_low+Vector2i.ONE*tile_steps
+ if mode==3 and (tile_low.x==0 or tile_low.y==0 or tile_high.x==samples.x-1 or tile_high.y==samples.y-1):
+  baseline=0.0 # Preserve the level join to the surrounding landscape.
  var bottom:=maxf(BASE_LEVEL+0.12,minf(-0.18,at.y-0.18))
  for z in range(rect.position.y,rect.end.y):
   for x in range(rect.position.x,rect.end.x):
@@ -264,7 +270,11 @@ func sculpt(cell: Vector2i, mode: int) -> bool:
     0:value=minf(old,lerpf(original,bottom,weight))
     1:value=minf(old,original-0.11*weight)
     2:value=original
-    3:value=lerpf(old,baseline,weight)
+    3:
+     var outside:=Vector2(maxi(maxi(tile_low.x-x,0),x-tile_high.x),maxi(maxi(tile_low.y-z,0),z-tile_high.y))*spacing
+     # Full strength across the square; blend only beyond its boundary.
+     var tile_weight:=1.0-smoothstep(0.0,0.3,outside.length())
+     value=baseline if outside==Vector2.ZERO else lerpf(old,baseline,tile_weight)
    _write_height(x,z,value)
  if mode==1:seed_holes[cell]=true
  else:

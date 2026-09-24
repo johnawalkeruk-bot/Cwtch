@@ -48,30 +48,38 @@ vec3 details(vec2 uv, vec4 layers, vec4 w, vec2 dx, vec2 dy) {
  }
  return result;
 }
+vec3 blended_details(vec2 uv, vec4 layers, vec4 w, vec4 meadow, float outside_blend, vec2 dx, vec2 dy) {
+ vec3 garden_detail=details(uv,layers,w,dx,dy);
+ if(outside_blend<=0.001) { return garden_detail; }
+ return mix(garden_detail,details(uv,vec4(1.0,4.0,0.0,2.0),meadow,dx,dy),outside_blend);
+}
 void fragment() {
  vec2 grid = (ground_position-grid_min)/micro_size-0.5;
  vec2 cell = floor(grid);
  vec4 w = weights(smoothstep(vec2(0.30),vec2(0.70),fract(grid)));
  ivec4 kinds = ivec4(terrain_at(cell),terrain_at(cell+vec2(1,0)),terrain_at(cell+vec2(0,1)),terrain_at(cell+vec2(1)));
  vec4 layers = vec4(layer(kinds.x),layer(kinds.y),layer(kinds.z),layer(kinds.w));
+ // Continue the live edge cells onto the meadow, then fade over 1.5 metres.
+ // Both surfaces use the same world UVs, POM and wetness at their shared edge.
+ vec2 outside=max(max(grid_min-ground_position,ground_position-(grid_min+grid_size*micro_size)),vec2(0.0));
+ float outside_blend=background_surface ? smoothstep(0.0,1.5,length(outside)) : 0.0;
+ vec4 meadow=vec4(1.0,0.0,0.0,0.0);
  if(background_surface) {
-  w=texture(brush_weights,ground_position/background_width+0.5);
-  w/=max(dot(w,vec4(1.0)),0.0001);
-  layers=vec4(1.0,4.0,0.0,2.0);
-  kinds=ivec4(2,3,0,7);
+  meadow=texture(brush_weights,ground_position/background_width+0.5);
+  meadow/=max(dot(meadow,vec4(1.0)),0.0001);
  }
  vec2 uv = ground_position*repeats_per_metre;
  vec2 dx = dFdx(uv);
  vec2 dy = dFdy(uv);
  vec3 view = normalize(eye_position-vec3(ground_position.x,ground_height,ground_position.y));
  if(orthographic_view) { view=normalize(orthographic_direction); }
- if(pom_enabled) {
+ if(pom_enabled && outside_blend<0.999) {
   float count = floor(mix(28.0,10.0,abs(view.y)));
   float step_depth = 1.0/count;
   vec2 step_uv = -view.xz/max(abs(view.y),0.15)*relief_metres*repeats_per_metre/count;
-  step_uv *= smoothstep(0.02,0.15,abs(view.y));
+  step_uv *= (1.0-outside_blend)*smoothstep(0.02,0.15,abs(view.y));
   float depth = 0.0;
-  float surface_depth = 1.0-details(uv,layers,w,dx,dy).r;
+  float surface_depth = 1.0-blended_details(uv,layers,w,meadow,outside_blend,dx,dy).r;
   float previous_surface = surface_depth;
   vec2 previous_uv = uv;
   for(int i=0;i<28;i++) {
@@ -80,7 +88,7 @@ void fragment() {
    previous_surface=surface_depth;
    uv+=step_uv;
    depth+=step_depth;
-   surface_depth=1.0-details(uv,layers,w,dx,dy).r;
+   surface_depth=1.0-blended_details(uv,layers,w,meadow,outside_blend,dx,dy).r;
   }
   float after=depth-surface_depth;
   float before=depth-step_depth-previous_surface;
@@ -97,8 +105,21 @@ void fragment() {
    mapped_normal+=(textureGrad(normal_maps,vec3(uv,layers[i]),dx,dy).xyz*2.0-1.0)*w[i];
   }
  }
- vec3 data=details(uv,layers,w,dx,dy);
- float moisture=max(wetness,background_surface ? 0.0 : texture(watered_tiles,(ground_position-grid_min)/(grid_size*micro_size)).r);
+ if(outside_blend>0.001) {
+  vec3 meadow_color=vec3(0.0);
+  vec3 meadow_normal=vec3(0.0);
+  vec4 meadow_layers=vec4(1.0,4.0,0.0,2.0);
+  for(int i=0;i<4;i++) {
+   if(meadow[i]>0.001) {
+    meadow_color+=textureGrad(color_maps,vec3(uv,meadow_layers[i]),dx,dy).rgb*meadow[i];
+    meadow_normal+=(textureGrad(normal_maps,vec3(uv,meadow_layers[i]),dx,dy).xyz*2.0-1.0)*meadow[i];
+   }
+  }
+  color=mix(color,meadow_color,outside_blend);
+  mapped_normal=mix(mapped_normal,meadow_normal,outside_blend);
+ }
+ vec3 data=blended_details(uv,layers,w,meadow,outside_blend,dx,dy);
+ float moisture=max(wetness,texture(watered_tiles,(ground_position-grid_min)/(grid_size*micro_size)).r*(1.0-outside_blend));
  ALBEDO=color * (1.0 - moisture * 0.28);
  ROUGHNESS=mix(clamp(data.g,0.88,1.0),0.73,moisture*0.6);
  SPECULAR=0.12;

@@ -4,7 +4,7 @@ signal mode_selected(index: int)
 signal cancelled
 const LABELS := ["Hoe", "Seed packet", "Watering can", "Shovel", "Put away"]
 const MODE_LABELS := ["Dig","Pick","Pour","Thump"]
-const MODE_NOTES := ["Dig a water-filled hollow", "Make a small seed hole", "Fill the ground with dirt", "Level the ground"]
+const MODE_NOTES := ["Dig a water-filled hollow", "Make a small seed hole", "Fill the ground with dirt", "Level the whole tile"]
 var mode_page := false
 const NOTES := ["Turn grass into earth", "Scatter a little green", "Give the ground a drink", "Choose how to shape the earth", "Stow your tool and wander"]
 var selected := 0

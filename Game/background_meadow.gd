@@ -13,7 +13,6 @@ func build(world: Node3D) -> void:
 	material = garden.terrain_material.duplicate() as ShaderMaterial
 	material.set_shader_parameter("background_surface", true)
 	material.set_shader_parameter("background_width", WIDTH)
-	material.set_shader_parameter("pom_enabled", false)
 	material.set_shader_parameter("brush_weights", _paint_surface())
 	var half: Vector2 = Vector2(garden.chunk_count) * garden.CHUNK_SIZE * 0.5
 	var outside := WIDTH * 0.5
@@ -67,6 +66,7 @@ func _paint_surface() -> ImageTexture:
 func _process(_delta: float) -> void:
 	if is_instance_valid(garden):
 		material.set_shader_parameter("wetness", garden.valley_cycle.wetness)
+		material.set_shader_parameter("world_to_grid", garden.global_transform.affine_inverse())
 
 func height_at(point: Vector2) -> float:
 	var half: Vector2 = Vector2(garden.chunk_count)
