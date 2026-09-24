@@ -61,6 +61,7 @@ func toggle(value: bool) -> void:
   Input.mouse_mode=Input.MOUSE_MODE_CAPTURED if garden.aiming else Input.MOUSE_MODE_VISIBLE
 
 func _input(event: InputEvent) -> void:
+ if is_instance_valid(garden.hedgehog_intro) and garden.hedgehog_intro.active:return
  if event is InputEventKey and event.pressed and not event.echo:
   if event.physical_keycode==KEY_QUOTELEFT or event.keycode==KEY_QUOTELEFT:
    if not garden.field_book.visible:toggle(not opened)

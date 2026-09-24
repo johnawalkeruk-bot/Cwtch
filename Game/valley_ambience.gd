@@ -2,6 +2,7 @@ extends Node
 ## Original synthesized environmental loops; independent from NPC dialogue.
 var layers: Dictionary = {}
 var muted := false
+var dialogue_duck := 1.0
 var stream_level := 0.0
 
 func _ready() -> void:
@@ -26,7 +27,7 @@ func update_mix(delta: float, rain: float, daylight: float, paused: bool) -> voi
 		var player: AudioStreamPlayer = layers[sound]
 		player.stream_paused = paused or muted
 		if levels.has(sound):
-			var level: float = levels[sound]
+			var level: float = levels[sound]*dialogue_duck
 			player.volume_db = lerpf(player.volume_db, linear_to_db(maxf(level, 0.0001)), 1.0-exp(-delta*2.0))
 
 func thunder() -> void:

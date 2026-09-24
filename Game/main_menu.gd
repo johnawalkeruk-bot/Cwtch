@@ -353,7 +353,7 @@ func _save_garden() -> bool:
 	var data := {"version":1,"terrain":terrain,"crops":crops,"harvested":garden.harvested,
 		"player":[garden.player.cell.x,garden.player.cell.y],"player_position":[garden.player.position.x,garden.player.position.z],"elapsed":garden.valley_cycle.elapsed,
 		"weather":garden.valley_cycle.weather_index,"weather_elapsed":garden.valley_cycle.weather_elapsed,
-		"deformation":garden.heightfield.save_deformation(),"wildlife":garden.wildlife.save_data(),"wetness":garden.valley_cycle.wetness,"watered":_saved_watered(),"coins":coins,"purchases":purchases}
+		"deformation":garden.heightfield.save_deformation(),"wildlife":garden.wildlife.save_data(),"hedgehog_intro":garden.hedgehog_intro.save_data(),"wetness":garden.valley_cycle.wetness,"watered":_saved_watered(),"coins":coins,"purchases":purchases}
 	var file := FileAccess.open(SAVE_PATH,FileAccess.WRITE)
 	if not file: return false
 	file.store_string(JSON.stringify(data))
@@ -403,6 +403,7 @@ func _restore_garden() -> void:
 	coins=maxi(0,int(data.get("coins",500)))
 	garden.wildlife.suppress_events=true
 	garden.wildlife.restore(data.get("wildlife",{}))
+	garden.hedgehog_intro.restore(data.get("hedgehog_intro",{}))
 	purchases.clear()
 	for record in data.get("purchases",[]):
 		if not record is Dictionary or not record.has_all(["id","x","z"]): continue

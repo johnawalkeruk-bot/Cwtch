@@ -28,6 +28,7 @@ var dev_console: CanvasLayer
 var tardis: Node3D
 var animal_notices: CanvasLayer
 var wildlife: Node
+var hedgehog_intro: Node3D
 var additional_visitors: Array[Node3D] = []
 var background_meadow: Node3D
 var valley_cycle: Node3D
@@ -152,6 +153,9 @@ func _ready() -> void:
 	dev_console=preload("res://developer_console.gd").new()
 	add_child(dev_console)
 	dev_console.setup(self)
+	hedgehog_intro=preload("res://hedgehog_intro.gd").new()
+	add_child(hedgehog_intro)
+	hedgehog_intro.setup(self)
 	_refresh_ui()
 
 func _create_chunks() -> void:
@@ -220,6 +224,7 @@ func _cycle_shovel(direction: int) -> void:
 	_refresh_ui()
 
 func _unhandled_input(event: InputEvent) -> void:
+	if is_instance_valid(hedgehog_intro) and hedgehog_intro.active:return
 	if is_instance_valid(dev_console) and dev_console.opened:return
 	if event.is_action_pressed("pad_wheel"):
 		if not guide.visible:_set_wheel(not tool_wheel.visible)
@@ -314,6 +319,7 @@ func _notification(what: int) -> void:
 		_set_guide(true)
 
 func _physics_process(delta: float) -> void:
+	if is_instance_valid(hedgehog_intro) and hedgehog_intro.active:return
 	if release_required and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and not Input.is_action_pressed("pad_use"):release_required=false
 	repeat_wait=maxf(0.0,repeat_wait-delta)
 	if is_instance_valid(dev_console) and dev_console.opened:
@@ -578,6 +584,9 @@ func _toggle_guide() -> void:
 	_set_guide(not guide.visible)
 
 func _set_guide(open: bool) -> void:
+	if is_instance_valid(hedgehog_intro) and hedgehog_intro.active:
+		hedgehog_intro.set_paused(open)
+		return
 	_clear_use()
 	if is_instance_valid(dev_console) and dev_console.opened: dev_console.toggle(false)
 	if is_instance_valid(field_book) and field_book.visible: field_book.close()

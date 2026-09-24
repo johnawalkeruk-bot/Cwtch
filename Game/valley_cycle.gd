@@ -89,7 +89,7 @@ func _create_rain() -> void:
 func _process(delta: float) -> void:
 	if not is_instance_valid(garden):
 		return
-	var paused: bool = garden.guide.visible
+	var paused: bool = garden.guide.visible or (is_instance_valid(garden.hedgehog_intro) and garden.hedgehog_intro.active and garden.hedgehog_intro.paused)
 	rain.speed_scale = 0.0 if paused else 1.0
 	if not paused:
 		advance(delta)
