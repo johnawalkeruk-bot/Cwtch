@@ -25,13 +25,15 @@ var description: Label
 var visit_notes: Label
 var folio: Label
 var section: Label
+var land_page: Control
+var preview_holder: SubViewportContainer
 var viewport: SubViewport
 var turntable: Node3D
 var preview: Node3D
 var previous: Button
 var tabs: Array[Button] = []
 var navigation_hint: Label
-const CATEGORIES := ["People","Animals","Plants"]
+const CATEGORIES := ["People","Animals","Plants","Land area"]
 var serif: SystemFont
 var opening: Control
 var reveal_tween: Tween
@@ -50,7 +52,7 @@ func _ready() -> void:
 	spread.offset_bottom=300
 	spread.draw.connect(_draw_book)
 	_text("C W T C H   /   F I E L D   N O T E S",Vector2(76,48),Vector2(470,28),17)
-	for i in range(3):
+	for i in CATEGORIES.size():
 		var label: String=CATEGORIES[i]
 		var tab:=_button(label,Vector2(-82,154+i*70),Vector2(128,54),func(): _category(label))
 		tabs.append(tab)
@@ -66,6 +68,7 @@ func _ready() -> void:
 	_button("Next  ›",Vector2(240,533),Vector2(130,38),func(): _turn(1))
 	_button("Close book",Vector2(823,533),Vector2(175,38),close)
 	var holder:=SubViewportContainer.new()
+	preview_holder=holder
 	holder.position=Vector2(80,138)
 	holder.size=Vector2(420,365)
 	holder.stretch=true
@@ -95,6 +98,9 @@ func _ready() -> void:
 	light.rotation_degrees=Vector3(-35,-25,0)
 	light.light_energy=1.2
 	viewport.add_child(light)
+	land_page=preload("res://land_area_page.gd").new()
+	spread.add_child(land_page)
+	land_page.hide()
 	opening=preload("res://book_opening.gd").new()
 	add_child(opening)
 	opening.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
@@ -208,12 +214,30 @@ func _category(value: String) -> void:
 	_show_entry()
 
 func _turn(direction: int) -> void:
+	if category=="Land area":
+		land_page.turn(direction)
+		return
 	if entries.is_empty():return
 	page=posmod(page+direction,entries.size())
 	_show_entry()
 
 func _show_entry() -> void:
 	visit_notes.text=""
+	var land: bool=category=="Land area"
+	land_page.visible=land
+	preview_holder.visible=not land
+	description.visible=not land
+	if land:
+		if is_instance_valid(preview):preview.free();preview=null
+		viewport.render_target_update_mode=SubViewport.UPDATE_DISABLED
+		land_page.setup(garden,serif)
+		title.text="Land area"
+		section.text="LAND AREA   /   GARDEN SURVEY"
+		navigation_hint.text="LB / RB  ·  category\nArrows / hover  ·  inspect tiles"
+		folio.text="Garden survey"
+		return
+	viewport.render_target_update_mode=SubViewport.UPDATE_ALWAYS
+	navigation_hint.text="LB / RB  ·  category\nArrows  ·  entries     B / Esc  ·  close"
 	if entries.is_empty():
 		title.text="No animal visits yet"
 		description.text="Make a little grass and watch the wild edge. Your first visitor will appear here after entering the garden."
@@ -250,7 +274,7 @@ func _show_entry() -> void:
 	turntable.rotation.y=-0.25
 
 func _process(delta: float) -> void:
-	if visible: turntable.rotation.y+=delta*0.22
+	if visible and category!="Land area": turntable.rotation.y+=delta*0.22
 
 func _input(event: InputEvent) -> void:
 	if not visible: return
@@ -263,9 +287,29 @@ func _input(event: InputEvent) -> void:
 	elif event is InputEventJoypadButton and event.pressed and event.button_index in [JOY_BUTTON_LEFT_SHOULDER,JOY_BUTTON_RIGHT_SHOULDER]:
 		_category(CATEGORIES[posmod(CATEGORIES.find(category)+(-1 if event.button_index==JOY_BUTTON_LEFT_SHOULDER else 1),CATEGORIES.size())])
 		get_viewport().set_input_as_handled()
+	elif category=="Land area" and _land_navigation(event):
+		get_viewport().set_input_as_handled()
 	elif event is InputEventJoypadButton and event.pressed and event.button_index in [JOY_BUTTON_DPAD_LEFT,JOY_BUTTON_DPAD_UP,JOY_BUTTON_DPAD_RIGHT,JOY_BUTTON_DPAD_DOWN]:
 		_turn(-1 if event.button_index in [JOY_BUTTON_DPAD_LEFT,JOY_BUTTON_DPAD_UP] else 1)
 		get_viewport().set_input_as_handled()
 	elif event is InputEventKey and event.pressed and not event.echo and event.keycode in [KEY_LEFT,KEY_UP,KEY_RIGHT,KEY_DOWN]:
 		_turn(-1 if event.keycode in [KEY_LEFT,KEY_UP] else 1)
 		get_viewport().set_input_as_handled()
+
+func _land_navigation(event: InputEvent) -> bool:
+	var direction:=Vector2i.ZERO
+	if event is InputEventKey and event.pressed:
+		match event.keycode:
+			KEY_LEFT:direction=Vector2i.LEFT
+			KEY_RIGHT:direction=Vector2i.RIGHT
+			KEY_UP:direction=Vector2i.UP
+			KEY_DOWN:direction=Vector2i.DOWN
+	elif event is InputEventJoypadButton and event.pressed:
+		match event.button_index:
+			JOY_BUTTON_DPAD_LEFT:direction=Vector2i.LEFT
+			JOY_BUTTON_DPAD_RIGHT:direction=Vector2i.RIGHT
+			JOY_BUTTON_DPAD_UP:direction=Vector2i.UP
+			JOY_BUTTON_DPAD_DOWN:direction=Vector2i.DOWN
+	if direction==Vector2i.ZERO:return false
+	land_page.move_selection(direction)
+	return true

@@ -1,5 +1,8 @@
 extends Node
 ## First-visit and residency dates use the garden clock and survive save/load.
+signal animal_event(kind: String, species: String, event_day: int)
+var suppress_events := false
+var life_events: Array[Dictionary]=[]
 var garden: Node3D
 var records: Dictionary={}
 var hedgehog: Node3D
@@ -28,25 +31,45 @@ func grass_ratio() -> float:
  return cached_ratio
 
 func day() -> int:
- return floori(garden.valley_cycle.elapsed/garden.valley_cycle.FULL_CYCLE)+1
+ return floori((garden.valley_cycle.elapsed+600.0)/garden.valley_cycle.FULL_CYCLE)+1
 
 func record_visit(id: String) -> void:
  if records.has(id):return
  records[id]={"visit_day":day(),"resident_day":0}
- garden.message=id.capitalize()+" first visited on Day %d. The Field Guide has a new entry."%day()
+ _announce("visit",id)
 
 func record_resident(id: String) -> void:
  record_visit(id)
  if int(records[id].resident_day)>0:return
  records[id].resident_day=day()
- garden.message=id.capitalize()+" became a resident on Day %d."%day()
+ _announce("resident",id)
+
+func _announce(kind: String, species: String) -> void:
+ if not suppress_events:animal_event.emit(kind,species,day())
+
+# Called by future breeding/lifespan systems with a stable individual animal ID.
+# These report real lifecycle events; they do not spawn or kill animals themselves.
+func record_birth(species: String, individual_id: String) -> bool:
+ return _record_life_event("birth",species,individual_id)
+
+func record_death(species: String, individual_id: String) -> bool:
+ return _record_life_event("death",species,individual_id)
+
+func _record_life_event(kind: String, species: String, individual_id: String) -> bool:
+ if individual_id.strip_edges().is_empty() or species.strip_edges().is_empty():return false
+ for event in life_events:
+  if event.kind==kind and event.individual_id==individual_id:return false
+ life_events.append({"kind":kind,"species":species,"individual_id":individual_id,"day":day()})
+ _announce(kind,species)
+ return true
 
 func purchased(id: String) -> void:
- # Record arrival on delivery; hedgehogs still need their habitat threshold.
- if id=="hedgehog":
-  record_visit(id)
-  if grass_ratio()>=0.05:record_resident(id)
- else:record_resident(id)
+ # Each purchased animal gets notices, while the guide retains first-species dates.
+ if records.has(id):_announce("visit",id)
+ else:record_visit(id)
+ if id!="hedgehog" or grass_ratio()>=0.05:
+  if int(records[id].resident_day)>0:_announce("resident",id)
+  else:record_resident(id)
  if id=="hedgehog":
   wild_hedgehog_enabled=false
   hedgehog.hide()
@@ -60,10 +83,16 @@ func actor_for(id: String) -> Node3D:
  return null
 
 func save_data() -> Dictionary:
- return {"wild_hedgehog_enabled":wild_hedgehog_enabled,"records":records.duplicate(true),"hedgehog_position":[hedgehog.position.x,hedgehog.position.z],"patrol_corner":hedgehog.patrol_corner}
+ return {"life_events":life_events.duplicate(true),"wild_hedgehog_enabled":wild_hedgehog_enabled,"records":records.duplicate(true),"hedgehog_position":[hedgehog.position.x,hedgehog.position.z],"patrol_corner":hedgehog.patrol_corner}
 
 func restore(data: Dictionary) -> void:
  records.clear()
+ life_events.clear()
+ var saved_events=data.get("life_events",[])
+ if saved_events is Array:
+  for event in saved_events:
+   if event is Dictionary and event.get("kind","") in ["birth","death"] and event.has_all(["species","individual_id","day"]):
+    life_events.append({"kind":str(event.kind),"species":str(event.species),"individual_id":str(event.individual_id),"day":maxi(1,int(event.day))})
  var saved=data.get("records",{})
  if saved is Dictionary:
   for id in ["hedgehog","chicken","badger","dragon","peacock"]:

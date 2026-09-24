@@ -36,6 +36,81 @@ func advance(delta: float) -> void:
 
 ```
 
+## animal_notices.gd
+
+```gd
+extends CanvasLayer
+## FIFO notices ensure an arrival and residency on the same frame are both seen.
+const DURATION := 6.0
+const TITLES := {"visit":"New visitor", "resident":"New resident", "birth":"A new arrival", "death":"A life remembered"}
+var garden: Node3D
+var queue: Array[Dictionary]=[]
+var current: Dictionary={}
+var elapsed := 0.0
+var panel: PanelContainer
+var heading: Label
+var detail: Label
+var date_label: Label
+
+func setup(world: Node3D) -> void:
+ garden=world
+ layer=8
+ panel=PanelContainer.new()
+ add_child(panel)
+ panel.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
+ panel.offset_left=28
+ panel.offset_right=408
+ panel.offset_top=-160
+ panel.offset_bottom=-28
+ panel.mouse_filter=Control.MOUSE_FILTER_IGNORE
+ panel.add_theme_stylebox_override("panel",garden._panel_style(Color("233b32")))
+ var stack:=VBoxContainer.new()
+ stack.mouse_filter=Control.MOUSE_FILTER_IGNORE
+ stack.add_theme_constant_override("separation",5)
+ panel.add_child(stack)
+ heading=garden._label("",19,Color("ebce8b"))
+ detail=garden._label("",16,Color("f0eadb"))
+ detail.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
+ date_label=garden._label("",13,Color("afc5b4"))
+ for label in [heading,detail,date_label]:
+  label.mouse_filter=Control.MOUSE_FILTER_IGNORE
+  stack.add_child(label)
+ panel.hide()
+ garden.wildlife.animal_event.connect(enqueue)
+
+func enqueue(kind: String, species: String, event_day: int) -> void:
+ if not TITLES.has(kind):return
+ queue.append({"kind":kind,"species":species,"day":event_day})
+
+func _process(delta: float) -> void:
+ if garden.guide.visible:
+  panel.hide()
+  return
+ if current.is_empty():
+  if queue.is_empty():
+   panel.hide()
+   return
+  current=queue.pop_front()
+  elapsed=0.0
+  heading.text=TITLES[current.kind]
+  var animal: String=str(current.species).capitalize()
+  match current.kind:
+   "visit":detail.text=animal+" visited your garden."
+   "resident":detail.text=animal+" became a resident."
+   "birth":detail.text="A "+animal.to_lower()+" was born."
+   "death":detail.text=animal+" has died."
+  date_label.text="Day %d"%int(current.day)
+ panel.show()
+ elapsed+=delta
+ panel.modulate.a=minf(smoothstep(0.0,0.3,elapsed),1.0-smoothstep(DURATION-0.5,DURATION,elapsed))
+ panel.offset_left=28.0-12.0*(1.0-smoothstep(0.0,0.3,elapsed))
+ panel.offset_right=panel.offset_left+380.0
+ if elapsed>=DURATION:
+  current={}
+  panel.hide()
+
+```
+
 ## animated_visitor.gd
 
 ```gd
@@ -1066,13 +1141,15 @@ var description: Label
 var visit_notes: Label
 var folio: Label
 var section: Label
+var land_page: Control
+var preview_holder: SubViewportContainer
 var viewport: SubViewport
 var turntable: Node3D
 var preview: Node3D
 var previous: Button
 var tabs: Array[Button] = []
 var navigation_hint: Label
-const CATEGORIES := ["People","Animals","Plants"]
+const CATEGORIES := ["People","Animals","Plants","Land area"]
 var serif: SystemFont
 var opening: Control
 var reveal_tween: Tween
@@ -1091,7 +1168,7 @@ func _ready() -> void:
 	spread.offset_bottom=300
 	spread.draw.connect(_draw_book)
 	_text("C W T C H   /   F I E L D   N O T E S",Vector2(76,48),Vector2(470,28),17)
-	for i in range(3):
+	for i in CATEGORIES.size():
 		var label: String=CATEGORIES[i]
 		var tab:=_button(label,Vector2(-82,154+i*70),Vector2(128,54),func(): _category(label))
 		tabs.append(tab)
@@ -1107,6 +1184,7 @@ func _ready() -> void:
 	_button("Next  ›",Vector2(240,533),Vector2(130,38),func(): _turn(1))
 	_button("Close book",Vector2(823,533),Vector2(175,38),close)
 	var holder:=SubViewportContainer.new()
+	preview_holder=holder
 	holder.position=Vector2(80,138)
 	holder.size=Vector2(420,365)
 	holder.stretch=true
@@ -1136,6 +1214,9 @@ func _ready() -> void:
 	light.rotation_degrees=Vector3(-35,-25,0)
 	light.light_energy=1.2
 	viewport.add_child(light)
+	land_page=preload("res://land_area_page.gd").new()
+	spread.add_child(land_page)
+	land_page.hide()
 	opening=preload("res://book_opening.gd").new()
 	add_child(opening)
 	opening.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
@@ -1249,12 +1330,30 @@ func _category(value: String) -> void:
 	_show_entry()
 
 func _turn(direction: int) -> void:
+	if category=="Land area":
+		land_page.turn(direction)
+		return
 	if entries.is_empty():return
 	page=posmod(page+direction,entries.size())
 	_show_entry()
 
 func _show_entry() -> void:
 	visit_notes.text=""
+	var land: bool=category=="Land area"
+	land_page.visible=land
+	preview_holder.visible=not land
+	description.visible=not land
+	if land:
+		if is_instance_valid(preview):preview.free();preview=null
+		viewport.render_target_update_mode=SubViewport.UPDATE_DISABLED
+		land_page.setup(garden,serif)
+		title.text="Land area"
+		section.text="LAND AREA   /   GARDEN SURVEY"
+		navigation_hint.text="LB / RB  ·  category\nArrows / hover  ·  inspect tiles"
+		folio.text="Garden survey"
+		return
+	viewport.render_target_update_mode=SubViewport.UPDATE_ALWAYS
+	navigation_hint.text="LB / RB  ·  category\nArrows  ·  entries     B / Esc  ·  close"
 	if entries.is_empty():
 		title.text="No animal visits yet"
 		description.text="Make a little grass and watch the wild edge. Your first visitor will appear here after entering the garden."
@@ -1291,7 +1390,7 @@ func _show_entry() -> void:
 	turntable.rotation.y=-0.25
 
 func _process(delta: float) -> void:
-	if visible: turntable.rotation.y+=delta*0.22
+	if visible and category!="Land area": turntable.rotation.y+=delta*0.22
 
 func _input(event: InputEvent) -> void:
 	if not visible: return
@@ -1304,12 +1403,32 @@ func _input(event: InputEvent) -> void:
 	elif event is InputEventJoypadButton and event.pressed and event.button_index in [JOY_BUTTON_LEFT_SHOULDER,JOY_BUTTON_RIGHT_SHOULDER]:
 		_category(CATEGORIES[posmod(CATEGORIES.find(category)+(-1 if event.button_index==JOY_BUTTON_LEFT_SHOULDER else 1),CATEGORIES.size())])
 		get_viewport().set_input_as_handled()
+	elif category=="Land area" and _land_navigation(event):
+		get_viewport().set_input_as_handled()
 	elif event is InputEventJoypadButton and event.pressed and event.button_index in [JOY_BUTTON_DPAD_LEFT,JOY_BUTTON_DPAD_UP,JOY_BUTTON_DPAD_RIGHT,JOY_BUTTON_DPAD_DOWN]:
 		_turn(-1 if event.button_index in [JOY_BUTTON_DPAD_LEFT,JOY_BUTTON_DPAD_UP] else 1)
 		get_viewport().set_input_as_handled()
 	elif event is InputEventKey and event.pressed and not event.echo and event.keycode in [KEY_LEFT,KEY_UP,KEY_RIGHT,KEY_DOWN]:
 		_turn(-1 if event.keycode in [KEY_LEFT,KEY_UP] else 1)
 		get_viewport().set_input_as_handled()
+
+func _land_navigation(event: InputEvent) -> bool:
+	var direction:=Vector2i.ZERO
+	if event is InputEventKey and event.pressed:
+		match event.keycode:
+			KEY_LEFT:direction=Vector2i.LEFT
+			KEY_RIGHT:direction=Vector2i.RIGHT
+			KEY_UP:direction=Vector2i.UP
+			KEY_DOWN:direction=Vector2i.DOWN
+	elif event is InputEventJoypadButton and event.pressed:
+		match event.button_index:
+			JOY_BUTTON_DPAD_LEFT:direction=Vector2i.LEFT
+			JOY_BUTTON_DPAD_RIGHT:direction=Vector2i.RIGHT
+			JOY_BUTTON_DPAD_UP:direction=Vector2i.UP
+			JOY_BUTTON_DPAD_DOWN:direction=Vector2i.DOWN
+	if direction==Vector2i.ZERO:return false
+	land_page.move_selection(direction)
+	return true
 
 ```
 
@@ -1554,8 +1673,10 @@ const CyclingNPC = preload("res://cycling_npc.gd")
 const ProceduralAnimal = preload("res://procedural_animal.gd")
 const HedgehogNPC = preload("res://hedgehog_npc.gd")
 var blocked_cells: Dictionary = {}
+var compass_view: Control
 var dev_console: CanvasLayer
 var tardis: Node3D
+var animal_notices: CanvasLayer
 var wildlife: Node
 var additional_visitors: Array[Node3D] = []
 var background_meadow: Node3D
@@ -1656,6 +1777,9 @@ func _ready() -> void:
 	wildlife=preload("res://garden_wildlife.gd").new()
 	add_child(wildlife)
 	wildlife.setup(self)
+	animal_notices=preload("res://animal_notices.gd").new()
+	add_child(animal_notices)
+	animal_notices.setup(self)
 	var meadow_grass := preload("res://meadow_grass.gd").new()
 	add_child(meadow_grass)
 	meadow_grass.build(self)
@@ -1670,6 +1794,8 @@ func _ready() -> void:
 	var compass:=preload("res://garden_compass.gd").new()
 	compass_layer.add_child(compass)
 	compass.setup(camera)
+	compass_view=compass
+	compass_view.visible=not guide.visible
 	dev_console=preload("res://developer_console.gd").new()
 	add_child(dev_console)
 	dev_console.setup(self)
@@ -2047,6 +2173,7 @@ func _set_guide(open: bool) -> void:
 	if is_instance_valid(dev_console) and dev_console.opened: dev_console.toggle(false)
 	if is_instance_valid(field_book) and field_book.visible: field_book.close()
 	guide.visible=open
+	if is_instance_valid(compass_view):compass_view.visible=not open
 	if open: ControllerInput.focus_first.call_deferred(guide)
 	else:
 		var focused := get_viewport().gui_get_focus_owner()
@@ -2239,6 +2366,9 @@ func build(garden: Node3D) -> void:
 ```gd
 extends Node
 ## First-visit and residency dates use the garden clock and survive save/load.
+signal animal_event(kind: String, species: String, event_day: int)
+var suppress_events := false
+var life_events: Array[Dictionary]=[]
 var garden: Node3D
 var records: Dictionary={}
 var hedgehog: Node3D
@@ -2267,25 +2397,45 @@ func grass_ratio() -> float:
  return cached_ratio
 
 func day() -> int:
- return floori(garden.valley_cycle.elapsed/garden.valley_cycle.FULL_CYCLE)+1
+ return floori((garden.valley_cycle.elapsed+600.0)/garden.valley_cycle.FULL_CYCLE)+1
 
 func record_visit(id: String) -> void:
  if records.has(id):return
  records[id]={"visit_day":day(),"resident_day":0}
- garden.message=id.capitalize()+" first visited on Day %d. The Field Guide has a new entry."%day()
+ _announce("visit",id)
 
 func record_resident(id: String) -> void:
  record_visit(id)
  if int(records[id].resident_day)>0:return
  records[id].resident_day=day()
- garden.message=id.capitalize()+" became a resident on Day %d."%day()
+ _announce("resident",id)
+
+func _announce(kind: String, species: String) -> void:
+ if not suppress_events:animal_event.emit(kind,species,day())
+
+# Called by future breeding/lifespan systems with a stable individual animal ID.
+# These report real lifecycle events; they do not spawn or kill animals themselves.
+func record_birth(species: String, individual_id: String) -> bool:
+ return _record_life_event("birth",species,individual_id)
+
+func record_death(species: String, individual_id: String) -> bool:
+ return _record_life_event("death",species,individual_id)
+
+func _record_life_event(kind: String, species: String, individual_id: String) -> bool:
+ if individual_id.strip_edges().is_empty() or species.strip_edges().is_empty():return false
+ for event in life_events:
+  if event.kind==kind and event.individual_id==individual_id:return false
+ life_events.append({"kind":kind,"species":species,"individual_id":individual_id,"day":day()})
+ _announce(kind,species)
+ return true
 
 func purchased(id: String) -> void:
- # Record arrival on delivery; hedgehogs still need their habitat threshold.
- if id=="hedgehog":
-  record_visit(id)
-  if grass_ratio()>=0.05:record_resident(id)
- else:record_resident(id)
+ # Each purchased animal gets notices, while the guide retains first-species dates.
+ if records.has(id):_announce("visit",id)
+ else:record_visit(id)
+ if id!="hedgehog" or grass_ratio()>=0.05:
+  if int(records[id].resident_day)>0:_announce("resident",id)
+  else:record_resident(id)
  if id=="hedgehog":
   wild_hedgehog_enabled=false
   hedgehog.hide()
@@ -2299,10 +2449,16 @@ func actor_for(id: String) -> Node3D:
  return null
 
 func save_data() -> Dictionary:
- return {"wild_hedgehog_enabled":wild_hedgehog_enabled,"records":records.duplicate(true),"hedgehog_position":[hedgehog.position.x,hedgehog.position.z],"patrol_corner":hedgehog.patrol_corner}
+ return {"life_events":life_events.duplicate(true),"wild_hedgehog_enabled":wild_hedgehog_enabled,"records":records.duplicate(true),"hedgehog_position":[hedgehog.position.x,hedgehog.position.z],"patrol_corner":hedgehog.patrol_corner}
 
 func restore(data: Dictionary) -> void:
  records.clear()
+ life_events.clear()
+ var saved_events=data.get("life_events",[])
+ if saved_events is Array:
+  for event in saved_events:
+   if event is Dictionary and event.get("kind","") in ["birth","death"] and event.has_all(["species","individual_id","day"]):
+    life_events.append({"kind":str(event.kind),"species":str(event.species),"individual_id":str(event.individual_id),"day":maxi(1,int(event.day))})
  var saved=data.get("records",{})
  if saved is Dictionary:
   for id in ["hedgehog","chicken","badger","dragon","peacock"]:
@@ -3064,6 +3220,105 @@ static func plant(parent: Node3D, placements: Array[Transform3D], kind: String) 
 
 ```
 
+## land_area_page.gd
+
+```gd
+extends Control
+## One map pixel-block per micro-tile, measured from the editable garden only.
+const COLORS := [Color("876343"),Color("b29a76"),Color("72914b"),Color("365d39"),Color("68a5ad"),Color("365574"),Color("cdb891"),Color("85858b")]
+const INK := Color("483322")
+const MAP := Rect2(40,15,330,330)
+var garden: Node3D
+var font: Font
+var counts: Array[int]=[]
+var percentages: Array[float]=[]
+var tile_types: Array[int]=[]
+var selected := Vector2i.ZERO
+var dirty := true
+
+func setup(world: Node3D, handwriting: Font) -> void:
+ if garden!=world:
+  if is_instance_valid(garden) and garden.terrain_changed.is_connected(_changed):garden.terrain_changed.disconnect(_changed)
+  garden=world
+  garden.terrain_changed.connect(_changed)
+ font=handwriting
+ position=Vector2(80,138)
+ size=Vector2(920,374)
+ mouse_filter=Control.MOUSE_FILTER_PASS
+ selected=selected.clamp(Vector2i.ZERO,garden.grid_size-Vector2i.ONE)
+ refresh()
+
+func _changed(_cell: Vector2i, _kind: int) -> void:
+ dirty=true
+
+func refresh() -> void:
+ counts.assign([0,0,0,0,0,0,0,0])
+ tile_types.clear()
+ var total: int=garden.grid_size.x*garden.grid_size.y
+ for z in garden.grid_size.y:
+  for x in garden.grid_size.x:
+   var kind: int=garden.get_terrain(Vector2i(x,z))
+   tile_types.append(kind)
+   counts[kind]+=1
+ percentages.clear()
+ for count in counts:percentages.append(100.0*float(count)/float(total))
+ dirty=false
+ queue_redraw()
+
+func _process(_delta: float) -> void:
+ if is_visible_in_tree() and dirty:refresh()
+
+func move_selection(offset: Vector2i) -> void:
+ selected=(selected+offset).clamp(Vector2i.ZERO,garden.grid_size-Vector2i.ONE)
+ queue_redraw()
+
+func turn(direction: int) -> void:
+ var index: int=posmod(selected.y*garden.grid_size.x+selected.x+direction,tile_types.size())
+ selected=Vector2i(index%garden.grid_size.x,index/garden.grid_size.x)
+ queue_redraw()
+
+func _gui_input(event: InputEvent) -> void:
+ if event is InputEventMouseMotion or event is InputEventMouseButton and event.pressed:
+  var point: Vector2=event.position
+  if MAP.has_point(point):
+   selected=Vector2i((point-MAP.position)/MAP.size*Vector2(garden.grid_size)).clamp(Vector2i.ZERO,garden.grid_size-Vector2i.ONE)
+   queue_redraw()
+   accept_event()
+
+func _draw() -> void:
+ if not is_instance_valid(garden) or tile_types.is_empty():return
+ var cell_size:=MAP.size/Vector2(garden.grid_size)
+ for z in garden.grid_size.y:
+  for x in garden.grid_size.x:
+   draw_rect(Rect2(MAP.position+Vector2(x,z)*cell_size,cell_size),COLORS[tile_types[z*garden.grid_size.x+x]])
+ for x in range(garden.grid_size.x+1):
+  var px:=MAP.position.x+x*cell_size.x
+  draw_line(Vector2(px,MAP.position.y),Vector2(px,MAP.end.y),Color(0.24,0.17,0.1,0.22))
+ for z in range(garden.grid_size.y+1):
+  var pz:=MAP.position.y+z*cell_size.y
+  draw_line(Vector2(MAP.position.x,pz),Vector2(MAP.end.x,pz),Color(0.24,0.17,0.1,0.22))
+ draw_rect(MAP,INK,false,2)
+ var chosen:=Rect2(MAP.position+Vector2(selected)*cell_size,cell_size)
+ draw_rect(chosen,Color("fff1c9"),false,3)
+ draw_rect(chosen.grow(1),INK,false,1)
+ _text(Vector2(173,9),"↑ NORTH",13)
+ var kind: int=tile_types[selected.y*garden.grid_size.x+selected.x]
+ _text(Vector2(30,366),"Tile %d, %d  ·  %s"%[selected.x+1,selected.y+1,garden.TERRAIN_NAMES[kind]],16)
+ _text(Vector2(500,96),"%.0f m × %.0f m   ·   %d tiles"%[garden.chunk_count.x*garden.CHUNK_SIZE,garden.chunk_count.y*garden.CHUNK_SIZE,tile_types.size()],17)
+ for i in counts.size():
+  var y:=128.0+i*28.0
+  draw_rect(Rect2(500,y-13,14,14),COLORS[i])
+  draw_rect(Rect2(500,y-13,14,14),INK,false,1)
+  _text(Vector2(524,y),garden.TERRAIN_NAMES[i],17)
+  _text(Vector2(706,y),str(counts[i]),16)
+  _text(Vector2(820,y),"%.2f%%"%percentages[i],16)
+ _text(Vector2(500,366),"Garden ground only. Each square is one tile.",14)
+
+func _text(at: Vector2, value: String, font_size: int) -> void:
+ draw_string(font,at,value,HORIZONTAL_ALIGNMENT_LEFT,-1,font_size,INK)
+
+```
+
 ## landscape_surface.gdshader
 
 ```gdshader
@@ -3720,6 +3975,7 @@ func _restore_garden() -> void:
 			garden.watered_image.set_pixel(wet_cell.x,wet_cell.y,Color(garden.watered_cells[wet_cell],0,0))
 	garden.watered_texture.update(garden.watered_image)
 	coins=maxi(0,int(data.get("coins",500)))
+	garden.wildlife.suppress_events=true
 	garden.wildlife.restore(data.get("wildlife",{}))
 	purchases.clear()
 	for record in data.get("purchases",[]):
@@ -3728,6 +3984,7 @@ func _restore_garden() -> void:
 		if not garden.contains_cell(Vector2i(int(record.x),int(record.z))): continue
 		purchases.append(record)
 		preload("res://village_stock.gd").deliver(garden,record)
+	garden.wildlife.suppress_events=false
 	garden.valley_cycle._update_visuals()
 	garden._refresh_ui()
 
@@ -4906,9 +5163,9 @@ void fragment() {
 
 ```gd
 extends Node3D
-## A transient visitor: reserve a clear footprint, materialise, then dematerialise.
+## A stationary materialisation just beyond the north boundary, doors facing south.
 const ASSET := "res://assets/easter_egg/Tardis/"
-const SPIN := "Tardis_lp|Tardis_lpAction"
+const NORTH_OFFSET := 2.4
 var garden: Node3D
 var state := "away"
 var visual: Node3D
@@ -4917,12 +5174,10 @@ var material: ShaderMaterial
 var audio: AudioStreamPlayer3D
 var lamp: OmniLight3D
 var body: StaticBody3D
-var reserved: Array[Vector2i]=[]
 var elapsed := 0.0
 var duration := 1.0
 var automatic := false
 var stay := 0.0
-var last_cell := Vector2i(-1,-1)
 
 func setup(world: Node3D) -> void:
  garden=world
@@ -4950,13 +5205,7 @@ func _load_model() -> void:
   if child is AnimationPlayer:
    animation=child
    animation.stop()
- assert(animation!=null and animation.has_animation(SPIN))
- # This is the supplied upright rotation clip; the other long clip rolls sideways.
- var clip: Animation=animation.get_animation(SPIN).duplicate()
- clip.loop_mode=Animation.LOOP_NONE
- var library:=AnimationLibrary.new()
- library.add_animation("flight",clip)
- animation.add_animation_library("event",library)
+   animation.active=false
  lamp=OmniLight3D.new()
  lamp.position.y=2.6
  lamp.light_color=Color("b7eaff")
@@ -4975,62 +5224,28 @@ func _load_model() -> void:
  body.collision_layer=0
  hide()
 
-func _clear_at(cell: Vector2i) -> bool:
- var point: Vector3=garden.cell_center(cell)
- if point.distance_to(garden.player.position)<3.0:return false
- var low:=INF
- var high:=-INF
- for z in range(-2,3):
-  for x in range(-2,3):
-   var at:=cell+Vector2i(x,z)
-   if not garden.contains_cell(at) or garden.blocked_cells.has(at) or garden.crops.has(at):return false
-   if garden.get_terrain(at) in [garden.Terrain.WATER,garden.Terrain.DEEP_WATER]:return false
-   var y: float=garden.cell_center(at).y
-   low=minf(low,y)
-   high=maxf(high,y)
- if high-low>0.35:return false
- for npc in get_tree().get_nodes_in_group("garden_npcs"):
-  if npc.garden!=garden:continue
-  var next: Vector3=garden.cell_center(npc.next_cell)
-  if Vector2(npc.position.x-point.x,npc.position.z-point.z).length()<2.8:return false
-  if Vector2(next.x-point.x,next.z-point.z).length()<2.8:return false
- return true
+func landing_point() -> Vector3:
+ var point:=Vector3(0,0,garden.grid_min.y-NORTH_OFFSET)
+ for x in [-0.7,0.0,0.7]:
+  for z in [-0.7,0.0,0.7]:
+   point.y=maxf(point.y,garden.background_meadow.height_at(Vector2(point.x+x,point.z+z)))
+ return point
 
 func land(auto_leave: bool=false) -> String:
  if state!="away":return "The TARDIS is already "+state+"."
- var candidates: Array[Vector2i]=[]
- for z in range(3,garden.grid_size.y-3):
-  for x in range(3,garden.grid_size.x-3):candidates.append(Vector2i(x,z))
- candidates.shuffle()
- var chosen:=Vector2i(-1,-1)
- for cell in candidates:
-  if cell!=last_cell and _clear_at(cell):
-   chosen=cell
-   break
- if chosen.x<0:return "No clear landing space. Make room away from people, crops and buildings."
  _load_model()
- last_cell=chosen
- position=garden.cell_center(chosen)
- rotation.y=float(randi_range(0,3))*PI/2.0
- for z in range(-2,3):
-  for x in range(-2,3):
-   var cell:=chosen+Vector2i(x,z)
-   garden.blocked_cells[cell]=true
-   reserved.append(cell)
- # Settle the box above the highest corner of its base on gently uneven soil.
- for x in [-0.7,0.7]:
-  for z in [-0.7,0.7]:position.y=maxf(position.y,garden.heightfield.height_at(Vector2(position.x+x,position.z+z)))
+ position=landing_point()
+ # The source's door and telephone notice face +Z (south) in its rest pose.
+ rotation=Vector3.ZERO
  automatic=auto_leave
  state="landing"
  body.collision_layer=4
  show()
  _start_sound("Landing")
- animation.play("event/flight",0.0,animation.get_animation("event/flight").length/duration)
- animation.advance(0.0)
  material.set_shader_parameter("presence",0.0)
- garden.message="A strange blue box is arriving in the garden."
+ garden.message="A strange blue box is arriving beyond the north edge."
  garden._refresh_ui()
- return "Landing at garden position %.1f, %.1f."%[position.x,position.z]
+ return "Landing just north of the garden, facing south."
 
 func _start_sound(filename: String) -> void:
  elapsed=0.0
@@ -5042,15 +5257,12 @@ func takeoff() -> String:
  if state!="landed":return "Takeoff requires a landed TARDIS (currently "+state+")."
  state="taking off"
  _start_sound("Takeoff")
- animation.play("event/flight",0.0,-animation.get_animation("event/flight").length/duration,true)
- animation.advance(0.0)
  return "The TARDIS is taking off."
 
 func _process(delta: float) -> void:
  if state=="away":return
  var paused: bool=garden.guide.visible
  audio.stream_paused=paused
- animation.active=not paused
  if paused:return
  if state=="landed":
   lamp.light_energy=0.25
@@ -5069,7 +5281,6 @@ func _process(delta: float) -> void:
  material.set_shader_parameter("lamp_energy",0.5+pulse*2.0)
  lamp.light_energy=presence*(0.6+pulse*1.5)
  if elapsed>=duration:
-  animation.pause()
   if arriving:
    state="landed"
    stay=20.0
@@ -5079,8 +5290,6 @@ func _process(delta: float) -> void:
    hide()
    body.collision_layer=0
    audio.stop()
-   for cell in reserved:garden.blocked_cells.erase(cell)
-   reserved.clear()
 
 ```
 

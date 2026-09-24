@@ -23,8 +23,10 @@ const CyclingNPC = preload("res://cycling_npc.gd")
 const ProceduralAnimal = preload("res://procedural_animal.gd")
 const HedgehogNPC = preload("res://hedgehog_npc.gd")
 var blocked_cells: Dictionary = {}
+var compass_view: Control
 var dev_console: CanvasLayer
 var tardis: Node3D
+var animal_notices: CanvasLayer
 var wildlife: Node
 var additional_visitors: Array[Node3D] = []
 var background_meadow: Node3D
@@ -125,6 +127,9 @@ func _ready() -> void:
 	wildlife=preload("res://garden_wildlife.gd").new()
 	add_child(wildlife)
 	wildlife.setup(self)
+	animal_notices=preload("res://animal_notices.gd").new()
+	add_child(animal_notices)
+	animal_notices.setup(self)
 	var meadow_grass := preload("res://meadow_grass.gd").new()
 	add_child(meadow_grass)
 	meadow_grass.build(self)
@@ -139,6 +144,8 @@ func _ready() -> void:
 	var compass:=preload("res://garden_compass.gd").new()
 	compass_layer.add_child(compass)
 	compass.setup(camera)
+	compass_view=compass
+	compass_view.visible=not guide.visible
 	dev_console=preload("res://developer_console.gd").new()
 	add_child(dev_console)
 	dev_console.setup(self)
@@ -516,6 +523,7 @@ func _set_guide(open: bool) -> void:
 	if is_instance_valid(dev_console) and dev_console.opened: dev_console.toggle(false)
 	if is_instance_valid(field_book) and field_book.visible: field_book.close()
 	guide.visible=open
+	if is_instance_valid(compass_view):compass_view.visible=not open
 	if open: ControllerInput.focus_first.call_deferred(guide)
 	else:
 		var focused := get_viewport().gui_get_focus_owner()

@@ -11,7 +11,7 @@ unless the pause menu is open. Type `help` to see the commands:
 - `time 18:30` sets the 24-hour clock within the current dawn-to-dawn cycle.
 - `weather fair`, `weather cloudy`, `weather light rain`, `weather rain`,
   `weather heavy rain`, `weather thunderstorm`, or `weather clearing`.
-- `tardis land` materialises at a randomly selected clear garden location.
+- `tardis land` materialises just outside the north edge, with its door facing south.
 - `tardis takeoff` dematerialises a landed TARDIS.
 - `tardis visit` lands, waits 20 seconds, and automatically takes off.
 - `tardis status` reports whether it is away, landing, landed or taking off.
@@ -20,13 +20,32 @@ Time and weather continue their normal cycles after a command. Existing saves
 retain time/weather through the normal save flow. The TARDIS is a temporary
 console event and does not persist across restarting the game.
 
-The supplied upright 9.6-second FBX rotation clip is played forward for landing
-and backward for departure, fitted to the supplied Landing.mp3 and Takeoff.mp3.
-The model uses its diffuse, normal, gloss and emissive maps plus a pulsing
-materialisation shader. A clear 5x5 micro-tile footprint is reserved during its
-visit; people, crops, water, buildings and the spirit are excluded from landing
-sites. Takeoff releases the footprint and collision. Pause holds sound and
-animation together. Source assets remain intact in Models/Easter_Egg/Tardis.
+The model stays in its rest pose throughout landing and takeoff; no spin clips
+play. Its materialisation shader and lamp pulses follow Landing.mp3 and
+Takeoff.mp3. It stands 2.4 m beyond the middle of the north boundary, grounded
+on the surrounding meadow, without occupying garden tiles. Pause holds the
+sound and visual effect together. Original source animations remain intact.
+
+# Animal notices and the land survey
+
+Animal visits and residency changes display a queued bottom-left notice with
+the day. Each notice stays for six seconds; opening the pause menu or Field
+Guide hides and holds the queue. Reloading a save does not replay old arrivals.
+Purchasing another animal of an already discovered species still gives notices.
+
+Birth and death notification handlers are available as
+`garden.wildlife.record_birth(species, individual_id)` and
+`garden.wildlife.record_death(species, individual_id)`. Pass a stable unique
+animal ID. Their event records survive saves and suppress duplicate reports.
+These handlers report events only; breeding and lifespan simulation are not
+implemented, and no animals are randomly born or killed by this update.
+
+The Field Guide's fourth tab, Land area, shows every micro-tile with north at
+the top, eight terrain colours, tile counts and coverage percentages. Buildings
+remain included in the underlying ground totals; scenery beyond the garden is
+excluded. Hover a square or use arrows/D-pad to inspect its ground type and
+coordinates. Previous/Next scans tiles; LB/RB changes categories. Counts refresh
+from the current terrain when the page opens or a terrain change is reported.
 
 # Village and shops
 

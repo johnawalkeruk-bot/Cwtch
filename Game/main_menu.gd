@@ -400,6 +400,7 @@ func _restore_garden() -> void:
 			garden.watered_image.set_pixel(wet_cell.x,wet_cell.y,Color(garden.watered_cells[wet_cell],0,0))
 	garden.watered_texture.update(garden.watered_image)
 	coins=maxi(0,int(data.get("coins",500)))
+	garden.wildlife.suppress_events=true
 	garden.wildlife.restore(data.get("wildlife",{}))
 	purchases.clear()
 	for record in data.get("purchases",[]):
@@ -408,6 +409,7 @@ func _restore_garden() -> void:
 		if not garden.contains_cell(Vector2i(int(record.x),int(record.z))): continue
 		purchases.append(record)
 		preload("res://village_stock.gd").deliver(garden,record)
+	garden.wildlife.suppress_events=false
 	garden.valley_cycle._update_visuals()
 	garden._refresh_ui()
 
