@@ -37,9 +37,6 @@ func restore_position(point: Vector3) -> void:
  target_cell=cell
 
 func advance(delta: float, input: Vector2, camera_yaw: float) -> void:
- if garden.floating_tool!=null and garden.floating_tool.busy:
-  velocity=Vector3.ZERO
-  return
  var wanted:=Basis(Vector3.UP,camera_yaw)*Vector3(input.x,0,input.y).limit_length()*SPEED
  velocity=velocity.lerp(wanted,1.0-exp(-12.0*delta))
  if wanted.length_squared()<0.001 and velocity.length()<0.01:velocity=Vector3.ZERO

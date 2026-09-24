@@ -26,14 +26,14 @@ func run() -> void:
 	light.rotation_degrees = Vector3(-35,-35,0)
 	light.light_energy = 1.2
 	scene.add_child(light)
-	for i in range(3):
+	for i in range(4):
 		var model := preload("res://floating_tool.gd").make_model(i)
 		scene.add_child(model)
-		camera.size = 0.95 if i==0 else 0.72
+		camera.size = 1.1 if i==3 else (0.95 if i==0 else 0.72)
 		print("TOOL BOUNDS ",i," ",preload("res://floating_tool.gd").bounds(model))
 		for frame in range(6): await process_frame
 		await RenderingServer.frame_post_draw
-		viewport.get_texture().get_image().save_png("res://assets/tools/%s_icon.png" % ["hoe","seeds","water"][i])
+		viewport.get_texture().get_image().save_png("res://assets/tools/%s_icon.png" % ["hoe","seeds","water","shovel"][i])
 		model.queue_free()
 		await process_frame
 	viewport.queue_free()

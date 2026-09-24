@@ -46,8 +46,7 @@ func toggle(value: bool) -> void:
  opened=value
  panel.visible=value
  backdrop.visible=value
- garden.action_pending=false
- garden.trigger_held=false
+ garden._clear_use()
  garden.player.velocity=Vector3.ZERO
  if value:
   if garden.tool_wheel.visible:garden._set_wheel(false)

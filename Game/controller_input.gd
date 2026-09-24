@@ -12,7 +12,7 @@ func _ready() -> void:
 		event.axis=entry[1]
 		event.axis_value=entry[2]
 		InputMap.action_add_event(entry[0],event)
-	for entry in [["pad_wheel",JOY_BUTTON_Y],["pad_guide",JOY_BUTTON_START]]:
+	for entry in [["pad_wheel",JOY_BUTTON_Y],["pad_guide",JOY_BUTTON_START],["pad_tardis",JOY_BUTTON_RIGHT_STICK]]:
 		InputMap.add_action(entry[0])
 		var event := InputEventJoypadButton.new()
 		event.button_index=entry[1]

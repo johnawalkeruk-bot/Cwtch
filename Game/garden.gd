@@ -1,7 +1,7 @@
 extends "res://main.gd"
 
-enum Tool { HOE, SEEDS, WATER, NONE }
-const TOOL_NAMES := ["Hoe", "Seed packet", "Watering can", "No tool equipped"]
+enum Tool { HOE, SEEDS, WATER, SHOVEL, NONE }
+const TOOL_NAMES := ["Hoe", "Seed packet", "Watering can", "Shovel", "No tool equipped"]
 const GROW_SECONDS := 12.0
 const HARVEST_GOAL := 6
 const REACH := 100.0
@@ -51,6 +51,9 @@ var crops: Dictionary = {}
 var harvested := 0
 var action_pending := false
 var trigger_held := false
+var mouse_held := false
+var release_required := false
+var repeat_wait := 0.0
 var action_mouse := Vector2.ZERO
 var pending_bounds := Rect2i()
 var pending_tool := 0
@@ -198,27 +201,56 @@ func _create_terrain() -> void:
 	terrain_material.set_shader_parameter("detail_maps", load("res://assets/textures/terrain_details.res"))
 	terrain_material.set_shader_parameter("riverbed_color", load("res://assets/textures/water/M_RiverBottom_BaseColor.tga"))
 
+func _clear_use() -> void:
+	action_pending=false
+	mouse_held=false
+	trigger_held=false
+	release_required=true
+	if is_instance_valid(floating_tool):floating_tool.cancel_use()
+
+func _trigger_tardis() -> void:
+	if tardis.state=="away":message=tardis.land()
+	elif tardis.state=="landed":message=tardis.takeoff()
+	else:message="The TARDIS is already "+tardis.state+"."
+	_refresh_ui()
+
+func _cycle_shovel(direction: int) -> void:
+	floating_tool.shovel_mode=posmod(floating_tool.shovel_mode+direction,4)
+	_refresh_ui()
+
 func _unhandled_input(event: InputEvent) -> void:
-	if is_instance_valid(dev_console) and dev_console.opened: return
+	if is_instance_valid(dev_console) and dev_console.opened:return
 	if event.is_action_pressed("pad_wheel"):
-		if not guide.visible and not floating_tool.busy: _set_wheel(not tool_wheel.visible)
+		if not guide.visible:_set_wheel(not tool_wheel.visible)
 		get_viewport().set_input_as_handled()
 		return
 	if event.is_action_pressed("pad_guide") or event.is_action_pressed("ui_cancel") and ControllerInput.using_pad:
-		if tool_wheel.visible: _set_wheel(false)
-		else: _toggle_guide()
+		if tool_wheel.visible:_set_wheel(false)
+		else:_toggle_guide()
 		get_viewport().set_input_as_handled()
 		return
+	var modal: bool=guide.visible or tool_wheel.visible
 	if event.is_action("pad_use"):
-		var pressed := event.is_action_pressed("pad_use")
-		if pressed and not trigger_held and not guide.visible and not tool_wheel.visible and not floating_tool.busy:
-			action_pending=true
-		trigger_held=pressed
+		if event.is_action_released("pad_use"):
+			trigger_held=false
+			if floating_tool.busy:action_pending=false
+		elif event.is_action_pressed("pad_use") and not modal and not release_required:
+			if not trigger_held:action_pending=true
+			trigger_held=true
+		get_viewport().set_input_as_handled()
+		return
+	var tardis_key: bool=event is InputEventKey and event.pressed and not event.echo and event.keycode==KEY_T and event.ctrl_pressed
+	if not modal and (event.is_action_pressed("pad_tardis") or tardis_key):
+		_trigger_tardis()
+		get_viewport().set_input_as_handled()
+		return
+	if not modal and tool==Tool.SHOVEL and event is InputEventJoypadButton and event.pressed and event.button_index in [JOY_BUTTON_LEFT_SHOULDER,JOY_BUTTON_RIGHT_SHOULDER]:
+		_cycle_shovel(-1 if event.button_index==JOY_BUTTON_LEFT_SHOULDER else 1)
 		get_viewport().set_input_as_handled()
 		return
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode==KEY_TAB:
-			if not guide.visible and not floating_tool.busy: _set_wheel(not tool_wheel.visible)
+			if not guide.visible:_set_wheel(not tool_wheel.visible)
 			get_viewport().set_input_as_handled()
 			return
 		if event.keycode==KEY_ESCAPE and tool_wheel.visible:
@@ -230,21 +262,31 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.keycode==KEY_M:
 			_toggle_ambience()
 			return
-		if guide.visible: return
-		if event.keycode>=KEY_1 and event.keycode<=KEY_3 and not floating_tool.busy:
+		if modal:return
+		if event.keycode>=KEY_1 and event.keycode<=KEY_4:
 			_select_tool(event.keycode-KEY_1)
 			_set_wheel(false)
 			return
-	if guide.visible or tool_wheel.visible: return
+		if tool==Tool.SHOVEL and event.keycode in [KEY_Q,KEY_E]:
+			_cycle_shovel(-1 if event.keycode==KEY_Q else 1)
+			return
+	if event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_LEFT:
+		if not event.pressed:
+			mouse_held=false
+			if floating_tool.busy:action_pending=false
+		elif not modal and not release_required:
+			mouse_held=true
+			action_pending=true
+	if modal:return
 	if event is InputEventMouseMotion and aiming:
-		camera_yaw -= event.relative.x*0.004
-		camera_pitch = clampf(camera_pitch+event.relative.y*0.004,deg_to_rad(-80),deg_to_rad(80))
-	if event is InputEventMouseButton and event.pressed and event.button_index==MOUSE_BUTTON_LEFT:
-		if not floating_tool.busy: action_pending=true
+		camera_yaw-=event.relative.x*0.004
+		camera_pitch=clampf(camera_pitch+event.relative.y*0.004,deg_to_rad(-80),deg_to_rad(80))
 
 func _set_wheel(open: bool) -> void:
-	action_pending = false
+	_clear_use()
+	notice.visible=not open and not guide.visible
 	if open:
+		cursor.clear()
 		tool_wheel.open(tool)
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		if not ControllerInput.using_pad: Input.warp_mouse(get_viewport().get_visible_rect().size*0.5)
@@ -258,13 +300,21 @@ func _set_wheel(open: bool) -> void:
 
 func _wheel_selected(index: int) -> void:
 	_select_tool(index)
+	if index==Tool.SHOVEL:tool_wheel.open_modes(floating_tool.shovel_mode)
+	else:_set_wheel(false)
+
+func _shovel_mode_selected(index: int) -> void:
+	floating_tool.shovel_mode=clampi(index,0,3)
 	_set_wheel(false)
+	_refresh_ui()
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT and is_instance_valid(guide):
 		_set_guide(true)
 
 func _physics_process(delta: float) -> void:
+	if release_required and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and not Input.is_action_pressed("pad_use"):release_required=false
+	repeat_wait=maxf(0.0,repeat_wait-delta)
 	if is_instance_valid(dev_console) and dev_console.opened:
 		action_pending=false
 		return
@@ -274,11 +324,9 @@ func _physics_process(delta: float) -> void:
 		return
 	if tool_wheel.visible: return
 	terrain_material.set_shader_parameter("world_to_grid",global_transform.affine_inverse())
-	var input := Vector2.ZERO
-	if not floating_tool.busy:
-		input = Vector2(float(Input.is_physical_key_pressed(KEY_D))-float(Input.is_physical_key_pressed(KEY_A)),
-			float(Input.is_physical_key_pressed(KEY_S))-float(Input.is_physical_key_pressed(KEY_W)))
-		input = (input+ControllerInput.movement()).limit_length()
+	var input := Vector2(float(Input.is_physical_key_pressed(KEY_D))-float(Input.is_physical_key_pressed(KEY_A)),
+		float(Input.is_physical_key_pressed(KEY_S))-float(Input.is_physical_key_pressed(KEY_W)))
+	input = (input+ControllerInput.movement()).limit_length()
 	var look := ControllerInput.look()
 	camera_yaw -= look.x*1.8*delta
 	camera_pitch = clampf(camera_pitch+look.y*1.5*delta,deg_to_rad(-80),deg_to_rad(80))
@@ -292,8 +340,10 @@ func _physics_process(delta: float) -> void:
 		cursor.follow_object(to_local(selected_target.subject.global_position),selected_target.selection_size(),delta)
 	else:
 		cursor.follow_feet(player.position,Vector2.ONE*MICRO_SIZE,delta)
-	if action_pending:
+	if (mouse_held or trigger_held) and not release_required and not floating_tool.busy and repeat_wait<=0.0:action_pending=true
+	if action_pending and not floating_tool.busy:
 		action_pending=false
+		repeat_wait=0.2
 		if is_instance_valid(selected_target) and not contains_cell(selected_target.crop_cell):
 			message = selected_target.subject.get_meta("inspection_text",selected_target.label+" is enjoying the valley.")
 		elif contains_cell(target):
@@ -338,7 +388,7 @@ func _pick_object(mouse: Vector2) -> Area3D:
 func _act(cell: Vector2i) -> void:
 	_apply_tool(cell,tool)
 
-func _apply_tool(cell: Vector2i, active_tool: int) -> void:
+func _apply_tool(cell: Vector2i, active_tool: int, mode: int=-1) -> void:
 	if not contains_cell(cell) or blocked_cells.has(cell): return
 	var terrain := get_terrain(cell)
 	match active_tool:
@@ -351,9 +401,15 @@ func _apply_tool(cell: Vector2i, active_tool: int) -> void:
 		Tool.SEEDS:
 			if terrain==Terrain.DIRT:
 				_clear_old_crop(cell)
+				heightfield.plant_seed(cell)
 				set_terrain(cell,Terrain.GRASS)
 				message="A fresh patch of grass."
 			else: message="Scatter grass seed onto bare earth."
+		Tool.SHOVEL:
+			var chosen: int=floating_tool.shovel_mode if mode<0 else mode
+			if heightfield.sculpt(cell,chosen):
+				message=["A hollow fills with water.","A small hole, ready for grass seed.","The hollow is filled with dirt.","The ground settles level."][chosen]
+			else:message="Leave a little room around people, plants and buildings."
 		Tool.WATER:
 			watered_cells[cell]=1.0
 			watered_image.set_pixel(cell.x,cell.y,Color(1,0,0))
@@ -514,15 +570,18 @@ func _create_garden_ui() -> void:
 	tool_wheel=preload("res://tool_wheel.gd").new()
 	root.add_child(tool_wheel)
 	tool_wheel.tool_selected.connect(_wheel_selected)
+	tool_wheel.mode_selected.connect(_shovel_mode_selected)
 	tool_wheel.cancelled.connect(func(): _set_wheel(false))
 
 func _toggle_guide() -> void:
 	_set_guide(not guide.visible)
 
 func _set_guide(open: bool) -> void:
+	_clear_use()
 	if is_instance_valid(dev_console) and dev_console.opened: dev_console.toggle(false)
 	if is_instance_valid(field_book) and field_book.visible: field_book.close()
 	guide.visible=open
+	notice.visible=not open
 	if is_instance_valid(compass_view):compass_view.visible=not open
 	if open: ControllerInput.focus_first.call_deferred(guide)
 	else:
@@ -538,14 +597,17 @@ func _set_guide(open: bool) -> void:
 	Input.mouse_mode=Input.MOUSE_MODE_VISIBLE if open else Input.MOUSE_MODE_CAPTURED
 
 func _select_tool(index: int) -> void:
-	tool=clampi(index,0,3)
+	_clear_use()
+	tool=clampi(index,0,4)
 	action_pending=false
 	if is_instance_valid(floating_tool): floating_tool.equip(tool)
 	_refresh_ui()
 
 func _refresh_ui() -> void:
 	if not is_instance_valid(hud): return
+	control_hint.text=_tool_controls()
 	hud.text=TOOL_NAMES[tool]
+	if tool==Tool.SHOVEL and is_instance_valid(floating_tool):hud.text+=" · "+floating_tool.MODES[floating_tool.shovel_mode]
 	if message!=last_message:
 		last_message=message
 		toast_timer=3.2
@@ -554,7 +616,12 @@ func _refresh_ui() -> void:
 
 func _controller_prompts() -> void:
 	var pad := ControllerInput.using_pad
-	control_hint.text = "Y / Triangle  tools · Menu  pause" if pad else "TAB  tools    ·    ESC  pause"
-	guide_controls.text = ("Left stick  glide  ·  Right stick  look\n\nY / Triangle  opens the tool wheel.\nRight trigger  uses the equipped tool.\nA / Cross  confirm  ·  B / Circle  back" if pad else "WASD  glide  ·  Mouse  look\n\nTAB  opens your tool wheel. Click to equip.\nLeft-click to use it above the spirit.") + "\n\nYour garden saves when you leave."
+	control_hint.text = _tool_controls()
+	guide_controls.text = ("Left stick  glide  ·  Right stick  look\n\nY / Triangle  opens the tool wheel.\nHold right trigger  continuously use your tool.\nLB / RB  shovel mode · R3  TARDIS.\nA / Cross  confirm  ·  B / Circle  back" if pad else "WASD  glide  ·  Mouse  look\n\nTAB  opens your tool wheel. Click to equip.\nHold left-click to use continuously.\nQ / E  shovel mode · Ctrl+T  TARDIS.") + "\n\nYour garden saves when you leave."
 	if field_book.visible: ControllerInput.focus_first.call_deferred(field_book)
 	elif guide.visible: ControllerInput.focus_first.call_deferred(guide)
+
+func _tool_controls() -> String:
+	var text: String="Y  tools · Hold RT  use · R3  TARDIS" if ControllerInput.using_pad else "TAB  tools · Hold click  use · CTRL+T  TARDIS"
+	if tool==Tool.SHOVEL:text+="\nLB / RB  shovel mode" if ControllerInput.using_pad else "\nQ / E  shovel mode"
+	return text

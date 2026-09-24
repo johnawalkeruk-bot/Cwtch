@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://hn13qfpm7ntn"
+path="res://.godot/imported/Grass Seeds.mp3-652239c35032d56cf67a4280a8dd65c4.mp3str"
+
+[deps]
+
+source_file="res://assets/sounds/tools/Grass Seeds.mp3"
+dest_files=["res://.godot/imported/Grass Seeds.mp3-652239c35032d56cf67a4280a8dd65c4.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

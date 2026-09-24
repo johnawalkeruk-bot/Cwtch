@@ -1,5 +1,8 @@
 shader_type spatial;
 render_mode cull_disabled;
+uniform sampler2D bed_heights : filter_linear, repeat_disable;
+uniform sampler2D original_heights : filter_linear, repeat_disable;
+uniform vec2 height_samples;
 uniform sampler2D terrain_ids : filter_nearest, repeat_disable;
 uniform sampler2D exclusions : filter_nearest, repeat_disable;
 uniform vec2 grid_min;
@@ -22,6 +25,11 @@ void vertex() {
 	VERTEX.y *= height_scale;
 	VERTEX.x += sin(TIME * 1.4 + root.x * 0.7 + root.z * 0.4) * 0.035 * tip_weight;
 	VERTEX.z += sin(TIME * 1.0 + root.z * 0.8) * 0.022 * tip_weight;
+	if (inside) {
+	 vec2 height_uv=((root.xz-grid_min)/(grid_size*micro_size)*(height_samples-1.0)+0.5)/height_samples;
+	 float shift=texture(bed_heights,height_uv).r-texture(original_heights,height_uv).r;
+	 VERTEX.y+=shift/max(length(MODEL_MATRIX[1].xyz),0.001);
+	}
 	VERTEX *= present;
 	tint = sin(root.x * 12.3 + root.z * 7.1) * 0.5 + 0.5;
 }

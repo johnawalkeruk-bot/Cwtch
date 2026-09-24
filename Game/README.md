@@ -1,3 +1,37 @@
+# Shovel, continuous tools and TARDIS shortcuts
+
+Ctrl+T or clicking the right stick (R3) lands the TARDIS just north of the
+garden, or makes it take off when landed. Repeated presses during an arrival
+or departure do not restart the effect. Shortcuts are disabled in menus and
+the console.
+
+Hold left-click or the controller right trigger to repeat the equipped tool.
+You can glide while working. Releasing finishes the current stroke without
+starting another; opening a menu or the console cancels use and requires a
+fresh press. Put away stows all models and disables tool actions.
+
+Choose Shovel in the Tab / Y tool wheel, then choose one of its four modes.
+Q/E or LB/RB cycles modes while equipped; a stroke already underway finishes
+in its original mode. Keys 1–4 equip hoe, grass seeds, watering can and shovel.
+
+- Dig: scoop a sloped hollow. Water fills the below-ground depression; repeated
+  scoops deepen it to a safe floor above the diorama base.
+- Pick: make a small, dry planting hole. Grass seeds planted there close the
+  hole and grow the existing grass ground type.
+- Pour: restore the local original ground height and fill the hollow with dirt.
+- Thump: flatten the centre of the brush to its original central elevation,
+  with a smooth transition at its edge. Holding repeats the levelling action.
+
+Each mode has a distinct procedural model animation and its matching sound.
+Hoe, seeds and watering can also use their supplied Sounds folder recordings.
+Original models and sounds remain in Tools/ and Sounds/.
+
+Terrain edits change the height mesh, surface normals, raycast collision,
+water depth, and grass roots. Only affected chunks and their shared edges are
+rebuilt. Edits avoid people, crops and building footprints, preserve the outer
+boundary, and are saved with the garden. Existing saves without deformation
+continue to load normally.
+
 # Compass, developer console and the TARDIS
 
 The compass at the top of the garden and village shows the camera heading.

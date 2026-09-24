@@ -353,7 +353,7 @@ func _save_garden() -> bool:
 	var data := {"version":1,"terrain":terrain,"crops":crops,"harvested":garden.harvested,
 		"player":[garden.player.cell.x,garden.player.cell.y],"player_position":[garden.player.position.x,garden.player.position.z],"elapsed":garden.valley_cycle.elapsed,
 		"weather":garden.valley_cycle.weather_index,"weather_elapsed":garden.valley_cycle.weather_elapsed,
-		"wildlife":garden.wildlife.save_data(),"wetness":garden.valley_cycle.wetness,"watered":_saved_watered(),"coins":coins,"purchases":purchases}
+		"deformation":garden.heightfield.save_deformation(),"wildlife":garden.wildlife.save_data(),"wetness":garden.valley_cycle.wetness,"watered":_saved_watered(),"coins":coins,"purchases":purchases}
 	var file := FileAccess.open(SAVE_PATH,FileAccess.WRITE)
 	if not file: return false
 	file.store_string(JSON.stringify(data))
@@ -374,6 +374,7 @@ func _restore_garden() -> void:
 	if terrain.size() != garden.grid_size.x*garden.grid_size.y: return
 	for z in range(garden.grid_size.y):
 		for x in range(garden.grid_size.x): garden.set_terrain(Vector2i(x,z),clampi(int(terrain[z*garden.grid_size.x+x]),0,7))
+	garden.heightfield.restore_deformation(data.get("deformation",{}))
 	for saved in data.get("crops",[]):
 		var cell := Vector2i(int(saved.x),int(saved.z))
 		if not garden.contains_cell(cell) or garden.blocked_cells.has(cell): continue

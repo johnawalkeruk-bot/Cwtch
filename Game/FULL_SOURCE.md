@@ -392,14 +392,14 @@ func run() -> void:
 	light.rotation_degrees = Vector3(-35,-35,0)
 	light.light_energy = 1.2
 	scene.add_child(light)
-	for i in range(3):
+	for i in range(4):
 		var model := preload("res://floating_tool.gd").make_model(i)
 		scene.add_child(model)
-		camera.size = 0.95 if i==0 else 0.72
+		camera.size = 1.1 if i==3 else (0.95 if i==0 else 0.72)
 		print("TOOL BOUNDS ",i," ",preload("res://floating_tool.gd").bounds(model))
 		for frame in range(6): await process_frame
 		await RenderingServer.frame_post_draw
-		viewport.get_texture().get_image().save_png("res://assets/tools/%s_icon.png" % ["hoe","seeds","water"][i])
+		viewport.get_texture().get_image().save_png("res://assets/tools/%s_icon.png" % ["hoe","seeds","water","shovel"][i])
 		model.queue_free()
 		await process_frame
 	viewport.queue_free()
@@ -630,7 +630,7 @@ func _ready() -> void:
 		event.axis=entry[1]
 		event.axis_value=entry[2]
 		InputMap.action_add_event(entry[0],event)
-	for entry in [["pad_wheel",JOY_BUTTON_Y],["pad_guide",JOY_BUTTON_START]]:
+	for entry in [["pad_wheel",JOY_BUTTON_Y],["pad_guide",JOY_BUTTON_START],["pad_tardis",JOY_BUTTON_RIGHT_STICK]]:
 		InputMap.add_action(entry[0])
 		var event := InputEventJoypadButton.new()
 		event.button_index=entry[1]
@@ -967,8 +967,7 @@ func toggle(value: bool) -> void:
  opened=value
  panel.visible=value
  backdrop.visible=value
- garden.action_pending=false
- garden.trigger_held=false
+ garden._clear_use()
  garden.player.velocity=Vector3.ZERO
  if value:
   if garden.tool_wheel.visible:garden._set_wheel(false)
@@ -1517,131 +1516,184 @@ func is_settled() -> bool:
 
 ```gd
 extends Node3D
-signal effect_applied(cell: Vector2i, tool: int)
-const KEYS := ["hoe","seeds","water"]
-const DURATION := [0.95,1.45,1.55]
+signal effect_applied(cell: Vector2i, tool: int, mode: int)
+const KEYS := ["hoe","seeds","water","shovel"]
+const MODES := ["Dig","Pick","Pour","Thump"]
+const SOUNDS := ["Hoe","Grass Seeds","Watering Can"]
+const SHOVEL_SOUNDS := ["Shovel_Dig","Shovel_Pick","Shovel_Fill","Shovel_Thump"]
 var garden: Node3D
 var pivot: Node3D
-var models: Array[Node3D] = []
+var models: Array[Node3D]=[]
 var particles: CPUParticles3D
+var audio: AudioStreamPlayer3D
 var selected := 0
+var shovel_mode := 0
+var stroke_mode := 0
+var stroke_duration := 1.0
 var busy := false
 var elapsed := 0.0
 var idle_time := 0.0
 var applied := false
+var tracks_spirit := true
 var target_cell := Vector2i.ZERO
 var target_point := Vector3.ZERO
 var outlet := Vector3.ZERO
 
 static func bounds(node: Node3D, transform: Transform3D = Transform3D.IDENTITY) -> AABB:
-	transform *= node.transform
-	var result := AABB()
-	if node is MeshInstance3D and node.mesh: result = transform*node.mesh.get_aabb()
-	for child in node.get_children():
-		if child is Node3D:
-			var child_bounds := bounds(child,transform)
-			if child_bounds.size.length()>0: result = child_bounds if result.size.length()==0 else result.merge(child_bounds)
-	return result
+ transform *= node.transform
+ var result := AABB()
+ if node is MeshInstance3D and node.mesh: result = transform*node.mesh.get_aabb()
+ for child in node.get_children():
+  if child is Node3D:
+   var child_bounds := bounds(child,transform)
+   if child_bounds.size.length()>0: result = child_bounds if result.size.length()==0 else result.merge(child_bounds)
+ return result
 
 static func make_model(index: int) -> Node3D:
-	var wrapper := Node3D.new()
-	var model: Node3D = load("res://assets/tools/%s.glb" % KEYS[index]).instantiate()
-	var box := bounds(model)
-	var size := 0.82 if index==0 else (0.43 if index==1 else 0.58)
-	var factor := size/maxf(box.size.x,maxf(box.size.y,box.size.z))
-	model.scale *= factor
-	model.position -= box.get_center()*factor
-	wrapper.add_child(model)
-	if index==2: wrapper.rotation.y=PI/4.0
-	return wrapper
+ var wrapper:=Node3D.new()
+ var path: String="res://assets/tools/shovel/Shovel.fbx" if index==3 else "res://assets/tools/%s.glb"%KEYS[index]
+ var model: Node3D=load(path).instantiate()
+ var box:=bounds(model)
+ var size: float=[0.82,0.43,0.58,0.95][index]
+ var factor:=size/maxf(box.size.x,maxf(box.size.y,box.size.z))
+ model.scale*=factor
+ model.position-=box.get_center()*factor
+ wrapper.add_child(model)
+ for animation in model.find_children("*","AnimationPlayer",true,false):animation.stop();animation.active=false
+ if index==2:wrapper.rotation.y=PI/4.0
+ return wrapper
 
 func setup(world: Node3D) -> void:
-	garden = world
-	pivot = Node3D.new()
-	add_child(pivot)
-	for i in range(3):
-		var model := make_model(i)
-		pivot.add_child(model)
-		models.append(model)
-	particles = CPUParticles3D.new()
-	particles.top_level = true
-	particles.local_coords = false
-	particles.amount = 55
-	particles.lifetime = 0.55
-	particles.direction = Vector3.DOWN
-	particles.spread = 13
-	particles.initial_velocity_min = 0.3
-	particles.initial_velocity_max = 0.7
-	particles.gravity = Vector3(0,-3,0)
-	particles.scale_amount_min = 0.6
-	particles.scale_amount_max = 1.0
-	var drop := SphereMesh.new()
-	drop.radius = 0.016
-	drop.height = 0.032
-	drop.radial_segments = 6
-	drop.rings = 3
-	var material := StandardMaterial3D.new()
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.vertex_color_use_as_albedo = true
-	drop.material = material
-	particles.mesh = drop
-	particles.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	particles.emitting = false
-	add_child(particles)
-	equip(0)
+ garden=world
+ pivot=Node3D.new()
+ add_child(pivot)
+ for i in 4:
+  var model:=make_model(i)
+  pivot.add_child(model)
+  models.append(model)
+ particles=CPUParticles3D.new()
+ particles.top_level=true
+ particles.local_coords=false
+ particles.amount=55
+ particles.lifetime=0.55
+ particles.gravity=Vector3(0,-3,0)
+ particles.scale_amount_min=0.6
+ particles.scale_amount_max=1.0
+ var drop:=SphereMesh.new()
+ drop.radius=0.016
+ drop.height=0.032
+ drop.radial_segments=6
+ drop.rings=3
+ var material:=StandardMaterial3D.new()
+ material.shading_mode=BaseMaterial3D.SHADING_MODE_UNSHADED
+ material.vertex_color_use_as_albedo=true
+ drop.material=material
+ particles.mesh=drop
+ particles.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+ particles.emitting=false
+ add_child(particles)
+ audio=AudioStreamPlayer3D.new()
+ audio.volume_db=-10.0
+ audio.unit_size=3.0
+ audio.max_distance=20.0
+ add_child(audio)
+ equip(0)
+
+func cancel_use() -> void:
+ busy=false
+ applied=false
+ particles.emitting=false
+ audio.stop()
+ pivot.rotation=Vector3.ZERO
+ pivot.position=Vector3.ZERO
 
 func equip(index: int) -> void:
-	if busy: return
-	selected = clampi(index,0,3)
-	for i in range(models.size()): models[i].visible = i==selected
-	pivot.rotation = Vector3.ZERO
-	particles.emitting = false
-	particles.color = Color("84e45a") if selected==1 else Color("58bbed")
+ cancel_use()
+ selected=clampi(index,0,4)
+ for i in models.size():models[i].visible=i==selected
 
 func use_at(cell: Vector2i) -> bool:
-	if busy or selected==3: return false
-	target_cell = cell
-	target_point = garden.player.position if cell==garden.player.cell else garden.cell_center(cell)
-	busy = true
-	elapsed = 0
-	applied = false
-	return true
+ if busy or selected==4:return false
+ target_cell=cell
+ tracks_spirit=cell==garden.player.cell
+ target_point=garden.player.position if tracks_spirit else garden.cell_center(cell)
+ stroke_mode=shovel_mode
+ var sound: String=SHOVEL_SOUNDS[stroke_mode] if selected==3 else SOUNDS[selected]
+ audio.stream=load("res://assets/sounds/tools/"+sound+".mp3")
+ stroke_duration=audio.stream.get_length()
+ audio.play()
+ particles.color=Color("97724c") if selected==3 else (Color("84e45a") if selected==1 else Color("58bbed"))
+ var digging: bool=selected==3 and stroke_mode in [0,1]
+ particles.direction=Vector3.UP if digging else Vector3.DOWN
+ particles.spread=38.0 if digging else 13.0
+ particles.initial_velocity_min=0.8 if digging else 0.3
+ particles.initial_velocity_max=1.8 if digging else 0.7
+ busy=true
+ elapsed=0.0
+ applied=false
+ return true
 
 func _process(delta: float) -> void:
-	if not is_instance_valid(garden): return
-	var paused: bool = garden.guide.visible or garden.tool_wheel.visible
-	particles.speed_scale = 0 if paused else 1
-	visible = not garden.guide.visible
-	if paused: return
-	idle_time += delta
-	var anchor: Vector3 = target_point+Vector3.UP*0.1 if busy else garden.cursor.position
-	position = anchor+Vector3.UP*(0.55+sin(idle_time*2)*0.022)
-	rotation.y = garden.camera_yaw
-	pivot.position = Vector3.ZERO
-	pivot.rotation = Vector3.ZERO
-	if not busy: return
-	elapsed += delta
-	var t := clampf(elapsed/DURATION[selected],0,1)
-	var tilt := smoothstep(0,0.25,t)*(1.0-smoothstep(0.78,1.0,t))
-	if selected==0:
-		pivot.position.y = -0.24*pow(absf(sin(t*PI*2)),2)
-		pivot.rotation.z = -0.18+sin(t*TAU*2)*0.10
-	elif selected==1:
-		pivot.rotation.z = PI*tilt
-		pivot.position.y = absf(sin(t*TAU*3))*0.055*tilt
-		outlet = Vector3(0,0.20,0)
-	else:
-		pivot.rotation.z = -1.9*tilt
-		outlet = Basis(Vector3.UP,PI/4.0)*Vector3(0.2553,0.0726,0.2359)
-	particles.global_position = pivot.to_global(outlet)
-	particles.emitting = selected>0 and t>0.28 and t<0.8
-	if not applied and t>=(0.25 if selected==0 else 0.58):
-		applied = true
-		effect_applied.emit(target_cell,selected)
-	if t>=1:
-		busy = false
-		particles.emitting = false
-		pivot.rotation = Vector3.ZERO
+ if not is_instance_valid(garden):return
+ var paused: bool=garden.guide.visible or garden.tool_wheel.visible or (is_instance_valid(garden.dev_console) and garden.dev_console.opened)
+ particles.speed_scale=0.0 if paused else 1.0
+ audio.stream_paused=paused
+ visible=not paused
+ if paused:return
+ idle_time+=delta
+ if busy and tracks_spirit:
+  target_cell=garden.player.cell
+  target_point=garden.player.position
+ var anchor: Vector3=target_point+Vector3.UP*0.1 if busy else garden.cursor.position
+ position=anchor+Vector3.UP*(0.55+sin(idle_time*2)*0.022)
+ rotation.y=garden.camera_yaw
+ pivot.position=Vector3.ZERO
+ pivot.rotation=Vector3.ZERO
+ if not busy:return
+ elapsed+=delta
+ var t:=clampf(elapsed/stroke_duration,0,1)
+ var tilt:=smoothstep(0,0.25,t)*(1.0-smoothstep(0.78,1.0,t))
+ var impact:=0.44
+ var emitting:=false
+ if selected==0:
+  pivot.position.y=-0.36*pow(sin(t*PI),4)
+  pivot.rotation.z=-0.18+sin(t*TAU)*0.14
+ elif selected==1:
+  pivot.rotation.z=PI*tilt
+  pivot.position.y=absf(sin(t*TAU*3))*0.055*tilt
+  outlet=Vector3(0,0.20,0)
+  emitting=t>0.28 and t<0.8
+ elif selected==2:
+  pivot.rotation.z=-1.9*tilt
+  outlet=Basis(Vector3.UP,PI/4.0)*Vector3(0.2553,0.0726,0.2359)
+  emitting=t>0.28 and t<0.8
+ else:
+  outlet=Vector3(0,-0.40,0)
+  match stroke_mode:
+   0:
+    pivot.position.y=-0.32*pow(sin(t*PI),2)+0.1*sin(t*TAU)
+    pivot.rotation.x=lerpf(-0.4,0.65,smoothstep(0.3,0.7,t))*tilt
+    emitting=t>0.44 and t<0.73
+   1:
+    pivot.position.y=-0.18*pow(sin(t*PI),8)
+    pivot.rotation.z=0.12*sin(t*TAU)*tilt
+    emitting=t>0.44 and t<0.56
+   2:
+    pivot.rotation.z=2.4*tilt
+    pivot.position.y=0.10*tilt
+    emitting=t>0.3 and t<0.75
+   3:
+    pivot.rotation.x=-PI/2.0*tilt
+    pivot.position.y=-0.42*pow(sin(t*PI),6)
+ particles.global_position=pivot.to_global(outlet)
+ particles.emitting=emitting
+ if not applied and t>=impact:
+  applied=true
+  effect_applied.emit(target_cell,selected,stroke_mode)
+ if t>=1.0:
+  busy=false
+  particles.emitting=false
+  pivot.rotation=Vector3.ZERO
 
 ```
 
@@ -1650,8 +1702,8 @@ func _process(delta: float) -> void:
 ```gd
 extends "res://main.gd"
 
-enum Tool { HOE, SEEDS, WATER, NONE }
-const TOOL_NAMES := ["Hoe", "Seed packet", "Watering can", "No tool equipped"]
+enum Tool { HOE, SEEDS, WATER, SHOVEL, NONE }
+const TOOL_NAMES := ["Hoe", "Seed packet", "Watering can", "Shovel", "No tool equipped"]
 const GROW_SECONDS := 12.0
 const HARVEST_GOAL := 6
 const REACH := 100.0
@@ -1701,6 +1753,9 @@ var crops: Dictionary = {}
 var harvested := 0
 var action_pending := false
 var trigger_held := false
+var mouse_held := false
+var release_required := false
+var repeat_wait := 0.0
 var action_mouse := Vector2.ZERO
 var pending_bounds := Rect2i()
 var pending_tool := 0
@@ -1848,27 +1903,56 @@ func _create_terrain() -> void:
 	terrain_material.set_shader_parameter("detail_maps", load("res://assets/textures/terrain_details.res"))
 	terrain_material.set_shader_parameter("riverbed_color", load("res://assets/textures/water/M_RiverBottom_BaseColor.tga"))
 
+func _clear_use() -> void:
+	action_pending=false
+	mouse_held=false
+	trigger_held=false
+	release_required=true
+	if is_instance_valid(floating_tool):floating_tool.cancel_use()
+
+func _trigger_tardis() -> void:
+	if tardis.state=="away":message=tardis.land()
+	elif tardis.state=="landed":message=tardis.takeoff()
+	else:message="The TARDIS is already "+tardis.state+"."
+	_refresh_ui()
+
+func _cycle_shovel(direction: int) -> void:
+	floating_tool.shovel_mode=posmod(floating_tool.shovel_mode+direction,4)
+	_refresh_ui()
+
 func _unhandled_input(event: InputEvent) -> void:
-	if is_instance_valid(dev_console) and dev_console.opened: return
+	if is_instance_valid(dev_console) and dev_console.opened:return
 	if event.is_action_pressed("pad_wheel"):
-		if not guide.visible and not floating_tool.busy: _set_wheel(not tool_wheel.visible)
+		if not guide.visible:_set_wheel(not tool_wheel.visible)
 		get_viewport().set_input_as_handled()
 		return
 	if event.is_action_pressed("pad_guide") or event.is_action_pressed("ui_cancel") and ControllerInput.using_pad:
-		if tool_wheel.visible: _set_wheel(false)
-		else: _toggle_guide()
+		if tool_wheel.visible:_set_wheel(false)
+		else:_toggle_guide()
 		get_viewport().set_input_as_handled()
 		return
+	var modal: bool=guide.visible or tool_wheel.visible
 	if event.is_action("pad_use"):
-		var pressed := event.is_action_pressed("pad_use")
-		if pressed and not trigger_held and not guide.visible and not tool_wheel.visible and not floating_tool.busy:
-			action_pending=true
-		trigger_held=pressed
+		if event.is_action_released("pad_use"):
+			trigger_held=false
+			if floating_tool.busy:action_pending=false
+		elif event.is_action_pressed("pad_use") and not modal and not release_required:
+			if not trigger_held:action_pending=true
+			trigger_held=true
+		get_viewport().set_input_as_handled()
+		return
+	var tardis_key: bool=event is InputEventKey and event.pressed and not event.echo and event.keycode==KEY_T and event.ctrl_pressed
+	if not modal and (event.is_action_pressed("pad_tardis") or tardis_key):
+		_trigger_tardis()
+		get_viewport().set_input_as_handled()
+		return
+	if not modal and tool==Tool.SHOVEL and event is InputEventJoypadButton and event.pressed and event.button_index in [JOY_BUTTON_LEFT_SHOULDER,JOY_BUTTON_RIGHT_SHOULDER]:
+		_cycle_shovel(-1 if event.button_index==JOY_BUTTON_LEFT_SHOULDER else 1)
 		get_viewport().set_input_as_handled()
 		return
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode==KEY_TAB:
-			if not guide.visible and not floating_tool.busy: _set_wheel(not tool_wheel.visible)
+			if not guide.visible:_set_wheel(not tool_wheel.visible)
 			get_viewport().set_input_as_handled()
 			return
 		if event.keycode==KEY_ESCAPE and tool_wheel.visible:
@@ -1880,21 +1964,31 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.keycode==KEY_M:
 			_toggle_ambience()
 			return
-		if guide.visible: return
-		if event.keycode>=KEY_1 and event.keycode<=KEY_3 and not floating_tool.busy:
+		if modal:return
+		if event.keycode>=KEY_1 and event.keycode<=KEY_4:
 			_select_tool(event.keycode-KEY_1)
 			_set_wheel(false)
 			return
-	if guide.visible or tool_wheel.visible: return
+		if tool==Tool.SHOVEL and event.keycode in [KEY_Q,KEY_E]:
+			_cycle_shovel(-1 if event.keycode==KEY_Q else 1)
+			return
+	if event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_LEFT:
+		if not event.pressed:
+			mouse_held=false
+			if floating_tool.busy:action_pending=false
+		elif not modal and not release_required:
+			mouse_held=true
+			action_pending=true
+	if modal:return
 	if event is InputEventMouseMotion and aiming:
-		camera_yaw -= event.relative.x*0.004
-		camera_pitch = clampf(camera_pitch+event.relative.y*0.004,deg_to_rad(-80),deg_to_rad(80))
-	if event is InputEventMouseButton and event.pressed and event.button_index==MOUSE_BUTTON_LEFT:
-		if not floating_tool.busy: action_pending=true
+		camera_yaw-=event.relative.x*0.004
+		camera_pitch=clampf(camera_pitch+event.relative.y*0.004,deg_to_rad(-80),deg_to_rad(80))
 
 func _set_wheel(open: bool) -> void:
-	action_pending = false
+	_clear_use()
+	notice.visible=not open and not guide.visible
 	if open:
+		cursor.clear()
 		tool_wheel.open(tool)
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 		if not ControllerInput.using_pad: Input.warp_mouse(get_viewport().get_visible_rect().size*0.5)
@@ -1908,13 +2002,21 @@ func _set_wheel(open: bool) -> void:
 
 func _wheel_selected(index: int) -> void:
 	_select_tool(index)
+	if index==Tool.SHOVEL:tool_wheel.open_modes(floating_tool.shovel_mode)
+	else:_set_wheel(false)
+
+func _shovel_mode_selected(index: int) -> void:
+	floating_tool.shovel_mode=clampi(index,0,3)
 	_set_wheel(false)
+	_refresh_ui()
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT and is_instance_valid(guide):
 		_set_guide(true)
 
 func _physics_process(delta: float) -> void:
+	if release_required and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and not Input.is_action_pressed("pad_use"):release_required=false
+	repeat_wait=maxf(0.0,repeat_wait-delta)
 	if is_instance_valid(dev_console) and dev_console.opened:
 		action_pending=false
 		return
@@ -1924,11 +2026,9 @@ func _physics_process(delta: float) -> void:
 		return
 	if tool_wheel.visible: return
 	terrain_material.set_shader_parameter("world_to_grid",global_transform.affine_inverse())
-	var input := Vector2.ZERO
-	if not floating_tool.busy:
-		input = Vector2(float(Input.is_physical_key_pressed(KEY_D))-float(Input.is_physical_key_pressed(KEY_A)),
-			float(Input.is_physical_key_pressed(KEY_S))-float(Input.is_physical_key_pressed(KEY_W)))
-		input = (input+ControllerInput.movement()).limit_length()
+	var input := Vector2(float(Input.is_physical_key_pressed(KEY_D))-float(Input.is_physical_key_pressed(KEY_A)),
+		float(Input.is_physical_key_pressed(KEY_S))-float(Input.is_physical_key_pressed(KEY_W)))
+	input = (input+ControllerInput.movement()).limit_length()
 	var look := ControllerInput.look()
 	camera_yaw -= look.x*1.8*delta
 	camera_pitch = clampf(camera_pitch+look.y*1.5*delta,deg_to_rad(-80),deg_to_rad(80))
@@ -1942,8 +2042,10 @@ func _physics_process(delta: float) -> void:
 		cursor.follow_object(to_local(selected_target.subject.global_position),selected_target.selection_size(),delta)
 	else:
 		cursor.follow_feet(player.position,Vector2.ONE*MICRO_SIZE,delta)
-	if action_pending:
+	if (mouse_held or trigger_held) and not release_required and not floating_tool.busy and repeat_wait<=0.0:action_pending=true
+	if action_pending and not floating_tool.busy:
 		action_pending=false
+		repeat_wait=0.2
 		if is_instance_valid(selected_target) and not contains_cell(selected_target.crop_cell):
 			message = selected_target.subject.get_meta("inspection_text",selected_target.label+" is enjoying the valley.")
 		elif contains_cell(target):
@@ -1988,7 +2090,7 @@ func _pick_object(mouse: Vector2) -> Area3D:
 func _act(cell: Vector2i) -> void:
 	_apply_tool(cell,tool)
 
-func _apply_tool(cell: Vector2i, active_tool: int) -> void:
+func _apply_tool(cell: Vector2i, active_tool: int, mode: int=-1) -> void:
 	if not contains_cell(cell) or blocked_cells.has(cell): return
 	var terrain := get_terrain(cell)
 	match active_tool:
@@ -2001,9 +2103,15 @@ func _apply_tool(cell: Vector2i, active_tool: int) -> void:
 		Tool.SEEDS:
 			if terrain==Terrain.DIRT:
 				_clear_old_crop(cell)
+				heightfield.plant_seed(cell)
 				set_terrain(cell,Terrain.GRASS)
 				message="A fresh patch of grass."
 			else: message="Scatter grass seed onto bare earth."
+		Tool.SHOVEL:
+			var chosen: int=floating_tool.shovel_mode if mode<0 else mode
+			if heightfield.sculpt(cell,chosen):
+				message=["A hollow fills with water.","A small hole, ready for grass seed.","The hollow is filled with dirt.","The ground settles level."][chosen]
+			else:message="Leave a little room around people, plants and buildings."
 		Tool.WATER:
 			watered_cells[cell]=1.0
 			watered_image.set_pixel(cell.x,cell.y,Color(1,0,0))
@@ -2164,15 +2272,18 @@ func _create_garden_ui() -> void:
 	tool_wheel=preload("res://tool_wheel.gd").new()
 	root.add_child(tool_wheel)
 	tool_wheel.tool_selected.connect(_wheel_selected)
+	tool_wheel.mode_selected.connect(_shovel_mode_selected)
 	tool_wheel.cancelled.connect(func(): _set_wheel(false))
 
 func _toggle_guide() -> void:
 	_set_guide(not guide.visible)
 
 func _set_guide(open: bool) -> void:
+	_clear_use()
 	if is_instance_valid(dev_console) and dev_console.opened: dev_console.toggle(false)
 	if is_instance_valid(field_book) and field_book.visible: field_book.close()
 	guide.visible=open
+	notice.visible=not open
 	if is_instance_valid(compass_view):compass_view.visible=not open
 	if open: ControllerInput.focus_first.call_deferred(guide)
 	else:
@@ -2188,14 +2299,17 @@ func _set_guide(open: bool) -> void:
 	Input.mouse_mode=Input.MOUSE_MODE_VISIBLE if open else Input.MOUSE_MODE_CAPTURED
 
 func _select_tool(index: int) -> void:
-	tool=clampi(index,0,3)
+	_clear_use()
+	tool=clampi(index,0,4)
 	action_pending=false
 	if is_instance_valid(floating_tool): floating_tool.equip(tool)
 	_refresh_ui()
 
 func _refresh_ui() -> void:
 	if not is_instance_valid(hud): return
+	control_hint.text=_tool_controls()
 	hud.text=TOOL_NAMES[tool]
+	if tool==Tool.SHOVEL and is_instance_valid(floating_tool):hud.text+=" · "+floating_tool.MODES[floating_tool.shovel_mode]
 	if message!=last_message:
 		last_message=message
 		toast_timer=3.2
@@ -2204,10 +2318,15 @@ func _refresh_ui() -> void:
 
 func _controller_prompts() -> void:
 	var pad := ControllerInput.using_pad
-	control_hint.text = "Y / Triangle  tools · Menu  pause" if pad else "TAB  tools    ·    ESC  pause"
-	guide_controls.text = ("Left stick  glide  ·  Right stick  look\n\nY / Triangle  opens the tool wheel.\nRight trigger  uses the equipped tool.\nA / Cross  confirm  ·  B / Circle  back" if pad else "WASD  glide  ·  Mouse  look\n\nTAB  opens your tool wheel. Click to equip.\nLeft-click to use it above the spirit.") + "\n\nYour garden saves when you leave."
+	control_hint.text = _tool_controls()
+	guide_controls.text = ("Left stick  glide  ·  Right stick  look\n\nY / Triangle  opens the tool wheel.\nHold right trigger  continuously use your tool.\nLB / RB  shovel mode · R3  TARDIS.\nA / Cross  confirm  ·  B / Circle  back" if pad else "WASD  glide  ·  Mouse  look\n\nTAB  opens your tool wheel. Click to equip.\nHold left-click to use continuously.\nQ / E  shovel mode · Ctrl+T  TARDIS.") + "\n\nYour garden saves when you leave."
 	if field_book.visible: ControllerInput.focus_first.call_deferred(field_book)
 	elif guide.visible: ControllerInput.focus_first.call_deferred(guide)
+
+func _tool_controls() -> String:
+	var text: String="Y  tools · Hold RT  use · R3  TARDIS" if ControllerInput.using_pad else "TAB  tools · Hold click  use · CTRL+T  TARDIS"
+	if tool==Tool.SHOVEL:text+="\nLB / RB  shovel mode" if ControllerInput.using_pad else "\nQ / E  shovel mode"
+	return text
 
 ```
 
@@ -2905,6 +3024,11 @@ const RESOLUTION := 12
 const WATER_LEVEL := 0.012
 const BASE_LEVEL := -0.95
 var garden: Node3D
+signal sculpted
+var original_heights: Image
+var original_texture: ImageTexture
+var edited: Dictionary={}
+var seed_holes: Dictionary={}
 var heights: Image
 var height_texture: ImageTexture
 var samples: Vector2i
@@ -2912,185 +3036,314 @@ var spacing := 2.0 / float(RESOLUTION)
 var water_material: ShaderMaterial
 
 func build(owner_garden: Node3D) -> void:
-	garden = owner_garden
-	samples = garden.chunk_count * RESOLUTION + Vector2i.ONE
-	heights = Image.create(samples.x, samples.y, false, Image.FORMAT_RF)
-	heights.fill(Color(0.0, 0.0, 0.0))
-	_sculpt_meadow()
-	_sculpt_pond()
-	height_texture = ImageTexture.create_from_image(heights)
-	for z in range(garden.chunk_count.y):
-		for x in range(garden.chunk_count.x):
-			_build_chunk(Vector2i(x, z))
-	_build_water()
-	_build_skirts()
+ garden = owner_garden
+ samples = garden.chunk_count * RESOLUTION + Vector2i.ONE
+ heights = Image.create(samples.x, samples.y, false, Image.FORMAT_RF)
+ heights.fill(Color(0.0, 0.0, 0.0))
+ _sculpt_meadow()
+ _sculpt_pond()
+ original_heights=heights.duplicate()
+ original_texture=ImageTexture.create_from_image(original_heights)
+ height_texture = ImageTexture.create_from_image(heights)
+ for z in range(garden.chunk_count.y):
+  for x in range(garden.chunk_count.x):
+   _build_chunk(Vector2i(x, z))
+ _build_water()
+ _build_skirts()
 
 func _sculpt_meadow() -> void:
-	var noise := FastNoiseLite.new()
-	noise.seed = 1891
-	noise.frequency = 0.16
-	noise.fractal_octaves = 3
-	var half: Vector2 = Vector2(garden.chunk_count)
-	for z in range(samples.y):
-		for x in range(samples.x):
-			var p: Vector2 = garden.grid_min + Vector2(x, z) * spacing
-			# A smooth level join to the surrounding meadow, with gently rolling ground throughout.
-			var edge := smoothstep(0.0, 2.0, minf(half.x-absf(p.x), half.y-absf(p.y)))
-			var working_plot := lerpf(0.22, 1.0, smoothstep(2.0, 5.0, p.length()))
-			var rolling := 0.32 + noise.get_noise_2dv(p)*0.65
-			rolling += 0.07*sin(p.x*0.75)*cos(p.y*0.65)
-			heights.set_pixel(x,z,Color(maxf(0.0,rolling)*edge*working_plot,0,0))
+ var noise := FastNoiseLite.new()
+ noise.seed = 1891
+ noise.frequency = 0.16
+ noise.fractal_octaves = 3
+ var half: Vector2 = Vector2(garden.chunk_count)
+ for z in range(samples.y):
+  for x in range(samples.x):
+   var p: Vector2 = garden.grid_min + Vector2(x, z) * spacing
+   # A smooth level join to the surrounding meadow, with gently rolling ground throughout.
+   var edge := smoothstep(0.0, 2.0, minf(half.x-absf(p.x), half.y-absf(p.y)))
+   var working_plot := lerpf(0.22, 1.0, smoothstep(2.0, 5.0, p.length()))
+   var rolling := 0.32 + noise.get_noise_2dv(p)*0.65
+   rolling += 0.07*sin(p.x*0.75)*cos(p.y*0.65)
+   heights.set_pixel(x,z,Color(maxf(0.0,rolling)*edge*working_plot,0,0))
 
 func _sculpt_pond() -> void:
-	var banks: Array[PackedVector2Array] = []
-	for z in range(garden.grid_size.y):
-		for x in range(garden.grid_size.x):
-			var cell := Vector2i(x, z)
-			if not _is_water(cell):
-				continue
-			var corner: Vector2 = garden.grid_min + Vector2(cell) * garden.MICRO_SIZE
-			var size: float = garden.MICRO_SIZE
-			for side in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
-				if _is_water(cell + side):
-					continue
-				var a := corner
-				var b := corner
-				if side.x != 0:
-					a.x += size if side.x > 0 else 0.0
-					b = a + Vector2(0, size)
-				else:
-					a.y += size if side.y > 0 else 0.0
-					b = a + Vector2(size, 0)
-				banks.append(PackedVector2Array([a, b]))
-	for z in range(samples.y):
-		for x in range(samples.x):
-			var point: Vector2 = garden.grid_min + Vector2(x, z) * spacing
-			if not _is_water(garden.local_to_cell(Vector3(point.x, 0, point.y))):
-				continue
-			var distance_to_bank := INF
-			for bank in banks:
-				distance_to_bank = minf(distance_to_bank, point.distance_to(Geometry2D.get_closest_point_to_segment(point, bank[0], bank[1])))
-			var depth := 0.9 * smoothstep(0.0, 1.1, distance_to_bank)
-			heights.set_pixel(x, z, Color(-depth, 0, 0))
+ var banks: Array[PackedVector2Array] = []
+ for z in range(garden.grid_size.y):
+  for x in range(garden.grid_size.x):
+   var cell := Vector2i(x, z)
+   if not _is_water(cell):
+    continue
+   var corner: Vector2 = garden.grid_min + Vector2(cell) * garden.MICRO_SIZE
+   var size: float = garden.MICRO_SIZE
+   for side in [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]:
+    if _is_water(cell + side):
+     continue
+    var a := corner
+    var b := corner
+    if side.x != 0:
+     a.x += size if side.x > 0 else 0.0
+     b = a + Vector2(0, size)
+    else:
+     a.y += size if side.y > 0 else 0.0
+     b = a + Vector2(size, 0)
+    banks.append(PackedVector2Array([a, b]))
+ for z in range(samples.y):
+  for x in range(samples.x):
+   var point: Vector2 = garden.grid_min + Vector2(x, z) * spacing
+   if not _is_water(garden.local_to_cell(Vector3(point.x, 0, point.y))):
+    continue
+   var distance_to_bank := INF
+   for bank in banks:
+    distance_to_bank = minf(distance_to_bank, point.distance_to(Geometry2D.get_closest_point_to_segment(point, bank[0], bank[1])))
+   var depth := 0.9 * smoothstep(0.0, 1.1, distance_to_bank)
+   heights.set_pixel(x, z, Color(-depth, 0, 0))
 
 func _is_water(cell: Vector2i) -> bool:
-	return garden.get_terrain(cell) in [garden.Terrain.WATER, garden.Terrain.DEEP_WATER]
+ return garden.get_terrain(cell) in [garden.Terrain.WATER, garden.Terrain.DEEP_WATER]
 
 func _h(x: int, z: int) -> float:
-	return heights.get_pixel(clampi(x, 0, samples.x - 1), clampi(z, 0, samples.y - 1)).r
+ return heights.get_pixel(clampi(x, 0, samples.x - 1), clampi(z, 0, samples.y - 1)).r
 
 func height_at(p: Vector2) -> float:
-	var q: Vector2 = ((p - garden.grid_min) / spacing).clamp(Vector2.ZERO, Vector2(samples - Vector2i.ONE))
-	var x := mini(floori(q.x), samples.x - 2)
-	var z := mini(floori(q.y), samples.y - 2)
-	var f := q - Vector2(x, z)
-	# Match the two actual mesh triangles, including their diagonal.
-	if f.x + f.y <= 1.0:
-		return _h(x, z) + f.x * (_h(x + 1, z) - _h(x, z)) + f.y * (_h(x, z + 1) - _h(x, z))
-	return _h(x + 1, z + 1) + (1.0 - f.x) * (_h(x, z + 1) - _h(x + 1, z + 1)) + (1.0 - f.y) * (_h(x + 1, z) - _h(x + 1, z + 1))
+ var q: Vector2 = ((p - garden.grid_min) / spacing).clamp(Vector2.ZERO, Vector2(samples - Vector2i.ONE))
+ var x := mini(floori(q.x), samples.x - 2)
+ var z := mini(floori(q.y), samples.y - 2)
+ var f := q - Vector2(x, z)
+ # Match the two actual mesh triangles, including their diagonal.
+ if f.x + f.y <= 1.0:
+  return _h(x, z) + f.x * (_h(x + 1, z) - _h(x, z)) + f.y * (_h(x, z + 1) - _h(x, z))
+ return _h(x + 1, z + 1) + (1.0 - f.x) * (_h(x, z + 1) - _h(x + 1, z + 1)) + (1.0 - f.y) * (_h(x + 1, z) - _h(x + 1, z + 1))
 
 func surface_at(p: Vector2) -> float:
-	return maxf(WATER_LEVEL, height_at(p))
+ return maxf(WATER_LEVEL, height_at(p))
 
 func _build_chunk(cell: Vector2i) -> void:
-	var vertices := PackedVector3Array()
-	var normals := PackedVector3Array()
-	var uvs := PackedVector2Array()
-	var indices := PackedInt32Array()
-	for z in range(RESOLUTION + 1):
-		for x in range(RESOLUTION + 1):
-			var gx := cell.x * RESOLUTION + x
-			var gz := cell.y * RESOLUTION + z
-			var p: Vector2 = garden.grid_min + Vector2(gx, gz) * spacing
-			vertices.append(Vector3(p.x, _h(gx, gz), p.y))
-			normals.append(Vector3(_h(gx - 1, gz) - _h(gx + 1, gz),
-				2.0 * spacing, _h(gx, gz - 1) - _h(gx, gz + 1)).normalized())
-			uvs.append(p)
-	for z in range(RESOLUTION):
-		for x in range(RESOLUTION):
-			var a := z * (RESOLUTION + 1) + x
-			var b := a + 1
-			var c := a + RESOLUTION + 1
-			var d := c + 1
-			indices.append_array(PackedInt32Array([a, b, c, b, d, c]))
-	var arrays := []
-	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = vertices
-	arrays[Mesh.ARRAY_NORMAL] = normals
-	arrays[Mesh.ARRAY_TEX_UV] = uvs
-	arrays[Mesh.ARRAY_INDEX] = indices
-	var mesh := ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	var chunk := MeshInstance3D.new()
-	chunk.name = "HeightChunk_%d_%d" % [cell.x, cell.y]
-	chunk.mesh = mesh
-	chunk.material_override = garden.terrain_material
-	add_child(chunk)
-	garden.chunks[cell] = chunk
-	var body := StaticBody3D.new()
-	body.collision_layer = 1
-	body.collision_mask = 0
-	var shape := CollisionShape3D.new()
-	shape.shape = mesh.create_trimesh_shape()
-	body.add_child(shape)
-	chunk.add_child(body)
+ var vertices := PackedVector3Array()
+ var normals := PackedVector3Array()
+ var uvs := PackedVector2Array()
+ var indices := PackedInt32Array()
+ for z in range(RESOLUTION + 1):
+  for x in range(RESOLUTION + 1):
+   var gx := cell.x * RESOLUTION + x
+   var gz := cell.y * RESOLUTION + z
+   var p: Vector2 = garden.grid_min + Vector2(gx, gz) * spacing
+   vertices.append(Vector3(p.x, _h(gx, gz), p.y))
+   normals.append(Vector3(_h(gx - 1, gz) - _h(gx + 1, gz),
+    2.0 * spacing, _h(gx, gz - 1) - _h(gx, gz + 1)).normalized())
+   uvs.append(p)
+ for z in range(RESOLUTION):
+  for x in range(RESOLUTION):
+   var a := z * (RESOLUTION + 1) + x
+   var b := a + 1
+   var c := a + RESOLUTION + 1
+   var d := c + 1
+   indices.append_array(PackedInt32Array([a, b, c, b, d, c]))
+ var arrays := []
+ arrays.resize(Mesh.ARRAY_MAX)
+ arrays[Mesh.ARRAY_VERTEX] = vertices
+ arrays[Mesh.ARRAY_NORMAL] = normals
+ arrays[Mesh.ARRAY_TEX_UV] = uvs
+ arrays[Mesh.ARRAY_INDEX] = indices
+ var mesh := ArrayMesh.new()
+ mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+ if garden.chunks.has(cell):
+  var existing: MeshInstance3D=garden.chunks[cell]
+  existing.mesh=mesh
+  var collision: CollisionShape3D=existing.get_child(0).get_child(0)
+  collision.set_deferred("shape",mesh.create_trimesh_shape())
+  return
+ var chunk := MeshInstance3D.new()
+ chunk.name = "HeightChunk_%d_%d" % [cell.x, cell.y]
+ chunk.mesh = mesh
+ chunk.material_override = garden.terrain_material
+ add_child(chunk)
+ garden.chunks[cell] = chunk
+ var body := StaticBody3D.new()
+ body.collision_layer = 1
+ body.collision_mask = 0
+ var shape := CollisionShape3D.new()
+ shape.shape = mesh.create_trimesh_shape()
+ body.add_child(shape)
+ chunk.add_child(body)
 
 func _build_water() -> void:
-	var plane := PlaneMesh.new()
-	plane.size = Vector2(garden.chunk_count) * 2.0
-	plane.subdivide_width = samples.x - 2
-	plane.subdivide_depth = samples.y - 2
-	var water := MeshInstance3D.new()
-	water.name = "PondSurface"
-	water.position.y = WATER_LEVEL
-	water.mesh = plane
-	water_material = ShaderMaterial.new()
-	water_material.shader = preload("res://water.gdshader")
-	for entry in [["water_color", "M_Water_BaseColor"], ["water_normal", "M_Water_Normal"], ["water_roughness", "M_Water_Roughness"], ["water_opacity", "M_Water_Opacity"], ["bottom_color", "M_RiverBottom_BaseColor"], ["bottom_ao", "M_RiverBottom_AO"]]:
-		water_material.set_shader_parameter(entry[0], load("res://assets/textures/water/%s.tga" % entry[1]))
-	water_material.set_shader_parameter("terrain_ids", garden.terrain_texture)
-	water_material.set_shader_parameter("grid_size", Vector2(garden.grid_size))
-	water_material.set_shader_parameter("micro_size", garden.MICRO_SIZE)
-	water_material.set_shader_parameter("grid_min", garden.grid_min)
-	water_material.set_shader_parameter("bed_heights", height_texture)
-	water_material.set_shader_parameter("height_samples", Vector2(samples))
-	water.material_override = water_material
-	water.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(water)
+ var plane := PlaneMesh.new()
+ plane.size = Vector2(garden.chunk_count) * 2.0
+ plane.subdivide_width = samples.x - 2
+ plane.subdivide_depth = samples.y - 2
+ var water := MeshInstance3D.new()
+ water.name = "PondSurface"
+ water.position.y = WATER_LEVEL
+ water.mesh = plane
+ water_material = ShaderMaterial.new()
+ water_material.shader = preload("res://water.gdshader")
+ for entry in [["water_color", "M_Water_BaseColor"], ["water_normal", "M_Water_Normal"], ["water_roughness", "M_Water_Roughness"], ["water_opacity", "M_Water_Opacity"], ["bottom_color", "M_RiverBottom_BaseColor"], ["bottom_ao", "M_RiverBottom_AO"]]:
+  water_material.set_shader_parameter(entry[0], load("res://assets/textures/water/%s.tga" % entry[1]))
+ water_material.set_shader_parameter("terrain_ids", garden.terrain_texture)
+ water_material.set_shader_parameter("grid_size", Vector2(garden.grid_size))
+ water_material.set_shader_parameter("micro_size", garden.MICRO_SIZE)
+ water_material.set_shader_parameter("grid_min", garden.grid_min)
+ water_material.set_shader_parameter("bed_heights", height_texture)
+ water_material.set_shader_parameter("height_samples", Vector2(samples))
+ water.material_override = water_material
+ water.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+ add_child(water)
 
 func _build_skirts() -> void:
-	var vertices := PackedVector3Array()
-	var perimeter: Array[Vector2i] = []
-	for x in range(samples.x):
-		perimeter.append(Vector2i(x, 0))
-	for z in range(1, samples.y):
-		perimeter.append(Vector2i(samples.x - 1, z))
-	for x in range(samples.x - 2, -1, -1):
-		perimeter.append(Vector2i(x, samples.y - 1))
-	for z in range(samples.y - 2, 0, -1):
-		perimeter.append(Vector2i(0, z))
-	for i in range(perimeter.size()):
-		var a := perimeter[i]
-		var b := perimeter[(i + 1) % perimeter.size()]
-		var pa: Vector2 = garden.grid_min + Vector2(a) * spacing
-		var pb: Vector2 = garden.grid_min + Vector2(b) * spacing
-		var top_a := Vector3(pa.x, _h(a.x, a.y), pa.y)
-		var top_b := Vector3(pb.x, _h(b.x, b.y), pb.y)
-		var low_a := Vector3(pa.x, BASE_LEVEL, pa.y)
-		var low_b := Vector3(pb.x, BASE_LEVEL, pb.y)
-		vertices.append_array(PackedVector3Array([top_a, low_a, top_b, top_b, low_a, low_b]))
-	var arrays := []
-	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = vertices
-	var mesh := ArrayMesh.new()
-	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	var skirt := MeshInstance3D.new()
-	skirt.mesh = mesh
-	var earth := StandardMaterial3D.new()
-	earth.albedo_color = Color("514331")
-	earth.cull_mode = BaseMaterial3D.CULL_DISABLED
-	skirt.material_override = earth
-	add_child(skirt)
+ var vertices := PackedVector3Array()
+ var perimeter: Array[Vector2i] = []
+ for x in range(samples.x):
+  perimeter.append(Vector2i(x, 0))
+ for z in range(1, samples.y):
+  perimeter.append(Vector2i(samples.x - 1, z))
+ for x in range(samples.x - 2, -1, -1):
+  perimeter.append(Vector2i(x, samples.y - 1))
+ for z in range(samples.y - 2, 0, -1):
+  perimeter.append(Vector2i(0, z))
+ for i in range(perimeter.size()):
+  var a := perimeter[i]
+  var b := perimeter[(i + 1) % perimeter.size()]
+  var pa: Vector2 = garden.grid_min + Vector2(a) * spacing
+  var pb: Vector2 = garden.grid_min + Vector2(b) * spacing
+  var top_a := Vector3(pa.x, _h(a.x, a.y), pa.y)
+  var top_b := Vector3(pb.x, _h(b.x, b.y), pb.y)
+  var low_a := Vector3(pa.x, BASE_LEVEL, pa.y)
+  var low_b := Vector3(pb.x, BASE_LEVEL, pb.y)
+  vertices.append_array(PackedVector3Array([top_a, low_a, top_b, top_b, low_a, low_b]))
+ var arrays := []
+ arrays.resize(Mesh.ARRAY_MAX)
+ arrays[Mesh.ARRAY_VERTEX] = vertices
+ var mesh := ArrayMesh.new()
+ mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+ var skirt := MeshInstance3D.new()
+ skirt.mesh = mesh
+ var earth := StandardMaterial3D.new()
+ earth.albedo_color = Color("514331")
+ earth.cull_mode = BaseMaterial3D.CULL_DISABLED
+ skirt.material_override = earth
+ add_child(skirt)
+
+func _sample_rect(center: Vector2, radius: float) -> Rect2i:
+ var low:=Vector2i(((center-Vector2.ONE*radius-garden.grid_min)/spacing).floor()).clamp(Vector2i.ONE,samples-Vector2i(2,2))
+ var high:=Vector2i(((center+Vector2.ONE*radius-garden.grid_min)/spacing).ceil()).clamp(Vector2i.ONE,samples-Vector2i(2,2))
+ return Rect2i(low,high-low+Vector2i.ONE)
+
+func _rebuild_samples(rect: Rect2i) -> void:
+ if rect.size==Vector2i.ZERO:return
+ height_texture.update(heights)
+ # Include a one-sample halo: neighbouring chunks share border vertices/normals.
+ var low: Vector2i=Vector2i(Vector2(rect.position-Vector2i.ONE)/RESOLUTION).clamp(Vector2i.ZERO,garden.chunk_count-Vector2i.ONE)
+ var high: Vector2i=Vector2i(Vector2(rect.end+Vector2i.ONE)/RESOLUTION).clamp(Vector2i.ZERO,garden.chunk_count-Vector2i.ONE)
+ for z in range(low.y,high.y+1):
+  for x in range(low.x,high.x+1):_build_chunk(Vector2i(x,z))
+ sculpted.emit()
+
+func _write_height(x: int, z: int, value: float) -> void:
+ value=clampf(value,BASE_LEVEL+0.12,1.5)
+ heights.set_pixel(x,z,Color(value,0,0))
+ var index:=z*samples.x+x
+ if absf(value-original_heights.get_pixel(x,z).r)<0.00001:edited.erase(index)
+ else:edited[index]=value
+
+func can_sculpt(cell: Vector2i, radius: float) -> bool:
+ var point: Vector3=garden.cell_center(cell)
+ for z in range(cell.y-2,cell.y+3):
+  for x in range(cell.x-2,cell.x+3):
+   var at:=Vector2i(x,z)
+   if not garden.contains_cell(at):continue
+   var p: Vector3=garden.cell_center(at)
+   if Vector2(p.x-point.x,p.z-point.z).length()>radius+garden.MICRO_SIZE*0.72:continue
+   if garden.blocked_cells.has(at) or garden.crops.has(at):return false
+ for npc in get_tree().get_nodes_in_group("garden_npcs"):
+  if npc.garden!=garden:continue
+  var next: Vector3=garden.cell_center(npc.next_cell)
+  if Vector2(npc.position.x-point.x,npc.position.z-point.z).length()<radius+npc.collision_radius+0.12:return false
+  if Vector2(next.x-point.x,next.z-point.z).length()<radius+npc.collision_radius+0.12:return false
+ return true
+
+func sculpt(cell: Vector2i, mode: int) -> bool:
+ if not garden.contains_cell(cell) or mode<0 or mode>3:return false
+ var radius:=0.28 if mode==1 else 0.85
+ if not can_sculpt(cell,radius):return false
+ var at: Vector3=garden.cell_center(cell)
+ var center:=Vector2(at.x,at.z)
+ var rect:=_sample_rect(center,radius)
+ var sample: Vector2i=Vector2i(((center-garden.grid_min)/spacing).round()).clamp(Vector2i.ZERO,samples-Vector2i.ONE)
+ var baseline: float=original_heights.get_pixel(sample.x,sample.y).r
+ var bottom:=maxf(BASE_LEVEL+0.12,minf(-0.18,at.y-0.18))
+ for z in range(rect.position.y,rect.end.y):
+  for x in range(rect.position.x,rect.end.x):
+   var distance: float=(garden.grid_min+Vector2(x,z)*spacing).distance_to(center)
+   if distance>radius:continue
+   var weight:=1.0-smoothstep(radius*0.25,radius,distance)
+   var old:=_h(x,z)
+   var original: float=original_heights.get_pixel(x,z).r
+   var value:=old
+   match mode:
+    0:value=minf(old,lerpf(original,bottom,weight))
+    1:value=minf(old,original-0.11*weight)
+    2:value=original
+    3:value=lerpf(old,baseline,weight)
+   _write_height(x,z,value)
+ if mode==1:seed_holes[cell]=true
+ else:
+  for hole in seed_holes.keys():
+   var p: Vector3=garden.cell_center(hole)
+   if Vector2(p.x,p.z).distance_to(center)<radius:seed_holes.erase(hole)
+ for z in range(cell.y-2,cell.y+3):
+  for x in range(cell.x-2,cell.x+3):
+   var tile:=Vector2i(x,z)
+   if not garden.contains_cell(tile):continue
+   var p: Vector3=garden.cell_center(tile)
+   if Vector2(p.x,p.z).distance_to(center)>radius:continue
+   var kind: int=garden.get_terrain(tile)
+   if mode==0:kind=garden.Terrain.DEEP_WATER if p.y < -0.45 else (garden.Terrain.WATER if p.y<0.0 else garden.Terrain.DIRT)
+   elif mode in [1,2]:kind=garden.Terrain.DIRT
+   elif kind in [garden.Terrain.WATER,garden.Terrain.DEEP_WATER] and p.y>=0.0:kind=garden.Terrain.DIRT
+   garden.set_terrain(tile,kind)
+ _rebuild_samples(rect)
+ return true
+
+func plant_seed(cell: Vector2i) -> void:
+ if not seed_holes.has(cell):return
+ var p: Vector3=garden.cell_center(cell)
+ var center:=Vector2(p.x,p.z)
+ var rect:=_sample_rect(center,0.28)
+ for z in range(rect.position.y,rect.end.y):
+  for x in range(rect.position.x,rect.end.x):
+   if (garden.grid_min+Vector2(x,z)*spacing).distance_to(center)<=0.28:
+    _write_height(x,z,original_heights.get_pixel(x,z).r)
+ seed_holes.erase(cell)
+ _rebuild_samples(rect)
+
+func save_deformation() -> Dictionary:
+ var values:=[]
+ for index in edited:values.append([index,edited[index]])
+ var holes:=[]
+ for cell in seed_holes:holes.append([cell.x,cell.y])
+ return {"samples":[samples.x,samples.y],"heights":values,"seed_holes":holes}
+
+func restore_deformation(data: Dictionary) -> void:
+ var dimensions=data.get("samples",[])
+ if not dimensions is Array or dimensions.size()!=2:return
+ if Vector2i(int(dimensions[0]),int(dimensions[1]))!=samples:return
+ var changed:=Rect2i()
+ for value in data.get("heights",[]):
+  if not value is Array or value.size()!=2:continue
+  var index:=int(value[0])
+  var height:=float(value[1])
+  if index<0 or index>=samples.x*samples.y or not is_finite(height):continue
+  var cell:=Vector2i(index%samples.x,index/samples.x)
+  if cell.x==0 or cell.y==0 or cell.x==samples.x-1 or cell.y==samples.y-1:continue
+  _write_height(cell.x,cell.y,height)
+  var area:=Rect2i(cell,Vector2i.ONE)
+  changed=area if changed.size==Vector2i.ZERO else changed.merge(area)
+ for value in data.get("seed_holes",[]):
+  if value is Array and value.size()==2:
+   var cell:=Vector2i(int(value[0]),int(value[1]))
+   if garden.contains_cell(cell):seed_holes[cell]=true
+ _rebuild_samples(changed)
 
 ```
 
@@ -3928,7 +4181,7 @@ func _save_garden() -> bool:
 	var data := {"version":1,"terrain":terrain,"crops":crops,"harvested":garden.harvested,
 		"player":[garden.player.cell.x,garden.player.cell.y],"player_position":[garden.player.position.x,garden.player.position.z],"elapsed":garden.valley_cycle.elapsed,
 		"weather":garden.valley_cycle.weather_index,"weather_elapsed":garden.valley_cycle.weather_elapsed,
-		"wildlife":garden.wildlife.save_data(),"wetness":garden.valley_cycle.wetness,"watered":_saved_watered(),"coins":coins,"purchases":purchases}
+		"deformation":garden.heightfield.save_deformation(),"wildlife":garden.wildlife.save_data(),"wetness":garden.valley_cycle.wetness,"watered":_saved_watered(),"coins":coins,"purchases":purchases}
 	var file := FileAccess.open(SAVE_PATH,FileAccess.WRITE)
 	if not file: return false
 	file.store_string(JSON.stringify(data))
@@ -3949,6 +4202,7 @@ func _restore_garden() -> void:
 	if terrain.size() != garden.grid_size.x*garden.grid_size.y: return
 	for z in range(garden.grid_size.y):
 		for x in range(garden.grid_size.x): garden.set_terrain(Vector2i(x,z),clampi(int(terrain[z*garden.grid_size.x+x]),0,7))
+	garden.heightfield.restore_deformation(data.get("deformation",{}))
 	for saved in data.get("crops",[]):
 		var cell := Vector2i(int(saved.x),int(saved.z))
 		if not garden.contains_cell(cell) or garden.blocked_cells.has(cell): continue
@@ -4104,6 +4358,9 @@ func build(world: Node3D) -> void:
 	_refresh_exclusions()
 	var material := ShaderMaterial.new()
 	material.shader = preload("res://meadow_grass.gdshader")
+	material.set_shader_parameter("bed_heights",world.heightfield.height_texture)
+	material.set_shader_parameter("original_heights",world.heightfield.original_texture)
+	material.set_shader_parameter("height_samples",Vector2(world.heightfield.samples))
 	material.set_shader_parameter("terrain_ids", world.terrain_texture)
 	material.set_shader_parameter("exclusions", exclusion_texture)
 	material.set_shader_parameter("grid_min", world.grid_min)
@@ -4176,6 +4433,9 @@ func _process(delta: float) -> void:
 ```gdshader
 shader_type spatial;
 render_mode cull_disabled;
+uniform sampler2D bed_heights : filter_linear, repeat_disable;
+uniform sampler2D original_heights : filter_linear, repeat_disable;
+uniform vec2 height_samples;
 uniform sampler2D terrain_ids : filter_nearest, repeat_disable;
 uniform sampler2D exclusions : filter_nearest, repeat_disable;
 uniform vec2 grid_min;
@@ -4198,6 +4458,11 @@ void vertex() {
 	VERTEX.y *= height_scale;
 	VERTEX.x += sin(TIME * 1.4 + root.x * 0.7 + root.z * 0.4) * 0.035 * tip_weight;
 	VERTEX.z += sin(TIME * 1.0 + root.z * 0.8) * 0.022 * tip_weight;
+	if (inside) {
+	 vec2 height_uv=((root.xz-grid_min)/(grid_size*micro_size)*(height_samples-1.0)+0.5)/height_samples;
+	 float shift=texture(bed_heights,height_uv).r-texture(original_heights,height_uv).r;
+	 VERTEX.y+=shift/max(length(MODEL_MATRIX[1].xyz),0.001);
+	}
 	VERTEX *= present;
 	tint = sin(root.x * 12.3 + root.z * 7.1) * 0.5 + 0.5;
 }
@@ -5473,9 +5738,6 @@ func restore_position(point: Vector3) -> void:
  target_cell=cell
 
 func advance(delta: float, input: Vector2, camera_yaw: float) -> void:
- if garden.floating_tool!=null and garden.floating_tool.busy:
-  velocity=Vector3.ZERO
-  return
  var wanted:=Basis(Vector3.UP,camera_yaw)*Vector3(input.x,0,input.y).limit_length()*SPEED
  velocity=velocity.lerp(wanted,1.0-exp(-12.0*delta))
  if wanted.length_squared()<0.001 and velocity.length()<0.01:velocity=Vector3.ZERO
@@ -5497,9 +5759,13 @@ func is_settled() -> bool:
 ```gd
 extends Control
 signal tool_selected(index: int)
+signal mode_selected(index: int)
 signal cancelled
-const LABELS := ["Hoe", "Seed packet", "Watering can", "Put away"]
-const NOTES := ["Turn grass into earth", "Scatter a little green", "Give the ground a drink", "Stow your tool and wander"]
+const LABELS := ["Hoe", "Seed packet", "Watering can", "Shovel", "Put away"]
+const MODE_LABELS := ["Dig","Pick","Pour","Thump"]
+const MODE_NOTES := ["Dig a water-filled hollow", "Make a small seed hole", "Fill the ground with dirt", "Level the ground"]
+var mode_page := false
+const NOTES := ["Turn grass into earth", "Scatter a little green", "Give the ground a drink", "Choose how to shape the earth", "Stow your tool and wander"]
 var selected := 0
 var hovered := -1
 var title: Label
@@ -5511,7 +5777,7 @@ var icons: Array[Texture2D] = []
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_STOP
-	for key in ["hoe","seeds","water"]:
+	for key in ["hoe","seeds","water","shovel"]:
 		icons.append(load("res://assets/tools/%s_icon.png" % key) if ResourceLoader.exists("res://assets/tools/%s_icon.png" % key) else null)
 	title = _label(24,Color("e5c17c"))
 	subtitle = _label(15,Color("d0ded0"))
@@ -5542,10 +5808,34 @@ func _layout() -> void:
 	queue_redraw()
 
 func open(current: int) -> void:
+	mode_page=false
 	selected = current
 	hovered = current
 	show()
 	_refresh()
+
+func open_modes(current: int) -> void:
+	mode_page=true
+	selected=current
+	hovered=current
+	show()
+	_refresh()
+
+func _labels() -> Array:
+	return MODE_LABELS if mode_page else LABELS
+
+func _choose() -> void:
+	var choice: int=hovered if hovered>=0 else selected
+	if mode_page:mode_selected.emit(choice)
+	else:tool_selected.emit(choice)
+
+func _cancel() -> void:
+	if mode_page:open(3)
+	else:cancelled.emit()
+
+func _sector(offset: Vector2) -> int:
+	var step: float=TAU/_labels().size()
+	return int(floor(fposmod(offset.angle()+PI/2+step/2,TAU)/step))
 
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion:
@@ -5553,38 +5843,41 @@ func _gui_input(event: InputEvent) -> void:
 		if offset.length()<65 or offset.length()>220:
 			hovered = -1
 		else:
-			hovered = int(floor(fposmod(offset.angle()+PI/2+PI/4,TAU)/(TAU/4)))
+			hovered = _sector(offset)
 		_refresh()
 	if event is InputEventMouseButton and event.pressed:
 		if event.button_index==MOUSE_BUTTON_LEFT and hovered>=0:
-			tool_selected.emit(hovered)
+			_choose()
 		elif event.button_index==MOUSE_BUTTON_RIGHT:
-			cancelled.emit()
+			_cancel()
 		accept_event()
 
 func _refresh() -> void:
 	instruction.text = "LEFT STICK / D-PAD  CHOOSE · A / CROSS  EQUIP · B / CIRCLE  CLOSE" if ControllerInput.using_pad else "MOVE MOUSE TO CHOOSE · CLICK TO EQUIP · TAB / ESC TO CLOSE"
-	title.text = "Choose your tool"
-	subtitle.text = NOTES[hovered] if hovered>=0 else "Take your time."
+	title.text = "Shovel · choose a mode" if mode_page else "Choose your tool"
+	subtitle.text = (MODE_NOTES if mode_page else NOTES)[hovered] if hovered>=0 else "Take your time."
 	queue_redraw()
 
 func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO,size),Color(0.015,0.045,0.04,0.64))
-	for i in range(4):
-		var angle := -PI/2+i*TAU/4
-		var start := angle-PI/4+0.028
-		var end := angle+PI/4-0.028
+	var labels:=_labels()
+	var step: float=TAU/labels.size()
+	for i in labels.size():
+		var angle := -PI/2+i*step
+		var start := angle-step/2+0.028
+		var end := angle+step/2-0.028
 		var polygon := PackedVector2Array()
 		for j in range(41): polygon.append(center+Vector2.from_angle(lerpf(start,end,j/40.0))*198)
 		for j in range(40,-1,-1): polygon.append(center+Vector2.from_angle(lerpf(start,end,j/40.0))*72)
 		draw_colored_polygon(polygon,Color("395548") if i==hovered else Color("18352f"))
 		draw_arc(center,198,start,end,48,Color("e5c17c") if i==hovered else Color("657868"),2.0,true)
 		var icon_center := center+Vector2.from_angle(angle)*128
-		if icons.size()>i and icons[i]:
-			draw_texture_rect(icons[i],Rect2(icon_center-Vector2(48,56),Vector2(96,96)),false)
+		var icon_index: int=3 if mode_page else i
+		if icons.size()>icon_index and icons[icon_index]:
+			draw_texture_rect(icons[icon_index],Rect2(icon_center-Vector2(48,56),Vector2(96,96)),false)
 		var font := get_theme_default_font()
-		var text_width := font.get_string_size(LABELS[i],HORIZONTAL_ALIGNMENT_LEFT,-1,16).x
-		draw_string(font,icon_center+Vector2(-text_width*0.5,57),LABELS[i],HORIZONTAL_ALIGNMENT_LEFT,-1,16,Color("f3ead4"))
+		var text_width := font.get_string_size(labels[i],HORIZONTAL_ALIGNMENT_LEFT,-1,16).x
+		draw_string(font,icon_center+Vector2(-text_width*0.5,57),labels[i],HORIZONTAL_ALIGNMENT_LEFT,-1,16,Color("f3ead4"))
 	draw_circle(center,67,Color("102a25"))
 	draw_arc(center,67,0,TAU,64,Color("9b895f"),1.0,true)
 	var font := get_theme_default_font()
@@ -5594,19 +5887,19 @@ func _process(_delta: float) -> void:
 	if not visible: return
 	var stick := ControllerInput.movement()
 	if stick.length()>0.35:
-		hovered=int(floor(fposmod(stick.angle()+PI/2+PI/4,TAU)/(TAU/4)))
+		hovered=_sector(stick)
 	_refresh()
 
 func _input(event: InputEvent) -> void:
 	if not visible: return
 	if event.is_action_pressed("ui_accept"):
-		tool_selected.emit(hovered if hovered>=0 else selected)
+		_choose()
 	elif event.is_action_pressed("ui_cancel"):
-		cancelled.emit()
+		_cancel()
 	elif event.is_action_pressed("ui_left"):
-		hovered=posmod(hovered-1,4)
+		hovered=posmod(hovered-1,_labels().size())
 	elif event.is_action_pressed("ui_right"):
-		hovered=posmod(hovered+1,4)
+		hovered=posmod(hovered+1,_labels().size())
 	elif event.is_action_pressed("ui_up"):
 		hovered=0
 	elif event.is_action_pressed("ui_down"):
@@ -7021,11 +7314,11 @@ void fragment() {
  vec2 grid=(ground_position-grid_min)/micro_size-0.5;
  vec2 cell=floor(grid);
  vec2 f=smoothstep(vec2(0.30),vec2(0.70),fract(grid));
- float depth=mix(mix(water_at(cell),water_at(cell+vec2(1,0)),f.x),mix(water_at(cell+vec2(0,1)),water_at(cell+vec2(1)),f.x),f.y);
+ float flood=mix(mix(water_at(cell),water_at(cell+vec2(1,0)),f.x),mix(water_at(cell+vec2(0,1)),water_at(cell+vec2(1)),f.x),f.y);
  vec2 height_uv=((ground_position-grid_min)/(grid_size*micro_size)*(height_samples-1.0)+0.5)/height_samples;
  float bed=texture(bed_heights,height_uv).r;
- depth=max(0.0,-bed);
- bool pond=depth>0.003;
+ float depth=max(0.0,-bed);
+ bool pond=depth>0.003 && flood>0.01;
  // Fixed low spots expand as rain accumulates, then shrink as the ground dries.
  float low_spot=noise(ground_position*3.8)*0.75+noise(ground_position*9.0)*0.25;
  float moisture=max(wetness,texture(watered_tiles,(ground_position-grid_min)/(grid_size*micro_size)).r);
@@ -7040,9 +7333,9 @@ void fragment() {
  float opacity=clamp(texture(water_opacity,uv+flow).r,0.25,0.85);
  vec3 tint=mix(vec3(0.13,0.30,0.28),vec3(0.035,0.13,0.19),smoothstep(0.1,0.65,depth));
  ALBEDO=pond ? tint*0.8+surface_color*0.2 : mix(riverbed,tint,0.72);
- ALPHA=pond ? clamp((1.0-exp(-depth*1.5))*0.75+opacity*0.12,0.12,0.78) : 0.65;
- ROUGHNESS=clamp(texture(water_roughness,uv+flow).r,0.12,0.38);
- SPECULAR=0.65;
+ ALPHA=pond ? clamp((1.0-exp(-depth*2.6))*0.7+opacity*0.18,0.34,0.88) : 0.65;
+ ROUGHNESS=clamp(texture(water_roughness,uv+flow).r,0.23,0.44);
+ SPECULAR=0.4;
  vec2 ripple_uv=fract(ground_position*5.0)-0.5;
  float ripple=sin(length(ripple_uv)*65.0-water_time*12.0)*exp(-length(ripple_uv)*5.0)*rain_strength;
  vec2 slope=(n1.xy+n2.xy)*(pond ? 0.10 : 0.035)+normalize(ripple_uv+vec2(0.0001))*ripple*0.07;
