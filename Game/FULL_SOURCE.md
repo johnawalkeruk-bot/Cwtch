@@ -841,6 +841,146 @@ func advance(delta: float) -> void:
 
 ```
 
+## developer_console.gd
+
+```gd
+extends CanvasLayer
+var garden: Node3D
+var backdrop: ColorRect
+var panel: PanelContainer
+var output: RichTextLabel
+var command: LineEdit
+var history: Array[String]=[]
+var history_index := 0
+var opened := false
+
+func setup(world: Node3D) -> void:
+ garden=world
+ layer=100
+ backdrop=ColorRect.new()
+ add_child(backdrop)
+ backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+ backdrop.color=Color(0,0,0,0.22)
+ backdrop.hide()
+ panel=PanelContainer.new()
+ add_child(panel)
+ panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_WIDE)
+ panel.offset_left=32
+ panel.offset_right=-32
+ panel.offset_top=96
+ panel.offset_bottom=390
+ panel.add_theme_stylebox_override("panel",garden._panel_style(Color(0.06,0.11,0.10,0.97)))
+ var stack:=VBoxContainer.new()
+ panel.add_child(stack)
+ stack.add_child(garden._label("DEVELOPER CONSOLE   ·   ` / ESC to close",18,Color("ebce8b")))
+ output=RichTextLabel.new()
+ output.custom_minimum_size.y=170
+ output.size_flags_vertical=Control.SIZE_EXPAND_FILL
+ output.scroll_following=true
+ output.selection_enabled=true
+ output.add_theme_font_size_override("normal_font_size",16)
+ stack.add_child(output)
+ command=LineEdit.new()
+ command.placeholder_text="help • time 18:30 • weather heavy rain • tardis land"
+ command.add_theme_font_size_override("font_size",18)
+ command.text_submitted.connect(_submit)
+ stack.add_child(command)
+ panel.hide()
+ _write("Time, weather and the TARDIS. Type help for commands. ↑ / ↓ recalls commands.")
+
+func toggle(value: bool) -> void:
+ opened=value
+ panel.visible=value
+ backdrop.visible=value
+ garden.action_pending=false
+ garden.trigger_held=false
+ garden.player.velocity=Vector3.ZERO
+ if value:
+  if garden.tool_wheel.visible:garden._set_wheel(false)
+  garden.aiming=false
+  garden.aim_dot.hide()
+  Input.mouse_mode=Input.MOUSE_MODE_VISIBLE
+  command.grab_focus()
+ else:
+  command.release_focus()
+  garden.aiming=not garden.guide.visible
+  garden.aim_dot.visible=garden.aiming
+  Input.mouse_mode=Input.MOUSE_MODE_CAPTURED if garden.aiming else Input.MOUSE_MODE_VISIBLE
+
+func _input(event: InputEvent) -> void:
+ if event is InputEventKey and event.pressed and not event.echo:
+  if event.physical_keycode==KEY_QUOTELEFT or event.keycode==KEY_QUOTELEFT:
+   if not garden.field_book.visible:toggle(not opened)
+   get_viewport().set_input_as_handled()
+   return
+  if opened and event.keycode==KEY_ESCAPE:
+   toggle(false)
+   get_viewport().set_input_as_handled()
+   return
+  if opened and event.keycode in [KEY_UP,KEY_DOWN]:
+   history_index=clampi(history_index+(-1 if event.keycode==KEY_UP else 1),0,history.size())
+   command.text=history[history_index] if history_index<history.size() else ""
+   command.caret_column=command.text.length()
+   get_viewport().set_input_as_handled()
+ if opened and (event is InputEventMouseMotion or event is InputEventJoypadButton or event is InputEventJoypadMotion):
+  get_viewport().set_input_as_handled()
+
+func _write(text: String) -> void:
+ output.add_text(text+"\n")
+ if output.get_line_count()>180:output.clear()
+
+func _submit(text: String) -> void:
+ var clean:=text.strip_edges()
+ if clean.is_empty():return
+ history.append(clean)
+ if history.size()>50:history.pop_front()
+ history_index=history.size()
+ _write("> "+clean)
+ _write(execute(clean))
+ command.clear()
+
+func execute(text: String) -> String:
+ var words:=text.strip_edges().to_lower().split(" ",false)
+ if words.is_empty():return "Type help."
+ var args: String=" ".join(words.slice(1))
+ match words[0]:
+  "help":return "time HH:MM | weather fair / cloudy / light rain / rain / heavy rain / thunderstorm / clearing\ntardis land | tardis takeoff | tardis visit | tardis status\nVisit lands, stays for 20 seconds, then takes off. Time and weather continue cycling."
+  "time":
+   var parts:=args.split(":")
+   if parts.size()!=2 or not parts[0].is_valid_int() or not parts[1].is_valid_int():return "Use time HH:MM (24-hour clock)."
+   var hour:=int(parts[0])
+   var minute:=int(parts[1])
+   if hour<0 or hour>23 or minute<0 or minute>59:return "Use an hour from 00–23 and minutes from 00–59."
+   var cycle: Node3D=garden.valley_cycle
+   cycle.elapsed=floor(cycle.elapsed/cycle.FULL_CYCLE)*cycle.FULL_CYCLE+fposmod(float(hour*60+minute-360),1440.0)/1440.0*cycle.FULL_CYCLE
+   cycle._update_visuals()
+   return "Time set to %02d:%02d."%[hour,minute]
+  "weather":
+   var cycle: Node3D=garden.valley_cycle
+   var index: int=-1
+   for i in cycle.WEATHER_NAMES.size():
+    if cycle.WEATHER_NAMES[i].to_lower()==args.replace("_"," "):index=i
+   if index<0:return "Weather: fair, cloudy, light rain, rain, heavy rain, thunderstorm, clearing."
+   cycle.weather_index=index
+   cycle.weather_elapsed=0.0
+   cycle.rain_strength=cycle.RAIN_LEVELS[index]
+   cycle.cloud_cover=cycle.CLOUD_LEVELS[index]
+   cycle.lightning_energy=0.0
+   cycle.thunder_delay=-1.0
+   cycle.storm_wait=3.0
+   cycle._update_visuals()
+   return "Weather set to "+cycle.WEATHER_NAMES[index]+"."
+  "tardis":
+   match args:
+    "land":return garden.tardis.land(false)
+    "visit":return garden.tardis.land(true)
+    "takeoff", "take off":return garden.tardis.takeoff()
+    "status":return "TARDIS: "+garden.tardis.state+"."
+   return "Use tardis land, tardis takeoff, tardis visit or tardis status."
+ return "Unknown command. Type help."
+
+```
+
 ## diorama_camera.gd
 
 ```gd
@@ -908,6 +1048,7 @@ const ENTRIES := [
  ["People","Meera","A familiar face among the garden paths. Meera wanders between the plots and the wild edge, taking in the changing light.","Meera"],
  ["People","Angus McDoogal","There is always a little movement where Angus stands. His lively gestures bring a welcome touch of company to a quiet afternoon.","Angus"],
  ["People","The visitor","A traveller passing through the valley. Stop for a moment and watch: even an unhurried garden has its small conversations.","WanderingVisitor"],
+ ["Animals","Peacock","A colourful garden companion, with an iridescent neck and a magnificent tail.","Peacock"],
  ["Animals","Chicken","A small, busy companion on the garden paths. Watch those quick steps and curious pauses as it explores the ground.","WanderingChicken"],
  ["Animals","Hedgehog","Low to the ground and never in a hurry. The hedgehog noses around the garden, stopping now and then before continuing its little journey.","Hedgehog"],
  ["Animals","Badger","A sturdy visitor with a distinctive striped face. The badger takes slow turns around the plots and shares the paths with its neighbours.","Badger"],
@@ -922,6 +1063,7 @@ var entries: Array[int] = []
 var spread: Control
 var title: Label
 var description: Label
+var visit_notes: Label
 var folio: Label
 var section: Label
 var viewport: SubViewport
@@ -958,7 +1100,7 @@ func _ready() -> void:
 	title=_text("",Vector2(580,139),Vector2(405,65),35)
 	description=_text("",Vector2(580,232),Vector2(395,210),21)
 	description.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
-	_text("Notes from your slice of the valley.",Vector2(580,463),Vector2(400,32),16)
+	visit_notes=_text("",Vector2(580,446),Vector2(410,76),16)
 	folio=_text("",Vector2(450,542),Vector2(160,28),15)
 	folio.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
 	previous=_button("‹  Previous",Vector2(80,533),Vector2(150,38),func(): _turn(-1))
@@ -1101,18 +1243,32 @@ func _category(value: String) -> void:
 		tab.modulate=Color("ffe5ae") if tab.text==category else Color("b9aa8c")
 	entries.clear()
 	for i in ENTRIES.size():
-		if ENTRIES[i][0]==category: entries.append(i)
+		if ENTRIES[i][0]==category:
+			if category!="Animals" or garden.wildlife.records.has(str(ENTRIES[i][1]).to_lower()): entries.append(i)
 	page=0
 	_show_entry()
 
 func _turn(direction: int) -> void:
+	if entries.is_empty():return
 	page=posmod(page+direction,entries.size())
 	_show_entry()
 
 func _show_entry() -> void:
+	visit_notes.text=""
+	if entries.is_empty():
+		title.text="No animal visits yet"
+		description.text="Make a little grass and watch the wild edge. Your first visitor will appear here after entering the garden."
+		section.text=category.to_upper()
+		folio.text="-"
+		if is_instance_valid(preview):preview.free();preview=null
+		return
 	var entry: Array=ENTRIES[entries[page]]
 	title.text=entry[1]
 	description.text=entry[2]
+	if category=="Animals":
+		var record: Dictionary=garden.wildlife.records[str(entry[1]).to_lower()]
+		visit_notes.text="First visit: Day %d\n"%int(record.visit_day)
+		visit_notes.text+=("Resident since: Day %d"%int(record.resident_day)) if int(record.resident_day)>0 else ("Resident requirement: 5% grass" if entry[1]=="Hedgehog" else "Not yet resident")
 	section.text=category.to_upper()+"   /   OBSERVATIONS FROM THE VALLEY"
 	folio.text="%02d   /   %02d" % [page+1,entries.size()]
 	if is_instance_valid(preview): preview.free()
@@ -1122,7 +1278,9 @@ func _show_entry() -> void:
 	if str(entry[3]).begins_with("res://"):
 		model=load(entry[3]).instantiate()
 	else:
-		model=garden.get_node(entry[3]).visual.duplicate(0)
+		var actor: Node3D=garden.wildlife.actor_for(str(entry[1]).to_lower()) if category=="Animals" else garden.get_node_or_null(entry[3])
+		if not is_instance_valid(actor):return
+		model=actor.visual.duplicate(0)
 		model.rotation=Vector3.ZERO
 	preview.add_child(model)
 	for animation in model.find_children("*","AnimationPlayer",true,false): animation.stop(true)
@@ -1396,7 +1554,9 @@ const CyclingNPC = preload("res://cycling_npc.gd")
 const ProceduralAnimal = preload("res://procedural_animal.gd")
 const HedgehogNPC = preload("res://hedgehog_npc.gd")
 var blocked_cells: Dictionary = {}
-var hedgehog: Node3D
+var dev_console: CanvasLayer
+var tardis: Node3D
+var wildlife: Node
 var additional_visitors: Array[Node3D] = []
 var background_meadow: Node3D
 var valley_cycle: Node3D
@@ -1460,21 +1620,11 @@ func _ready() -> void:
 	floating_tool.effect_applied.connect(_apply_tool)
 	ambience = ValleyAmbience.new()
 	add_child(ambience)
-	hedgehog = HedgehogNPC.new()
-	hedgehog.name = "Hedgehog"
-	add_child(hedgehog)
-	hedgehog.setup(self)
-	SelectionTarget.attach(hedgehog, "Hedgehog", Vector3(0.3,0.30,0.38))
 	visitor = WanderingNPC.new()
 	visitor.name = "WanderingVisitor"
 	add_child(visitor)
 	visitor.setup(self)
 	SelectionTarget.attach(visitor, "Valley visitor", Vector3(0.65, 1.5, 0.65))
-	chicken = ChickenNPC.new()
-	chicken.name = "WanderingChicken"
-	add_child(chicken)
-	chicken.setup(self)
-	SelectionTarget.attach(chicken, "Chicken", Vector3(0.40, 0.48, 0.45))
 	valley_cycle = ValleyCycle.new()
 	valley_cycle.name = "DayNightWeather"
 	add_child(valley_cycle)
@@ -1503,21 +1653,26 @@ func _ready() -> void:
 	angus.setup(self)
 	SelectionTarget.attach(angus,"Angus McDoogal",Vector3(0.8,1.5,0.8))
 	additional_visitors.append(angus)
-	for entry in [["Badger","badger",Vector2i(0,4)],["Dragon","dragon",Vector2i(7,5)]]:
-		var animal := ProceduralAnimal.new()
-		animal.name = entry[0]
-		animal.species = entry[1]
-		animal.cell = entry[2]
-		add_child(animal)
-		animal.setup(self)
-		SelectionTarget.attach(animal,entry[0],Vector3(0.7,0.45,0.7) if entry[1]=="badger" else Vector3(1.1,0.65,0.8))
-		additional_visitors.append(animal)
+	wildlife=preload("res://garden_wildlife.gd").new()
+	add_child(wildlife)
+	wildlife.setup(self)
 	var meadow_grass := preload("res://meadow_grass.gd").new()
 	add_child(meadow_grass)
 	meadow_grass.build(self)
 	var model_weather := preload("res://model_weather.gd").new()
 	add_child(model_weather)
 	model_weather.setup(self)
+	tardis=preload("res://tardis_event.gd").new()
+	add_child(tardis)
+	tardis.setup(self)
+	var compass_layer:=CanvasLayer.new()
+	add_child(compass_layer)
+	var compass:=preload("res://garden_compass.gd").new()
+	compass_layer.add_child(compass)
+	compass.setup(camera)
+	dev_console=preload("res://developer_console.gd").new()
+	add_child(dev_console)
+	dev_console.setup(self)
 	_refresh_ui()
 
 func _create_chunks() -> void:
@@ -1568,6 +1723,7 @@ func _create_terrain() -> void:
 	terrain_material.set_shader_parameter("riverbed_color", load("res://assets/textures/water/M_RiverBottom_BaseColor.tga"))
 
 func _unhandled_input(event: InputEvent) -> void:
+	if is_instance_valid(dev_console) and dev_console.opened: return
 	if event.is_action_pressed("pad_wheel"):
 		if not guide.visible and not floating_tool.busy: _set_wheel(not tool_wheel.visible)
 		get_viewport().set_input_as_handled()
@@ -1633,6 +1789,9 @@ func _notification(what: int) -> void:
 		_set_guide(true)
 
 func _physics_process(delta: float) -> void:
+	if is_instance_valid(dev_console) and dev_console.opened:
+		action_pending=false
+		return
 	if not is_instance_valid(guide) or guide.visible:
 		cursor.clear()
 		action_pending = false
@@ -1823,8 +1982,8 @@ func _create_garden_ui() -> void:
 	notice.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
 	notice.offset_left=-280
 	notice.offset_right=280
-	notice.offset_top=44
-	notice.offset_bottom=84
+	notice.offset_top=94
+	notice.offset_bottom=134
 	notice.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
 	notice.add_theme_color_override("font_shadow_color",Color("132b26"))
 	notice.add_theme_constant_override("shadow_offset_y",2)
@@ -1885,6 +2044,7 @@ func _toggle_guide() -> void:
 	_set_guide(not guide.visible)
 
 func _set_guide(open: bool) -> void:
+	if is_instance_valid(dev_console) and dev_console.opened: dev_console.toggle(false)
 	if is_instance_valid(field_book) and field_book.visible: field_book.close()
 	guide.visible=open
 	if open: ControllerInput.focus_first.call_deferred(guide)
@@ -1921,6 +2081,54 @@ func _controller_prompts() -> void:
 	guide_controls.text = ("Left stick  glide  ·  Right stick  look\n\nY / Triangle  opens the tool wheel.\nRight trigger  uses the equipped tool.\nA / Cross  confirm  ·  B / Circle  back" if pad else "WASD  glide  ·  Mouse  look\n\nTAB  opens your tool wheel. Click to equip.\nLeft-click to use it above the spirit.") + "\n\nYour garden saves when you leave."
 	if field_book.visible: ControllerInput.focus_first.call_deferred(field_book)
 	elif guide.visible: ControllerInput.focus_first.call_deferred(guide)
+
+```
+
+## garden_compass.gd
+
+```gd
+extends Control
+## World north is -Z. Heading follows the camera, independently of movement.
+var camera: Camera3D
+var heading := 0.0
+const DIRECTIONS := ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+
+func setup(view: Camera3D) -> void:
+ camera=view
+ mouse_filter=Control.MOUSE_FILTER_IGNORE
+ set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
+ offset_left=-150
+ offset_right=150
+ offset_top=22
+ offset_bottom=82
+
+func bearing() -> float:
+ var forward: Vector3=-camera.global_basis.z
+ return fposmod(rad_to_deg(atan2(forward.x,-forward.z)),360.0)
+
+func _process(_delta: float) -> void:
+ if is_instance_valid(camera):
+  heading=bearing()
+  queue_redraw()
+
+func _draw() -> void:
+ var style:=StyleBoxFlat.new()
+ style.bg_color=Color(0.10,0.17,0.15,0.88)
+ style.set_corner_radius_all(12)
+ draw_style_box(style,Rect2(Vector2.ZERO,size))
+ var font:=ThemeDB.fallback_font
+ var gold:=Color("ebce8b")
+ for i in range(-8,9):
+  var degree: float=floor(heading/15.0)*15.0+i*15.0
+  var x:=size.x*0.5+(degree-heading)*2.0
+  if x<15 or x>size.x-15:continue
+  draw_line(Vector2(x,34),Vector2(x,39),Color("91a99b"),1)
+  if posmod(int(degree),45)==0:
+   var label: String=DIRECTIONS[posmod(int(degree)/45,8)]
+   draw_string(font,Vector2(x-font.get_string_size(label,HORIZONTAL_ALIGNMENT_LEFT,-1,14).x/2,26),label,HORIZONTAL_ALIGNMENT_LEFT,-1,14,gold)
+ draw_colored_polygon(PackedVector2Array([Vector2(146,3),Vector2(154,3),Vector2(150,9)]),gold)
+ var text: String="%03d°"%posmod(roundi(heading),360)
+ draw_string(font,Vector2(150-font.get_string_size(text,HORIZONTAL_ALIGNMENT_LEFT,-1,12).x/2,54),text,HORIZONTAL_ALIGNMENT_LEFT,-1,12,gold)
 
 ```
 
@@ -2023,6 +2231,111 @@ func build(garden: Node3D) -> void:
 				mesh.scale = Vector3((end - start) * 1.07, rng.randf_range(0.25, 0.28), THICKNESS * 1.22)
 				mesh.rotation.y = (0.0 if along_x else PI / 2.0) + rng.randf_range(-0.07, 0.07)
 				add_child(mesh)
+
+```
+
+## garden_wildlife.gd
+
+```gd
+extends Node
+## First-visit and residency dates use the garden clock and survive save/load.
+var garden: Node3D
+var records: Dictionary={}
+var hedgehog: Node3D
+var wild_hedgehog_enabled := true
+var grass_dirty := true
+var cached_ratio := 0.0
+
+func setup(world: Node3D) -> void:
+ garden=world
+ garden.terrain_changed.connect(func(_cell,_kind):grass_dirty=true)
+ hedgehog=preload("res://visiting_hedgehog.gd").new()
+ hedgehog.name="Hedgehog"
+ garden.add_child(hedgehog)
+ hedgehog.setup(garden)
+ preload("res://selection_target.gd").attach(hedgehog,"Hedgehog",Vector3(0.35,0.30,0.4))
+
+func grass_ratio() -> float:
+ if not grass_dirty:return cached_ratio
+ var total: int = garden.grid_size.x*garden.grid_size.y
+ var grass:=0
+ for y in range(garden.grid_size.y):
+  for x in range(garden.grid_size.x):
+   if garden.get_terrain(Vector2i(x,y)) in [garden.Terrain.GRASS,garden.Terrain.LONG_GRASS]:grass+=1
+ cached_ratio=float(grass)/float(total)
+ grass_dirty=false
+ return cached_ratio
+
+func day() -> int:
+ return floori(garden.valley_cycle.elapsed/garden.valley_cycle.FULL_CYCLE)+1
+
+func record_visit(id: String) -> void:
+ if records.has(id):return
+ records[id]={"visit_day":day(),"resident_day":0}
+ garden.message=id.capitalize()+" first visited on Day %d. The Field Guide has a new entry."%day()
+
+func record_resident(id: String) -> void:
+ record_visit(id)
+ if int(records[id].resident_day)>0:return
+ records[id].resident_day=day()
+ garden.message=id.capitalize()+" became a resident on Day %d."%day()
+
+func purchased(id: String) -> void:
+ # Record arrival on delivery; hedgehogs still need their habitat threshold.
+ if id=="hedgehog":
+  record_visit(id)
+  if grass_ratio()>=0.05:record_resident(id)
+ else:record_resident(id)
+ if id=="hedgehog":
+  wild_hedgehog_enabled=false
+  hedgehog.hide()
+  hedgehog.process_mode=Node.PROCESS_MODE_DISABLED
+  hedgehog.remove_from_group("garden_npcs")
+  for shape in hedgehog.find_children("*","CollisionShape3D",true,false):shape.set_deferred("disabled",true)
+
+func actor_for(id: String) -> Node3D:
+ for node in garden.get_children():
+  if node is Node3D and node.visible and str(node.get_meta("animal_id",""))==id:return node
+ return null
+
+func save_data() -> Dictionary:
+ return {"wild_hedgehog_enabled":wild_hedgehog_enabled,"records":records.duplicate(true),"hedgehog_position":[hedgehog.position.x,hedgehog.position.z],"patrol_corner":hedgehog.patrol_corner}
+
+func restore(data: Dictionary) -> void:
+ records.clear()
+ var saved=data.get("records",{})
+ if saved is Dictionary:
+  for id in ["hedgehog","chicken","badger","dragon","peacock"]:
+   var entry=saved.get(id,{})
+   if entry is Dictionary and int(entry.get("visit_day",0))>0:
+    records[id]={"visit_day":maxi(1,int(entry.visit_day)),"resident_day":maxi(0,int(entry.get("resident_day",0)))}
+ hedgehog.patrol_corner=clampi(int(data.get("patrol_corner",1)),0,3)
+ wild_hedgehog_enabled=bool(data.get("wild_hedgehog_enabled",true))
+ if not wild_hedgehog_enabled:
+  hedgehog.hide()
+  hedgehog.process_mode=Node.PROCESS_MODE_DISABLED
+  return
+ if records.has("hedgehog"):
+  hedgehog.visit_state="inside"
+  hedgehog.add_to_group("garden_npcs")
+  var point=data.get("hedgehog_position",[])
+  var cell:=Vector2i(0,garden.grid_size.y/2)
+  if point is Array and point.size()==2:
+   var candidate: Vector2i=garden.local_to_cell(Vector3(float(point[0]),0,float(point[1])))
+   if hedgehog._can_reserve(candidate):cell=candidate
+  if not hedgehog._can_reserve(cell):
+   for y in range(garden.grid_size.y):
+    for x in range(garden.grid_size.x):
+     if hedgehog._can_reserve(Vector2i(x,y)):cell=Vector2i(x,y);break
+  hedgehog.cell=cell
+  hedgehog.next_cell=cell
+  hedgehog.position=garden.cell_center(cell)
+  hedgehog.destination=hedgehog.position
+
+func _process(_delta: float) -> void:
+ if not is_instance_valid(garden) or garden.guide.visible:return
+ if records.has("hedgehog") and int(records.hedgehog.resident_day)==0 and grass_ratio()>=0.05:record_resident("hedgehog")
+
 
 ```
 
@@ -3360,7 +3673,7 @@ func _save_garden() -> bool:
 	var data := {"version":1,"terrain":terrain,"crops":crops,"harvested":garden.harvested,
 		"player":[garden.player.cell.x,garden.player.cell.y],"player_position":[garden.player.position.x,garden.player.position.z],"elapsed":garden.valley_cycle.elapsed,
 		"weather":garden.valley_cycle.weather_index,"weather_elapsed":garden.valley_cycle.weather_elapsed,
-		"wetness":garden.valley_cycle.wetness,"watered":_saved_watered(),"coins":coins,"purchases":purchases}
+		"wildlife":garden.wildlife.save_data(),"wetness":garden.valley_cycle.wetness,"watered":_saved_watered(),"coins":coins,"purchases":purchases}
 	var file := FileAccess.open(SAVE_PATH,FileAccess.WRITE)
 	if not file: return false
 	file.store_string(JSON.stringify(data))
@@ -3407,6 +3720,7 @@ func _restore_garden() -> void:
 			garden.watered_image.set_pixel(wet_cell.x,wet_cell.y,Color(garden.watered_cells[wet_cell],0,0))
 	garden.watered_texture.update(garden.watered_image)
 	coins=maxi(0,int(data.get("coins",500)))
+	garden.wildlife.restore(data.get("wildlife",{}))
 	purchases.clear()
 	for record in data.get("purchases",[]):
 		if not record is Dictionary or not record.has_all(["id","x","z"]): continue
@@ -3485,6 +3799,7 @@ func return_from_village() -> void:
 func purchase_village_item(id: String) -> String:
 	var item: Dictionary=preload("res://village_stock.gd").item(id)
 	if item.is_empty(): return "That item is unavailable."
+	if id=="hedgehog" and garden.wildlife.grass_ratio()<0.01:return "Hedgehogs need at least 1% grass before visiting your garden."
 	if coins<int(item.price): return "There are not enough coins in your purse."
 	var cell: Vector2i=preload("res://village_stock.gd").find_space(garden,id)
 	if cell.x<0: return "Your garden needs more clear ground for this delivery."
@@ -3496,6 +3811,7 @@ func purchase_village_item(id: String) -> String:
 		purchases.pop_back()
 		return "The purchase could not be saved. No coins were spent."
 	preload("res://village_stock.gd").deliver(garden,record)
+	_save_garden()
 	return "%s delivered to your garden.\n%d coins remaining."%[item.name,coins]
 
 ```
@@ -4180,6 +4496,32 @@ for name in ['ash','birch']:
 
 ```
 
+## peacock_npc.gd
+
+```gd
+extends "res://wandering_npc.gd"
+var stride := 0.0
+func _create_visual() -> void:
+ collision_radius=0.27
+ collision_height=0.85
+ move_speed=0.34
+ visual=load("res://assets/animals/Peacock/Peacock.fbx").instantiate()
+ var box: AABB=preload("res://floating_tool.gd").bounds(visual)
+ var scale_factor:=0.85/box.size.y
+ visual.scale*=scale_factor
+ visual.position-=Vector3(box.get_center().x,box.position.y,box.get_center().z)*scale_factor
+ add_child(visual)
+ animation_player=AnimationPlayer.new()
+ add_child(animation_player)
+ set_meta("animal_id","peacock")
+func advance(delta: float) -> void:
+ super.advance(delta)
+ if garden.guide.visible:return
+ stride+=delta
+ visual.rotation.z=sin(stride*8)*0.025*motion_ratio
+
+```
+
 ## Play Aberglen.cmd
 
 ```cmd
@@ -4556,6 +4898,211 @@ void fragment() {
 	AO = mix(1.0, texture(stone_ao, UV).r, 0.65);
 	NORMAL_MAP = texture(stone_normal, UV).rgb;
 	NORMAL_MAP_DEPTH = 0.65;
+}
+
+```
+
+## tardis_event.gd
+
+```gd
+extends Node3D
+## A transient visitor: reserve a clear footprint, materialise, then dematerialise.
+const ASSET := "res://assets/easter_egg/Tardis/"
+const SPIN := "Tardis_lp|Tardis_lpAction"
+var garden: Node3D
+var state := "away"
+var visual: Node3D
+var animation: AnimationPlayer
+var material: ShaderMaterial
+var audio: AudioStreamPlayer3D
+var lamp: OmniLight3D
+var body: StaticBody3D
+var reserved: Array[Vector2i]=[]
+var elapsed := 0.0
+var duration := 1.0
+var automatic := false
+var stay := 0.0
+var last_cell := Vector2i(-1,-1)
+
+func setup(world: Node3D) -> void:
+ garden=world
+ name="TardisEvent"
+ audio=AudioStreamPlayer3D.new()
+ audio.volume_db=-12.0
+ audio.unit_size=12.0
+ audio.max_distance=60.0
+ add_child(audio)
+
+func _load_model() -> void:
+ if is_instance_valid(visual):return
+ visual=load(ASSET+"source/For sketchfab.fbx").instantiate()
+ add_child(visual)
+ # The source is 3.114 m high, with its origin 5 cm below its feet.
+ visual.scale=Vector3.ONE*(2.7/3.11391)
+ visual.position.y=0.05*visual.scale.x
+ material=ShaderMaterial.new()
+ material.shader=preload("res://tardis_material.gdshader")
+ var prefix: String=ASSET+"textures/Tardis_lp_RandomColor_1_"
+ for pair in [["color_map","Diffuse"],["normal_map","Normal"],["glow_map","Emissive"],["gloss_map","Glossiness"]]:
+  material.set_shader_parameter(pair[0],load(prefix+pair[1]+".png"))
+ for child in visual.find_children("*","",true,false):
+  if child is MeshInstance3D:child.material_override=material
+  if child is AnimationPlayer:
+   animation=child
+   animation.stop()
+ assert(animation!=null and animation.has_animation(SPIN))
+ # This is the supplied upright rotation clip; the other long clip rolls sideways.
+ var clip: Animation=animation.get_animation(SPIN).duplicate()
+ clip.loop_mode=Animation.LOOP_NONE
+ var library:=AnimationLibrary.new()
+ library.add_animation("flight",clip)
+ animation.add_animation_library("event",library)
+ lamp=OmniLight3D.new()
+ lamp.position.y=2.6
+ lamp.light_color=Color("b7eaff")
+ lamp.omni_range=5.0
+ add_child(lamp)
+ body=StaticBody3D.new()
+ body.collision_layer=4
+ body.collision_mask=0
+ var shape:=CollisionShape3D.new()
+ var box:=BoxShape3D.new()
+ box.size=Vector3(1.4,2.7,1.4)
+ shape.shape=box
+ shape.position.y=1.35
+ body.add_child(shape)
+ add_child(body)
+ body.collision_layer=0
+ hide()
+
+func _clear_at(cell: Vector2i) -> bool:
+ var point: Vector3=garden.cell_center(cell)
+ if point.distance_to(garden.player.position)<3.0:return false
+ var low:=INF
+ var high:=-INF
+ for z in range(-2,3):
+  for x in range(-2,3):
+   var at:=cell+Vector2i(x,z)
+   if not garden.contains_cell(at) or garden.blocked_cells.has(at) or garden.crops.has(at):return false
+   if garden.get_terrain(at) in [garden.Terrain.WATER,garden.Terrain.DEEP_WATER]:return false
+   var y: float=garden.cell_center(at).y
+   low=minf(low,y)
+   high=maxf(high,y)
+ if high-low>0.35:return false
+ for npc in get_tree().get_nodes_in_group("garden_npcs"):
+  if npc.garden!=garden:continue
+  var next: Vector3=garden.cell_center(npc.next_cell)
+  if Vector2(npc.position.x-point.x,npc.position.z-point.z).length()<2.8:return false
+  if Vector2(next.x-point.x,next.z-point.z).length()<2.8:return false
+ return true
+
+func land(auto_leave: bool=false) -> String:
+ if state!="away":return "The TARDIS is already "+state+"."
+ var candidates: Array[Vector2i]=[]
+ for z in range(3,garden.grid_size.y-3):
+  for x in range(3,garden.grid_size.x-3):candidates.append(Vector2i(x,z))
+ candidates.shuffle()
+ var chosen:=Vector2i(-1,-1)
+ for cell in candidates:
+  if cell!=last_cell and _clear_at(cell):
+   chosen=cell
+   break
+ if chosen.x<0:return "No clear landing space. Make room away from people, crops and buildings."
+ _load_model()
+ last_cell=chosen
+ position=garden.cell_center(chosen)
+ rotation.y=float(randi_range(0,3))*PI/2.0
+ for z in range(-2,3):
+  for x in range(-2,3):
+   var cell:=chosen+Vector2i(x,z)
+   garden.blocked_cells[cell]=true
+   reserved.append(cell)
+ # Settle the box above the highest corner of its base on gently uneven soil.
+ for x in [-0.7,0.7]:
+  for z in [-0.7,0.7]:position.y=maxf(position.y,garden.heightfield.height_at(Vector2(position.x+x,position.z+z)))
+ automatic=auto_leave
+ state="landing"
+ body.collision_layer=4
+ show()
+ _start_sound("Landing")
+ animation.play("event/flight",0.0,animation.get_animation("event/flight").length/duration)
+ animation.advance(0.0)
+ material.set_shader_parameter("presence",0.0)
+ garden.message="A strange blue box is arriving in the garden."
+ garden._refresh_ui()
+ return "Landing at garden position %.1f, %.1f."%[position.x,position.z]
+
+func _start_sound(filename: String) -> void:
+ elapsed=0.0
+ audio.stream=load(ASSET+filename+".mp3")
+ duration=audio.stream.get_length()
+ audio.play()
+
+func takeoff() -> String:
+ if state!="landed":return "Takeoff requires a landed TARDIS (currently "+state+")."
+ state="taking off"
+ _start_sound("Takeoff")
+ animation.play("event/flight",0.0,-animation.get_animation("event/flight").length/duration,true)
+ animation.advance(0.0)
+ return "The TARDIS is taking off."
+
+func _process(delta: float) -> void:
+ if state=="away":return
+ var paused: bool=garden.guide.visible
+ audio.stream_paused=paused
+ animation.active=not paused
+ if paused:return
+ if state=="landed":
+  lamp.light_energy=0.25
+  material.set_shader_parameter("lamp_energy",0.35)
+  if automatic:
+   stay-=delta
+   if stay<=0.0:takeoff()
+  return
+ elapsed=minf(elapsed+delta,duration)
+ var progress:=elapsed/duration
+ var arriving: bool=state=="landing"
+ var amount:=progress if arriving else 1.0-progress
+ var pulse:=0.5+0.5*sin(progress*TAU*7.0)
+ var presence:=clampf(amount+sin(progress*PI)*0.23*(pulse-0.5),0.0,1.0)
+ material.set_shader_parameter("presence",presence)
+ material.set_shader_parameter("lamp_energy",0.5+pulse*2.0)
+ lamp.light_energy=presence*(0.6+pulse*1.5)
+ if elapsed>=duration:
+  animation.pause()
+  if arriving:
+   state="landed"
+   stay=20.0
+   material.set_shader_parameter("presence",1.0)
+  else:
+   state="away"
+   hide()
+   body.collision_layer=0
+   audio.stop()
+   for cell in reserved:garden.blocked_cells.erase(cell)
+   reserved.clear()
+
+```
+
+## tardis_material.gdshader
+
+```gdshader
+shader_type spatial;
+uniform sampler2D color_map : source_color, filter_linear_mipmap;
+uniform sampler2D normal_map : hint_normal, filter_linear_mipmap;
+uniform sampler2D glow_map : source_color, filter_linear_mipmap;
+uniform sampler2D gloss_map : filter_linear_mipmap;
+uniform float presence : hint_range(0.0,1.0) = 1.0;
+uniform float lamp_energy = 0.3;
+void fragment() {
+ float noise = fract(sin(dot(FRAGCOORD.xy,vec2(12.9898,78.233)))*43758.5453);
+ if (presence < 0.001 || noise > presence) { discard; }
+ ALBEDO = texture(color_map,UV).rgb;
+ NORMAL_MAP = texture(normal_map,UV).rgb;
+ ROUGHNESS = clamp(1.0-texture(gloss_map,UV).r,0.45,0.95);
+ METALLIC = 0.0;
+ SPECULAR = 0.25;
+ EMISSION = texture(glow_map,UV).rgb*lamp_energy;
 }
 
 ```
@@ -5434,6 +5981,11 @@ func _ready() -> void:
  _build_street()
  _build_room()
  _build_ui()
+ var compass_layer:=CanvasLayer.new()
+ add_child(compass_layer)
+ var compass:=preload("res://garden_compass.gd").new()
+ compass_layer.add_child(compass)
+ compass.setup(camera)
  ambience=preload("res://valley_ambience.gd").new()
  add_child(ambience)
  ControllerInput.mode_changed.connect(_input_mode)
@@ -5779,8 +6331,9 @@ script = ExtResource("1")
 extends RefCounted
 ## Shop stock and deterministic delivery shared by the village and save loader.
 const STOCK := [
+ {"id":"peacock","shop":0,"name":"Peacock","price":65,"note":"A colourful resident with a magnificent tail."},
  {"id":"chicken","shop":0,"name":"Chicken","price":25,"note":"A busy new companion for your garden."},
- {"id":"hedgehog","shop":0,"name":"Hedgehog","price":40,"note":"A small visitor with a curious nose."},
+ {"id":"hedgehog","shop":0,"name":"Hedgehog","price":40,"note":"Needs 1% grass to visit; 5% to become resident."},
  {"id":"birch","shop":1,"name":"Young birch","price":35,"note":"A pale-trunked tree for an open patch."},
  {"id":"ash","shop":1,"name":"Young ash","price":35,"note":"A leafy addition to the garden."},
  {"id":"planter","shop":2,"name":"Flower planter","price":15,"note":"A terracotta pot of valley flowers."},
@@ -5824,8 +6377,8 @@ static func find_space(garden: Node3D, id: String) -> Vector2i:
 static func deliver(garden: Node3D, record: Dictionary) -> Node3D:
  var id: String=record.id
  var cell:=Vector2i(int(record.x),int(record.z))
- if id in ["chicken","hedgehog"]:
-  var actor: Node3D=load("res://chicken_npc.gd" if id=="chicken" else "res://hedgehog_npc.gd").new()
+ if id in ["chicken","hedgehog","peacock"]:
+  var actor: Node3D=load("res://peacock_npc.gd" if id=="peacock" else ("res://chicken_npc.gd" if id=="chicken" else "res://hedgehog_npc.gd")).new()
   garden.add_child(actor)
   actor.setup(garden)
   actor.cell=cell
@@ -5833,7 +6386,9 @@ static func deliver(garden: Node3D, record: Dictionary) -> Node3D:
   actor.position=garden.cell_center(cell)
   actor.destination=actor.position
   preload("res://selection_target.gd").attach(actor,item(id).name,Vector3(0.5,0.5,0.5))
+  actor.set_meta("animal_id",id)
   garden.additional_visitors.append(actor)
+  garden.wildlife.purchased(id)
   return actor
  var node:=model(id)
  garden.add_child(node)
@@ -5878,6 +6433,8 @@ static func model(id: String) -> Node3D:
  var width:=1.0
  if id=="cottage": path="res://assets/cottage.glb"; width=3.8
  elif id in ["ash","birch"]: path="res://assets/trees/%s_forest.glb"%id; width=2.2
+ elif id=="peacock": path="res://assets/animals/Peacock/Peacock.fbx"; width=0.85
+ elif id=="hedgehog": path="res://assets/hedgehog.glb"; width=0.35
  elif id=="chicken": path="res://assets/chicken_rig.glb"; width=0.5
  if path!="":
   var imported: Node3D=load(path).instantiate()
@@ -5901,6 +6458,71 @@ static func model(id: String) -> Node3D:
    flower.radius=.09; flower.height=.1
    part(root,flower,Color("c994ba") if i%2==0 else Color("e7bf64"),at)
  return root
+
+```
+
+## visiting_hedgehog.gd
+
+```gd
+extends "res://hedgehog_npc.gd"
+var visit_state := "outside"
+var patrol_corner := 1
+var entry_cell := Vector2i.ZERO
+
+func setup(world: Node3D) -> void:
+ super.setup(world)
+ set_meta("animal_id","hedgehog")
+ remove_from_group("garden_npcs")
+ position=Vector3(-garden.grid_min.x+1.25,0,0)
+ position.y=garden.background_meadow.height_at(Vector2(position.x,position.z))
+
+func _entry() -> bool:
+ var nearest:=INF
+ var found:=false
+ for y in range(garden.grid_size.y):
+  for x in range(garden.grid_size.x):
+   if x!=0 and y!=0 and x!=garden.grid_size.x-1 and y!=garden.grid_size.y-1:continue
+   var candidate:=Vector2i(x,y)
+   if not _can_reserve(candidate):continue
+   var distance: float=position.distance_squared_to(garden.cell_center(candidate))
+   if distance<nearest:
+    nearest=distance
+    entry_cell=candidate
+    found=true
+ return found
+
+func advance(delta: float) -> void:
+ if garden.guide.visible or garden.tool_wheel.visible:return
+ if visit_state=="inside":
+  super.advance(delta)
+  return
+ if visit_state=="outside" and garden.wildlife.grass_ratio()>=0.01 and _entry():visit_state="entering"
+ var half: Vector2=-garden.grid_min+Vector2.ONE*1.25
+ var corners: Array[Vector3]=[Vector3(half.x,0,-half.y),Vector3(half.x,0,half.y),Vector3(-half.x,0,half.y),Vector3(-half.x,0,-half.y)]
+ var target: Vector3=corners[patrol_corner] if visit_state=="outside" else garden.cell_center(entry_cell)
+ if visit_state=="entering" and not garden.wildlife.records.has("hedgehog") and garden.wildlife.grass_ratio()<0.01:
+  visit_state="outside"
+  return
+ var offset:=Vector3(target.x-position.x,0,target.z-position.z)
+ walking=offset.length()>0.02
+ if walking:
+  visual.rotation.y=lerp_angle(visual.rotation.y,atan2(offset.x,offset.z),1.0-exp(-3.0*delta))
+  var hit:=move_and_collide(offset.normalized()*minf(offset.length(),delta*0.32))
+  if hit and visit_state=="entering":_entry()
+ var inside: bool=garden.contains_cell(garden.local_to_cell(position))
+ position.y=garden.heightfield.height_at(Vector2(position.x,position.z)) if inside else garden.background_meadow.height_at(Vector2(position.x,position.z))
+ gait+=delta
+ body.rotation.z=sin(gait*10.0)*0.045
+ body.position.y=absf(sin(gait*8.0))*0.006
+ if inside and visit_state=="entering":garden.wildlife.record_visit("hedgehog")
+ if offset.length()<0.04:
+  if visit_state=="outside":patrol_corner=(patrol_corner+1)%4
+  else:
+   cell=entry_cell
+   next_cell=cell
+   destination=garden.cell_center(cell)
+   add_to_group("garden_npcs")
+   visit_state="inside"
 
 ```
 

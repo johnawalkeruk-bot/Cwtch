@@ -23,6 +23,8 @@ const CyclingNPC = preload("res://cycling_npc.gd")
 const ProceduralAnimal = preload("res://procedural_animal.gd")
 const HedgehogNPC = preload("res://hedgehog_npc.gd")
 var blocked_cells: Dictionary = {}
+var dev_console: CanvasLayer
+var tardis: Node3D
 var wildlife: Node
 var additional_visitors: Array[Node3D] = []
 var background_meadow: Node3D
@@ -129,6 +131,17 @@ func _ready() -> void:
 	var model_weather := preload("res://model_weather.gd").new()
 	add_child(model_weather)
 	model_weather.setup(self)
+	tardis=preload("res://tardis_event.gd").new()
+	add_child(tardis)
+	tardis.setup(self)
+	var compass_layer:=CanvasLayer.new()
+	add_child(compass_layer)
+	var compass:=preload("res://garden_compass.gd").new()
+	compass_layer.add_child(compass)
+	compass.setup(camera)
+	dev_console=preload("res://developer_console.gd").new()
+	add_child(dev_console)
+	dev_console.setup(self)
 	_refresh_ui()
 
 func _create_chunks() -> void:
@@ -179,6 +192,7 @@ func _create_terrain() -> void:
 	terrain_material.set_shader_parameter("riverbed_color", load("res://assets/textures/water/M_RiverBottom_BaseColor.tga"))
 
 func _unhandled_input(event: InputEvent) -> void:
+	if is_instance_valid(dev_console) and dev_console.opened: return
 	if event.is_action_pressed("pad_wheel"):
 		if not guide.visible and not floating_tool.busy: _set_wheel(not tool_wheel.visible)
 		get_viewport().set_input_as_handled()
@@ -244,6 +258,9 @@ func _notification(what: int) -> void:
 		_set_guide(true)
 
 func _physics_process(delta: float) -> void:
+	if is_instance_valid(dev_console) and dev_console.opened:
+		action_pending=false
+		return
 	if not is_instance_valid(guide) or guide.visible:
 		cursor.clear()
 		action_pending = false
@@ -434,8 +451,8 @@ func _create_garden_ui() -> void:
 	notice.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
 	notice.offset_left=-280
 	notice.offset_right=280
-	notice.offset_top=44
-	notice.offset_bottom=84
+	notice.offset_top=94
+	notice.offset_bottom=134
 	notice.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
 	notice.add_theme_color_override("font_shadow_color",Color("132b26"))
 	notice.add_theme_constant_override("shadow_offset_y",2)
@@ -496,6 +513,7 @@ func _toggle_guide() -> void:
 	_set_guide(not guide.visible)
 
 func _set_guide(open: bool) -> void:
+	if is_instance_valid(dev_console) and dev_console.opened: dev_console.toggle(false)
 	if is_instance_valid(field_book) and field_book.visible: field_book.close()
 	guide.visible=open
 	if open: ControllerInput.focus_first.call_deferred(guide)

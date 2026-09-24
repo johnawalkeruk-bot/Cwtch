@@ -1,3 +1,33 @@
+# Compass, developer console and the TARDIS
+
+The compass at the top of the garden and village shows the camera heading.
+North is world -Z; east is +X. It follows mouse and controller camera aiming.
+
+In the garden, press the backtick key (`) to open or close the developer console.
+Escape closes it, Enter runs a command, and Up/Down recalls command history.
+Movement and tool selection are disabled while typing. The simulation continues
+unless the pause menu is open. Type `help` to see the commands:
+
+- `time 18:30` sets the 24-hour clock within the current dawn-to-dawn cycle.
+- `weather fair`, `weather cloudy`, `weather light rain`, `weather rain`,
+  `weather heavy rain`, `weather thunderstorm`, or `weather clearing`.
+- `tardis land` materialises at a randomly selected clear garden location.
+- `tardis takeoff` dematerialises a landed TARDIS.
+- `tardis visit` lands, waits 20 seconds, and automatically takes off.
+- `tardis status` reports whether it is away, landing, landed or taking off.
+
+Time and weather continue their normal cycles after a command. Existing saves
+retain time/weather through the normal save flow. The TARDIS is a temporary
+console event and does not persist across restarting the game.
+
+The supplied upright 9.6-second FBX rotation clip is played forward for landing
+and backward for departure, fitted to the supplied Landing.mp3 and Takeoff.mp3.
+The model uses its diffuse, normal, gloss and emissive maps plus a pulsing
+materialisation shader. A clear 5x5 micro-tile footprint is reserved during its
+visit; people, crops, water, buildings and the spirit are excluded from landing
+sites. Takeoff releases the footprint and collision. Pause holds sound and
+animation together. Source assets remain intact in Models/Easter_Egg/Tardis.
+
 # Village and shops
 
 Choose Visit the village from the garden pause menu. WASD/left stick moves;
