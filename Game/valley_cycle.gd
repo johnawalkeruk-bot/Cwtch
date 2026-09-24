@@ -12,6 +12,7 @@ var weather_index := 0
 var rain_strength := 0.0
 var cloud_cover := 0.15
 var wetness := 0.0
+var active_ambience: Node
 var garden: Node3D
 var sun: DirectionalLight3D
 var moon: DirectionalLight3D
@@ -148,7 +149,8 @@ func _advance_storm(delta: float) -> void:
 	if thunder_delay >= 0.0:
 		thunder_delay -= delta
 		if thunder_delay < 0.0:
-			garden.ambience.thunder()
+			if is_instance_valid(active_ambience): active_ambience.thunder()
+			else: garden.ambience.thunder()
 	if weather_index == 5 and rain_strength > 0.7:
 		storm_wait -= delta
 		if storm_wait <= 0.0:

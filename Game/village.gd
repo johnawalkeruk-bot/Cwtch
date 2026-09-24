@@ -2,6 +2,14 @@ extends Node3D
 const Stock=preload("res://village_stock.gd")
 const SHOPS=["THE ANIMAL KEEPER","THE PLANT NURSERY","THE DECORATOR","THE BUILDER"]
 const SUBTITLES=["New companions for your garden","A little more green","Small comforts, made with care","A home in the valley"]
+const CHUNK_SIZE=2.0
+var chunk_count:=Vector2i(12,12)
+var valley_cycle: Node3D
+var background_meadow: Node3D
+var moon: DirectionalLight3D
+var lightning: DirectionalLight3D
+var rain: CPUParticles3D
+var clock_label: Label
 var sun: DirectionalLight3D
 var outdoor_environment: Environment
 var indoor_environment: Environment
@@ -10,9 +18,9 @@ var exterior: Node3D
 var interior: Node3D
 var camera: Camera3D
 var spirit: CharacterBody3D
-var ring: MeshInstance3D
+var ring: Node3D
 var yaw:=0.0
-var pitch:=0.35
+var pitch:=PI/4.0
 var selected_shop:=-1
 var current_shop:=-1
 var paused:=false
@@ -40,7 +48,7 @@ func _ready() -> void:
  interior.hide()
  camera=Camera3D.new()
  camera.near=.05
- camera.far=250
+ camera.far=500
  camera.fov=68
  add_child(camera)
  var world:=WorldEnvironment.new()
@@ -74,8 +82,29 @@ func _ready() -> void:
 
 func activate(owner_menu: Node3D) -> void:
  host=owner_menu
+ valley_cycle=host.garden.valley_cycle
+ outdoor_environment=valley_cycle.environment
+ camera.environment=outdoor_environment
+ background_meadow=preload("res://village_outdoors.gd").new()
+ exterior.add_child(background_meadow)
+ background_meadow.build(self)
+ moon=DirectionalLight3D.new()
+ add_child(moon)
+ lightning=DirectionalLight3D.new()
+ add_child(lightning)
+ rain=valley_cycle.rain.duplicate() as CPUParticles3D
+ rain.mesh=rain.mesh.duplicate()
+ rain.mesh.material=rain.mesh.material.duplicate()
+ rain.position=Vector3(0,3.2,0)
+ exterior.add_child(rain)
+ var weather=preload("res://model_weather.gd").new()
+ add_child(weather)
+ weather.setup(self)
+ valley_cycle.active_ambience=ambience
+ _sync_weather(0.0)
  camera.make_current()
  _leave_shop()
+ preload("res://diorama_camera.gd").follow(camera,spirit.position,yaw,pitch)
 
 func _solid(parent: Node3D, dimensions: Vector3, at: Vector3, shop: int=-1) -> void:
  var body:=StaticBody3D.new()
@@ -90,28 +119,6 @@ func _solid(parent: Node3D, dimensions: Vector3, at: Vector3, shop: int=-1) -> v
  body.add_child(collision)
 
 func _build_street() -> void:
- var ground:=Stock.box(exterior,Vector3(120,.12,120),Color.WHITE,Vector3(0,-.08,-3))
- var grass:=StandardMaterial3D.new()
- grass.albedo_texture=load("res://assets/textures/grass/Grass002_1K-JPG_Color.jpg")
- grass.uv1_triplanar=true
- grass.uv1_scale=Vector3.ONE*.5
- grass.roughness=1.0
- ground.material_override=grass
- var road:=MeshInstance3D.new()
- var plane:=PlaneMesh.new()
- plane.size=Vector2(6,48)
- road.mesh=plane
- road.position=Vector3(0,.01,-4)
- var material:=preload("res://pom_material.gd").create_standard(
-  load("res://assets/textures/gravel/Gravel040_1K-JPG_Color.jpg"),
-  load("res://assets/textures/gravel/Gravel040_1K-JPG_NormalGL.jpg"),
-  load("res://assets/textures/gravel/Gravel040_1K-JPG_Displacement.jpg"),
-  load("res://assets/textures/gravel/Gravel040_1K-JPG_Roughness.jpg"))
- material.uv1_scale=Vector3(3,24,1)
- road.material_override=material
- road.name="GravelStreet"
- exterior.add_child(road)
- for x in [-3.2,3.2]: Stock.box(exterior,Vector3(.18,.15,48),Color("aaa48c"),Vector3(x,.02,-4))
  for i in range(4):
   var side: float=-1.0 if i%2==0 else 1.0
   var at:=Vector3(side*7,0,-10 if i<2 else 4)
@@ -157,17 +164,10 @@ func _build_street() -> void:
  collision.shape=sphere
  collision.position.y=.4
  spirit.add_child(collision)
- var builder:=preload("res://gliding_cursor.gd").new()
- ring=MeshInstance3D.new()
- ring.mesh=builder._arrow_ring()
- builder.free()
- var ring_material:=StandardMaterial3D.new()
- ring_material.vertex_color_use_as_albedo=true
- ring_material.shading_mode=BaseMaterial3D.SHADING_MODE_UNSHADED
- ring.material_override=ring_material
- ring.position.y=.1
- ring.scale=Vector3.ONE*.7
- spirit.add_child(ring)
+ ring=preload("res://gliding_cursor.gd").new()
+ exterior.add_child(ring)
+ ring.surface_height=func(_point: Vector2) -> float: return 0.0
+ ring.follow_feet(spirit.position,Vector2.ONE*0.7,0.0)
 
 func _build_room() -> void:
  Stock.box(interior,Vector3(12,.18,10),Color("584332"),Vector3(0,4,0))
@@ -225,6 +225,7 @@ func _build_ui() -> void:
  panel.add_child(stack)
  _label(stack,"C W T C H  /  THE VILLAGE",21)
  hud=_label(stack,"",15)
+ clock_label=_label(stack,"",16)
  prompt=_label(root,"",21)
  prompt.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
  prompt.offset_left=-270; prompt.offset_right=270
@@ -282,7 +283,7 @@ func _pause(value: bool) -> void:
 func _physics_process(delta: float) -> void:
  if not is_instance_valid(host): return
  ambience.muted=host.garden.ambience_muted
- ambience.update_mix(delta,0,0.8,paused)
+ _sync_weather(delta)
  hud.text="%d coins  ·  %s"%[host.coins,"Left stick move · Right stick look · Menu pause" if ControllerInput.using_pad else "WASD move · Mouse look · Esc travel menu"]
  if current_shop>=0:
   showcase.rotation.y+=delta*.2
@@ -296,13 +297,16 @@ func _physics_process(delta: float) -> void:
  spirit.move_and_slide()
  spirit.position.x=clampf(spirit.position.x,-12,12)
  spirit.position.z=clampf(spirit.position.z,-24,19)
- ring.rotation.y+=delta
  preload("res://diorama_camera.gd").follow(camera,spirit.position,yaw,pitch)
  var origin:=camera.global_position
  var ray:=PhysicsRayQueryParameters3D.create(origin,origin-camera.global_basis.z*24,1|16)
  ray.collide_with_areas=true
  var hit:=get_world_3d().direct_space_state.intersect_ray(ray)
  selected_shop=int(hit.collider.get_meta("shop",-1)) if not hit.is_empty() else -1
+ if selected_shop>=0:
+  var side: float=-1.0 if selected_shop%2==0 else 1.0
+  ring.follow_object(Vector3(side*7,0,-10 if selected_shop<2 else 4),Vector2(6.4,6.4),delta)
+ else: ring.follow_object(spirit.position,Vector2.ONE*0.7,delta)
  prompt.text=(SHOPS[selected_shop]+"\n"+("A / Cross · enter" if ControllerInput.using_pad else "Click / E · enter")) if selected_shop>=0 else "·"
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -329,6 +333,8 @@ func enter_shop(index: int) -> void:
  current_shop=index
  camera.environment=indoor_environment
  sun.hide()
+ moon.hide()
+ lightning.hide()
  exterior.hide()
  interior.show()
  shop_panel.show()
@@ -381,6 +387,8 @@ func _leave_shop() -> void:
  current_shop=-1
  camera.environment=outdoor_environment
  sun.show()
+ if is_instance_valid(moon): moon.show()
+ if is_instance_valid(lightning): lightning.show()
  interior.hide()
  exterior.show()
  shop_panel.hide()
@@ -391,3 +399,26 @@ func _leave_shop() -> void:
 
 func _notification(what: int) -> void:
  if what==NOTIFICATION_APPLICATION_FOCUS_OUT and is_instance_valid(pause_panel) and current_shop<0: _pause(true)
+
+func _sync_weather(delta: float) -> void:
+ if not is_instance_valid(valley_cycle):return
+ # Advance the garden's single clock while its scene is inactive.
+ if not paused:valley_cycle.advance(delta)
+ for pair in [[sun,valley_cycle.sun],[moon,valley_cycle.moon],[lightning,valley_cycle.lightning]]:
+  var target: DirectionalLight3D=pair[0]
+  var source: DirectionalLight3D=pair[1]
+  target.global_rotation=source.global_rotation
+  target.light_color=source.light_color
+  target.light_energy=source.light_energy
+  target.sky_mode=source.sky_mode
+  target.visible=current_shop<0
+ rain.position=spirit.position+Vector3.UP*3.2
+ rain.emitting=valley_cycle.rain_strength>0.03 and current_shop<0
+ rain.speed_scale=0.0 if paused else 1.0
+ rain.amount=valley_cycle.rain.amount
+ rain.direction=valley_cycle.rain.direction
+ rain.mesh.material.albedo_color=valley_cycle.rain.mesh.material.albedo_color
+ background_meadow.material.set_shader_parameter("wetness",valley_cycle.wetness)
+ clock_label.text=valley_cycle.clock_label.text
+ var daylight: float=valley_cycle.sky_material.get_shader_parameter("daylight")
+ ambience.update_mix(delta,valley_cycle.rain_strength,daylight,paused)

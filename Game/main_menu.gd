@@ -470,6 +470,7 @@ func open_village() -> void:
 
 func return_from_village() -> void:
 	if not is_instance_valid(village): return
+	garden.valley_cycle.active_ambience=null
 	village.free()
 	village=null
 	garden.show()

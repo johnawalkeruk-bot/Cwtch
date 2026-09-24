@@ -169,6 +169,7 @@ func _create_cursor() -> void:
 	cursor = GlidingCursor.new()
 	cursor.name = "GlidingCursor"
 	add_child(cursor)
+	cursor.surface_height = func(point: Vector2) -> float: return heightfield.surface_at(point)
 
 func _toggle_ambience() -> void:
 	ambience_muted = not ambience_muted

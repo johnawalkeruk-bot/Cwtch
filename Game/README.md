@@ -1,3 +1,19 @@
+## Village landscape and shared spirit cursor
+
+The village now has a blended gravel lane, meadow verges, grass tufts, woodland,
+rolling ridges, distant mountains, drifting clouds and mist, using the garden's
+terrain and tree assets. The garden's single clock and weather cycle continue
+while visiting the village and its shops, including rain, wet surfaces, moonlight,
+lightning, thunder and ambient sound. Pausing stops the clock; returning to the
+garden preserves the current time and weather.
+
+Both scenes use the same gold-and-blue spirit ring. The village starts with the
+ring in view; aiming at a shop glides and resizes it around the frontage. The ring's
+subdivided mesh samples terrain under every vertex, staying about 10 cm above the
+surface as it rotates and changes size, including over sculpted garden ground.
+Water selections follow the water surface. Mouse and controller navigation remain
+available.
+
 ## Garden edge blending
 
 The meadow continues live garden edge textures and blends into its surface brush over 1.5 metres. Colour, normal detail, roughness, parallax and watering share the same boundary, including corners. Tool changes appear immediately; tile types and land percentages are unchanged.

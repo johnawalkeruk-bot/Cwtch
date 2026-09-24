@@ -9,6 +9,6 @@ void fragment() {
 	float angle = atan(p.y, p.x);
 	float ring = smoothstep(0.83, 0.89, radius) * (1.0 - smoothstep(0.96, 1.0, radius));
 	float swirl = pow(0.5 + 0.5 * sin(angle * 3.0 - TIME * 2.0 + radius * 7.0), 3.0);
-	ALBEDO = highlight.rgb;
+	ALBEDO = mix(vec3(0.21,0.62,0.92), highlight.rgb, swirl);
 	ALPHA = ring * (0.35 + 0.65 * swirl) * highlight.a;
 }
