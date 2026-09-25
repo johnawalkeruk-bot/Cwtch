@@ -3,6 +3,8 @@ extends Node3D
 const RESOLUTION := 12
 const WATER_LEVEL := 0.012
 const BASE_LEVEL := -0.95
+const MAX_MEADOW_HEIGHT := 0.18
+const HEIGHT_PROFILE_VERSION := 2
 var garden: Node3D
 signal sculpted
 var original_heights: Image
@@ -43,9 +45,9 @@ func _sculpt_meadow() -> void:
    # A smooth level join to the surrounding meadow, with gently rolling ground throughout.
    var edge := smoothstep(0.0, 2.0, minf(half.x-absf(p.x), half.y-absf(p.y)))
    var working_plot := lerpf(0.22, 1.0, smoothstep(2.0, 5.0, p.length()))
-   var rolling := 0.32 + noise.get_noise_2dv(p)*0.65
-   rolling += 0.07*sin(p.x*0.75)*cos(p.y*0.65)
-   heights.set_pixel(x,z,Color(maxf(0.0,rolling)*edge*working_plot,0,0))
+   var rolling := 0.10 + noise.get_noise_2dv(p)*0.18
+   rolling += 0.025*sin(p.x*0.75)*cos(p.y*0.65)
+   heights.set_pixel(x,z,Color(clampf(rolling,0.0,MAX_MEADOW_HEIGHT)*edge*working_plot,0,0))
 
 func _sculpt_pond() -> void:
  var banks: Array[PackedVector2Array] = []
@@ -220,7 +222,7 @@ func _rebuild_samples(rect: Rect2i) -> void:
  sculpted.emit()
 
 func _write_height(x: int, z: int, value: float) -> void:
- value=clampf(value,BASE_LEVEL+0.12,1.5)
+ value=clampf(value,BASE_LEVEL+0.12,MAX_MEADOW_HEIGHT)
  heights.set_pixel(x,z,Color(value,0,0))
  var index:=z*samples.x+x
  if absf(value-original_heights.get_pixel(x,z).r)<0.00001:edited.erase(index)
@@ -249,14 +251,11 @@ func sculpt(cell: Vector2i, mode: int) -> bool:
  var at: Vector3=garden.cell_center(cell)
  var center:=Vector2(at.x,at.z)
  var rect:=_sample_rect(center,radius)
- var sample: Vector2i=Vector2i(((center-garden.grid_min)/spacing).round()).clamp(Vector2i.ZERO,samples-Vector2i.ONE)
- var baseline: float=original_heights.get_pixel(sample.x,sample.y).r
+ var baseline:=0.0 # Thump always sets the entire selected tile to garden zero.
  # Integer bounds include every shared edge and corner of the selected tile.
  var tile_steps:=roundi(float(garden.MICRO_SIZE)/spacing)
  var tile_low:=cell*tile_steps
  var tile_high:=tile_low+Vector2i.ONE*tile_steps
- if mode==3 and (tile_low.x==0 or tile_low.y==0 or tile_high.x==samples.x-1 or tile_high.y==samples.y-1):
-  baseline=0.0 # Preserve the level join to the surrounding landscape.
  var bottom:=maxf(BASE_LEVEL+0.12,minf(-0.18,at.y-0.18))
  for z in range(rect.position.y,rect.end.y):
   for x in range(rect.position.x,rect.end.x):
@@ -312,7 +311,7 @@ func save_deformation() -> Dictionary:
  for index in edited:values.append([index,edited[index]])
  var holes:=[]
  for cell in seed_holes:holes.append([cell.x,cell.y])
- return {"samples":[samples.x,samples.y],"heights":values,"seed_holes":holes}
+ return {"profile_version":HEIGHT_PROFILE_VERSION,"samples":[samples.x,samples.y],"heights":values,"seed_holes":holes}
 
 func restore_deformation(data: Dictionary) -> void:
  var dimensions=data.get("samples",[])
@@ -326,6 +325,8 @@ func restore_deformation(data: Dictionary) -> void:
   if index<0 or index>=samples.x*samples.y or not is_finite(height):continue
   var cell:=Vector2i(index%samples.x,index/samples.x)
   if cell.x==0 or cell.y==0 or cell.x==samples.x-1 or cell.y==samples.y-1:continue
+  # Older positive edits used the much taller meadow. Preserve excavations.
+  if int(data.get("profile_version",1))<HEIGHT_PROFILE_VERSION and height>0.0:height*=0.35
   _write_height(cell.x,cell.y,height)
   var area:=Rect2i(cell,Vector2i.ONE)
   changed=area if changed.size==Vector2i.ZERO else changed.merge(area)

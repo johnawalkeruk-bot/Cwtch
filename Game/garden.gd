@@ -226,16 +226,28 @@ func _cycle_shovel(direction: int) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if is_instance_valid(hedgehog_intro) and hedgehog_intro.active:return
 	if is_instance_valid(dev_console) and dev_console.opened:return
-	if event.is_action_pressed("pad_wheel"):
-		if not guide.visible:_set_wheel(not tool_wheel.visible)
+	if field_book.visible:return
+	var modal: bool=guide.visible
+	if event.is_action_pressed("pad_guide"):
+		_toggle_guide()
 		get_viewport().set_input_as_handled()
 		return
-	if event.is_action_pressed("pad_guide") or event.is_action_pressed("ui_cancel") and ControllerInput.using_pad:
-		if tool_wheel.visible:_set_wheel(false)
-		else:_toggle_guide()
-		get_viewport().set_input_as_handled()
-		return
-	var modal: bool=guide.visible or tool_wheel.visible
+	if event is InputEventJoypadButton and event.pressed:
+		if event.button_index==JOY_BUTTON_B:
+			if modal:_set_guide(false)
+			else:_select_tool(Tool.NONE)
+			get_viewport().set_input_as_handled()
+			return
+		if not modal:
+			var tools_by_direction: Dictionary={JOY_BUTTON_DPAD_UP:Tool.HOE,JOY_BUTTON_DPAD_RIGHT:Tool.SEEDS,JOY_BUTTON_DPAD_DOWN:Tool.WATER,JOY_BUTTON_DPAD_LEFT:Tool.SHOVEL}
+			if tools_by_direction.has(event.button_index):
+				_select_tool(tools_by_direction[event.button_index])
+				get_viewport().set_input_as_handled()
+				return
+			if event.button_index==JOY_BUTTON_X:
+				if tool==Tool.SHOVEL:_cycle_shovel(1)
+				get_viewport().set_input_as_handled()
+				return
 	if event.is_action("pad_use"):
 		if event.is_action_released("pad_use"):
 			trigger_held=false
@@ -250,18 +262,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_trigger_tardis()
 		get_viewport().set_input_as_handled()
 		return
-	if not modal and tool==Tool.SHOVEL and event is InputEventJoypadButton and event.pressed and event.button_index in [JOY_BUTTON_LEFT_SHOULDER,JOY_BUTTON_RIGHT_SHOULDER]:
-		_cycle_shovel(-1 if event.button_index==JOY_BUTTON_LEFT_SHOULDER else 1)
-		get_viewport().set_input_as_handled()
-		return
 	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode==KEY_TAB:
-			if not guide.visible:_set_wheel(not tool_wheel.visible)
-			get_viewport().set_input_as_handled()
-			return
-		if event.keycode==KEY_ESCAPE and tool_wheel.visible:
-			_set_wheel(false)
-			return
 		if event.keycode in [KEY_F,KEY_ESCAPE]:
 			_toggle_guide()
 			return
@@ -271,10 +272,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		if modal:return
 		if event.keycode>=KEY_1 and event.keycode<=KEY_4:
 			_select_tool(event.keycode-KEY_1)
-			_set_wheel(false)
+			get_viewport().set_input_as_handled()
 			return
-		if tool==Tool.SHOVEL and event.keycode in [KEY_Q,KEY_E]:
-			_cycle_shovel(-1 if event.keycode==KEY_Q else 1)
+		if event.keycode==KEY_T and not event.ctrl_pressed:
+			_select_tool(Tool.NONE)
+			get_viewport().set_input_as_handled()
+			return
+		if event.keycode==KEY_X:
+			if tool==Tool.SHOVEL:_cycle_shovel(1)
+			get_viewport().set_input_as_handled()
 			return
 	if event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_LEFT:
 		if not event.pressed:
@@ -288,31 +294,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		camera_yaw-=event.relative.x*0.004
 		camera_pitch=clampf(camera_pitch+event.relative.y*0.004,deg_to_rad(-80),deg_to_rad(80))
 
-func _set_wheel(open: bool) -> void:
+func _set_wheel(_open: bool) -> void:
+	# Retained as a close hook for other modal interfaces; selection is direct now.
+	tool_wheel.hide()
 	_clear_use()
-	notice.visible=not open and not guide.visible
-	if open:
-		cursor.clear()
-		tool_wheel.open(tool)
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-		if not ControllerInput.using_pad: Input.warp_mouse(get_viewport().get_visible_rect().size*0.5)
-		var focused := get_viewport().gui_get_focus_owner()
-		if focused: focused.release_focus()
-	else:
-		tool_wheel.hide()
-		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED if not guide.visible else Input.MOUSE_MODE_VISIBLE
-	aiming = not open and not guide.visible
-	aim_dot.visible = aiming
-
-func _wheel_selected(index: int) -> void:
-	_select_tool(index)
-	if index==Tool.SHOVEL:tool_wheel.open_modes(floating_tool.shovel_mode)
-	else:_set_wheel(false)
-
-func _shovel_mode_selected(index: int) -> void:
-	floating_tool.shovel_mode=clampi(index,0,3)
-	_set_wheel(false)
-	_refresh_ui()
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT and is_instance_valid(guide):
@@ -574,11 +559,10 @@ func _create_garden_ui() -> void:
 		quit_button.text="Save & Quit"
 		quit_button.pressed.connect(get_tree().current_scene.save_and_quit)
 		pages.add_child(quit_button)
-	tool_wheel=preload("res://tool_wheel.gd").new()
+	tool_wheel=Control.new()
 	root.add_child(tool_wheel)
-	tool_wheel.tool_selected.connect(_wheel_selected)
-	tool_wheel.mode_selected.connect(_shovel_mode_selected)
-	tool_wheel.cancelled.connect(func(): _set_wheel(false))
+	tool_wheel.hide()
+	tool_wheel.mouse_filter=Control.MOUSE_FILTER_IGNORE
 
 func _toggle_guide() -> void:
 	_set_guide(not guide.visible)
@@ -627,11 +611,11 @@ func _refresh_ui() -> void:
 func _controller_prompts() -> void:
 	var pad := ControllerInput.using_pad
 	control_hint.text = _tool_controls()
-	guide_controls.text = ("Left stick  glide  ·  Right stick  look\n\nY / Triangle  opens the tool wheel.\nHold right trigger  continuously use your tool.\nLB / RB  shovel mode · R3  TARDIS.\nA / Cross  confirm  ·  B / Circle  back" if pad else "WASD  glide  ·  Mouse  look\n\nTAB  opens your tool wheel. Click to equip.\nHold left-click to use continuously.\nQ / E  shovel mode · Ctrl+T  TARDIS.") + "\n\nYour garden saves when you leave."
+	guide_controls.text = ("Left stick  glide  /  Right stick  look\n\nD-pad: Up Hoe / Right Seeds\nDown Watering can / Left Shovel\nX / Square  change mode\nB / Circle  put tool away\nHold RT  use / Start  pause\nR3  TARDIS" if pad else "WASD  glide  /  Mouse  look\n\n1 Hoe / 2 Seeds / 3 Watering can / 4 Shovel\nX  change mode / T  put tool away\nHold left-click  use / Esc  pause\nCtrl+T  TARDIS") + "\n\nYour garden saves when you leave."
 	if field_book.visible: ControllerInput.focus_first.call_deferred(field_book)
 	elif guide.visible: ControllerInput.focus_first.call_deferred(guide)
 
 func _tool_controls() -> String:
-	var text: String="Y  tools · Hold RT  use · R3  TARDIS" if ControllerInput.using_pad else "TAB  tools · Hold click  use · CTRL+T  TARDIS"
-	if tool==Tool.SHOVEL:text+="\nLB / RB  shovel mode" if ControllerInput.using_pad else "\nQ / E  shovel mode"
+	var text: String="D-pad  tools / B  put away / Hold RT  use" if ControllerInput.using_pad else "1-4  tools / T  put away / Hold click  use"
+	if tool==Tool.SHOVEL:text+="\nX / Square  change mode" if ControllerInput.using_pad else "\nX  change mode"
 	return text

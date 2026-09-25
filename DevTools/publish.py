@@ -36,6 +36,7 @@ def main(version=None):
  if existing.returncode==0:raise RuntimeError(tag+' is already published. Use a new version.')
  pending.parent.mkdir(exist_ok=True);pending.write_text(version)
  release=build(version)
+ run([sys.executable,ROOT/'DevTools/build_changelog.py','--release',version])
  (ROOT/'VERSION').write_text(version+'\n',encoding='ascii')
  run(['git','add','--all'])
  if run(['git','diff','--cached','--quiet'],check=False).returncode!=0:
@@ -49,6 +50,9 @@ def main(version=None):
  run([GH,'release','create',tag,release/'CWTCH-Windows.zip',release/'CWTCH-Windows.zip.sha256',release/'CWTCH-Launcher.zip','--repo',repository,'--title','CWTCH '+tag,'--generate-notes','--latest'])
  pending.unlink()
  print('Published https://github.com/'+repository+'/releases/tag/'+tag,flush=True)
+ site=run([sys.executable,ROOT/'DevTools/publish_site.py'],check=False)
+ if site.returncode:
+  print('Game release succeeded; website update failed. Retry DevTools/publish_site.py separately.',file=sys.stderr)
 
 if __name__=='__main__':
  parser=argparse.ArgumentParser();parser.add_argument('--version');args=parser.parse_args()

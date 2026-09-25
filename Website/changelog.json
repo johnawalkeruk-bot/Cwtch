@@ -1,0 +1,305 @@
+{
+  "entries": [
+    {
+      "id": "unreleased",
+      "label": "Next update",
+      "date": null,
+      "title": "In development",
+      "sections": []
+    },
+    {
+      "id": "0.1.12",
+      "label": "v0.1.12",
+      "date": "2026-09-25",
+      "title": "Direct tools, gentler ground and subtitle fixes",
+      "sections": [
+        {
+          "heading": "Changed",
+          "items": [
+            "Select Hoe, Seeds, Watering Can and Shovel with 1–4, or D-pad Up, Right, Down and Left. The radial tool menu is retired.",
+            "Cycle shovel modes with X on keyboard or X / Square on controller. Put tools away with T or B / Circle; B still goes back in menus.",
+            "Natural garden rises are capped at 18 cm. Older saved raised patches are softened once; dug-out areas retain their depth.",
+            "Thump sets every corner and edge of the selected micro-tile to height zero, with a transition into neighbouring ground."
+          ]
+        },
+        {
+          "heading": "Fixed",
+          "items": [
+            "Arthur’s speech bubble stays hidden until he speaks, including after entering the garden or returning from the village.",
+            "Putting a tool away cancels its current stroke, particles and sound. Ctrl+T still controls the TARDIS."
+          ]
+        },
+        {
+          "heading": "Website",
+          "items": [
+            "Added this development changelog and linked it from the game page. Future completed changes will receive notes before manual publication."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "0.1.11",
+      "label": "v0.1.11",
+      "date": "2026-09-24",
+      "title": "Arthur welcomes your first hedgehog",
+      "sections": [
+        {
+          "heading": "Added",
+          "items": [
+            "The first hedgehog visit starts a face-on conversation with Arthur.",
+            "Arthur alternates his two supplied talking animations while Arthur_Hedgehogs.mp3 plays. A speech bubble displays subtitles generated from the recording.",
+            "The camera and controls return when the recording ends. The scene waits for menus, supports pausing, and saves completion so it only plays once per garden."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "0.1.10",
+      "label": "v0.1.10",
+      "date": "2026-09-24",
+      "title": "A village in the valley",
+      "sections": [
+        {
+          "heading": "Added",
+          "items": [
+            "Village mountains, wooded ridges, meadow verges, grass, drifting clouds and mist, using the garden’s landscape assets.",
+            "The village and shops share the garden’s clock and weather, including night lighting, rain, wet surfaces, thunder and ambient sound."
+          ]
+        },
+        {
+          "heading": "Improved",
+          "items": [
+            "Gravel street edges blend into the meadow.",
+            "Gold-and-blue spirit cursors replace the red-and-gold colours. Their mesh follows the ground as they move, rotate and resize.",
+            "Fixed village cursor visibility and shop selection; the ring frames the selected shop."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "0.1.9",
+      "label": "v0.1.9",
+      "date": "2026-09-24",
+      "title": "Softer garden boundaries",
+      "sections": [
+        {
+          "heading": "Improved",
+          "items": [
+            "Garden-edge textures continue into the surrounding meadow and blend over 1.5 metres, including corners. Changes to edge tiles appear immediately outside the boundary.",
+            "Colour, normal detail, roughness, parallax and wetness match at the join.",
+            "Thump flattens the whole micro-tile, including its corners and shared edges. The next update changes its target height to zero."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "0.1.8",
+      "label": "v0.1.8",
+      "date": "2026-09-24",
+      "title": "Shape the earth",
+      "sections": [
+        {
+          "heading": "Added",
+          "items": [
+            "The shovel has four animated modes with sound: Dig, Pick, Pour and Thump.",
+            "Dig deforms the ground into a sloping, water-filled hollow. Pick makes a small seed hole; Pour restores dirt; Thump levels the ground.",
+            "Hold left-click or right trigger to keep using tools while gliding. Each tool uses its supplied sound effects.",
+            "Ctrl+T and right-stick click toggle the TARDIS landing and takeoff."
+          ]
+        },
+        {
+          "heading": "Improved",
+          "items": [
+            "Terrain collision, water depth and grass roots follow edits. Deformation and seed holes survive saving and loading.",
+            "Release packaging now exports to a fresh staging file and excludes temporary packs."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "0.1.7",
+      "label": "v0.1.7",
+      "date": "2026-09-24",
+      "title": "Garden milestones and a land survey",
+      "sections": [
+        {
+          "heading": "Added",
+          "items": [
+            "Bottom-left notices report animal visits, residency and recorded birth or death events. Visit and residency dates appear in the Field Guide.",
+            "A Land Area category maps all 1,296 micro-tiles, with ground-type counts and percentages."
+          ]
+        },
+        {
+          "heading": "Changed",
+          "items": [
+            "The TARDIS lands just north of the garden, facing south, without spinning."
+          ]
+        },
+        {
+          "heading": "Development note",
+          "items": [
+            "Birth and death notifications are event support; automatic breeding and ageing are not implemented."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "0.1.6",
+      "label": "v0.1.6",
+      "date": "2026-09-24",
+      "title": "Finding your bearings",
+      "sections": [
+        {
+          "heading": "Added",
+          "items": [
+            "Compasses in the garden and village show the direction you face.",
+            "A developer console opens with the backtick key and accepts time and weather commands.",
+            "The supplied TARDIS model has materialisation, lighting and landing/takeoff sound effects, with console controls."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "0.1.5",
+      "label": "v0.1.5",
+      "date": "2026-09-23",
+      "title": "A garden that welcomes wildlife",
+      "sections": [
+        {
+          "heading": "Changed",
+          "items": [
+            "New gardens begin without animals inside. A wild hedgehog patrols outside until grass covers at least 1% of the plot.",
+            "The hedgehog becomes a resident at 5% grass coverage. The Field Guide records first visit and residency days, saved with the garden."
+          ]
+        },
+        {
+          "heading": "Added",
+          "items": [
+            "The peacock joins the animal shop, using the supplied model and animated movement."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "0.1.4",
+      "label": "v0.1.4",
+      "date": "2026-09-23",
+      "title": "A free-flowing spirit",
+      "sections": [
+        {
+          "heading": "Changed",
+          "items": [
+            "Garden movement becomes continuous, like the village, instead of snapping the player to micro-tiles. Tools still work on the underlying tile grid.",
+            "New gardens begin as hard dirt."
+          ]
+        },
+        {
+          "heading": "Added",
+          "items": [
+            "Grass and stone textures, plus grass tufts, extend onto the surrounding scenery and menu landscape."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "0.1.3",
+      "label": "v0.1.3",
+      "date": "2026-09-23",
+      "title": "A more connected landscape",
+      "sections": [
+        {
+          "heading": "Improved",
+          "items": [
+            "Removed the cottage from the garden and expanded the textured surrounding scenery.",
+            "The 3D menu has a fuller natural environment; imported models respond to lighting and weather through shared material effects.",
+            "Added a way to put the current tool away."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "0.1.2",
+      "label": "v0.1.2",
+      "date": "2026-09-23",
+      "title": "Ground, clouds and stars",
+      "sections": [
+        {
+          "heading": "Improved",
+          "items": [
+            "Natural rolling terrain replaces the uniformly flat garden surface. Ground materials are less shiny.",
+            "Improved the cloud and star sky, distant wisps and water rendering.",
+            "Grass follows the ground’s surface height."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "0.1.1",
+      "label": "v0.1.1",
+      "date": "2026-09-23",
+      "title": "A home for CWTCH",
+      "sections": [
+        {
+          "heading": "Added",
+          "items": [
+            "The supplied logo becomes the game and launcher icon.",
+            "A refreshed launcher shows the installed game version and download progress.",
+            "A public game page provides the Windows launcher download.",
+            "Batched 3D grass adds depth to grassy ground."
+          ]
+        }
+      ]
+    },
+    {
+      "id": "0.1.0",
+      "label": "v0.1.0",
+      "date": "2026-09-22",
+      "title": "The foundations of the valley",
+      "sections": [
+        {
+          "heading": "Garden and tools",
+          "items": [
+            "Started with exportable 2 m ground chunks, each divided into nine micro-tiles, and expanded the garden to 24 × 24 metres.",
+            "Connected dirt, hard dirt, grass, long grass, water, deep water, path and stone materials; height-map parallax adds surface detail.",
+            "A low-floating spirit replaces the visible player, with mouse camera aiming, object selection and a resizing swirling cursor.",
+            "Added Hoe, Seed Packet and Watering Can models with animated use, seed and water particles, gardening interactions and saved progress."
+          ]
+        },
+        {
+          "heading": "People and wildlife",
+          "items": [
+            "Imported Arthur and Meera with animation cycles, plus Angus and a valley visitor. Turning is smooth and NPCs avoid one another.",
+            "Added chicken, hedgehog, badger and dragon models, including procedural movement for rigged animals.",
+            "Weather-responsive shivering and talking animation/audio behaviour were explored with the visitor models."
+          ]
+        },
+        {
+          "heading": "Sky and sound",
+          "items": [
+            "Twenty-minute days and twenty-minute nights, a moving sun, clock, stars and a changing sky.",
+            "Fair, cloudy, light rain, rain, heavy rain, thunderstorm and clearing weather, with wet ground and rain puddles.",
+            "Birds, wind, stream and storm ambience replaced the music. Layered Welsh mountains, woodland, mist, heather, ferns and gorse frame the garden.",
+            "Prototype music, the perimeter wall and fixed pond were retired as the open garden took shape."
+          ]
+        },
+        {
+          "heading": "Menus, guide and village",
+          "items": [
+            "A 16:9 presentation and animated 3D mountain main menu, with birds, day/night weather, the golden CWTCH title and “your slice of the valley.” tagline.",
+            "Main-menu entry, new garden, options and quit controls; pause-menu Save & Quit.",
+            "An old leather Field Guide opens from its cover with animated pages, handwritten styling, 3D previews and descriptions for people, animals and plants.",
+            "Controller movement, camera, menu navigation, shoulder-button categories and directional entry selection.",
+            "A gravel village street leads to animal, plant, decoration and building shops, with cottage exteriors, interiors, purchases and delivery to the garden."
+          ]
+        },
+        {
+          "heading": "Development and installation",
+          "items": [
+            "The desktop CWTCH folder became the canonical development project, with source assets, full source documentation and reproducible builds.",
+            "Windows launcher installation and updates use versioned packages and download checksums; saves are kept separately."
+          ]
+        }
+      ]
+    }
+  ]
+}

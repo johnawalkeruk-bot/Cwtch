@@ -229,6 +229,65 @@ func advance(delta: float) -> void:
 
 ```
 
+## arthur_hedgehog_subtitles.gd
+
+```gd
+extends RefCounted
+## Generated locally from Arthur_Hedgehogs.mp3 with Whisper small.en word timestamps.
+const CUES = [
+ {
+  "start": 0.0,
+  "end": 3.59,
+  "text": "Ho ho ho, look who's pottering about!"
+ },
+ {
+  "start": 4.62,
+  "end": 7.83,
+  "text": "Must have wandered right down from the old tree line, I expect."
+ },
+ {
+  "start": 9.12,
+ "end": 11.15,
+ "text": "Absolute creatures of habit, hedgehogs are,"
+ },
+ {
+ "start": 11.48,
+ "end": 13.17,
+ "text": "snuffling about in the twilight,"
+ },
+ {
+ "start": 13.58,
+ "end": 17.03,
+ "text": "always on a mission, and never in a rush for anyone."
+ },
+ {
+ "start": 18.68,
+  "end": 21.63,
+  "text": "Marvellous little things to have about the place, truth be told."
+ },
+ {
+  "start": 22.34,
+  "end": 25.54775,
+  "text": "Makes anywhere feel proper lived-in, don't they?"
+ }
+]
+
+```
+
+## arthur_speech_bubble.gd
+
+```gd
+extends PanelContainer
+## Parchment speech bubble; the tail points back toward Arthur's portrait.
+func _draw() -> void:
+ var fill:=Color("f4ead2")
+ var edge:=Color("b69755")
+ var points:=PackedVector2Array([Vector2(2,42),Vector2(-23,63),Vector2(2,69)])
+ draw_colored_polygon(points,fill)
+ draw_polyline(PackedVector2Array([points[0],points[1],points[2]]),edge,2.0,true)
+
+```
+
 ## background_meadow.gd
 
 ```gd
@@ -630,7 +689,7 @@ func _ready() -> void:
 		event.axis=entry[1]
 		event.axis_value=entry[2]
 		InputMap.action_add_event(entry[0],event)
-	for entry in [["pad_wheel",JOY_BUTTON_Y],["pad_guide",JOY_BUTTON_START],["pad_tardis",JOY_BUTTON_RIGHT_STICK]]:
+	for entry in [["pad_guide",JOY_BUTTON_START],["pad_tardis",JOY_BUTTON_RIGHT_STICK]]:
 		InputMap.add_action(entry[0])
 		var event := InputEventJoypadButton.new()
 		event.button_index=entry[1]
@@ -982,6 +1041,7 @@ func toggle(value: bool) -> void:
   Input.mouse_mode=Input.MOUSE_MODE_CAPTURED if garden.aiming else Input.MOUSE_MODE_VISIBLE
 
 func _input(event: InputEvent) -> void:
+ if is_instance_valid(garden.hedgehog_intro) and garden.hedgehog_intro.active:return
  if event is InputEventKey and event.pressed and not event.echo:
   if event.physical_keycode==KEY_QUOTELEFT or event.keycode==KEY_QUOTELEFT:
    if not garden.field_book.visible:toggle(not opened)
@@ -1730,6 +1790,7 @@ var dev_console: CanvasLayer
 var tardis: Node3D
 var animal_notices: CanvasLayer
 var wildlife: Node
+var hedgehog_intro: Node3D
 var additional_visitors: Array[Node3D] = []
 var background_meadow: Node3D
 var valley_cycle: Node3D
@@ -1854,6 +1915,9 @@ func _ready() -> void:
 	dev_console=preload("res://developer_console.gd").new()
 	add_child(dev_console)
 	dev_console.setup(self)
+	hedgehog_intro=preload("res://hedgehog_intro.gd").new()
+	add_child(hedgehog_intro)
+	hedgehog_intro.setup(self)
 	_refresh_ui()
 
 func _create_chunks() -> void:
@@ -1922,17 +1986,30 @@ func _cycle_shovel(direction: int) -> void:
 	_refresh_ui()
 
 func _unhandled_input(event: InputEvent) -> void:
+	if is_instance_valid(hedgehog_intro) and hedgehog_intro.active:return
 	if is_instance_valid(dev_console) and dev_console.opened:return
-	if event.is_action_pressed("pad_wheel"):
-		if not guide.visible:_set_wheel(not tool_wheel.visible)
+	if field_book.visible:return
+	var modal: bool=guide.visible
+	if event.is_action_pressed("pad_guide"):
+		_toggle_guide()
 		get_viewport().set_input_as_handled()
 		return
-	if event.is_action_pressed("pad_guide") or event.is_action_pressed("ui_cancel") and ControllerInput.using_pad:
-		if tool_wheel.visible:_set_wheel(false)
-		else:_toggle_guide()
-		get_viewport().set_input_as_handled()
-		return
-	var modal: bool=guide.visible or tool_wheel.visible
+	if event is InputEventJoypadButton and event.pressed:
+		if event.button_index==JOY_BUTTON_B:
+			if modal:_set_guide(false)
+			else:_select_tool(Tool.NONE)
+			get_viewport().set_input_as_handled()
+			return
+		if not modal:
+			var tools_by_direction: Dictionary={JOY_BUTTON_DPAD_UP:Tool.HOE,JOY_BUTTON_DPAD_RIGHT:Tool.SEEDS,JOY_BUTTON_DPAD_DOWN:Tool.WATER,JOY_BUTTON_DPAD_LEFT:Tool.SHOVEL}
+			if tools_by_direction.has(event.button_index):
+				_select_tool(tools_by_direction[event.button_index])
+				get_viewport().set_input_as_handled()
+				return
+			if event.button_index==JOY_BUTTON_X:
+				if tool==Tool.SHOVEL:_cycle_shovel(1)
+				get_viewport().set_input_as_handled()
+				return
 	if event.is_action("pad_use"):
 		if event.is_action_released("pad_use"):
 			trigger_held=false
@@ -1947,18 +2024,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_trigger_tardis()
 		get_viewport().set_input_as_handled()
 		return
-	if not modal and tool==Tool.SHOVEL and event is InputEventJoypadButton and event.pressed and event.button_index in [JOY_BUTTON_LEFT_SHOULDER,JOY_BUTTON_RIGHT_SHOULDER]:
-		_cycle_shovel(-1 if event.button_index==JOY_BUTTON_LEFT_SHOULDER else 1)
-		get_viewport().set_input_as_handled()
-		return
 	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode==KEY_TAB:
-			if not guide.visible:_set_wheel(not tool_wheel.visible)
-			get_viewport().set_input_as_handled()
-			return
-		if event.keycode==KEY_ESCAPE and tool_wheel.visible:
-			_set_wheel(false)
-			return
 		if event.keycode in [KEY_F,KEY_ESCAPE]:
 			_toggle_guide()
 			return
@@ -1968,10 +2034,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		if modal:return
 		if event.keycode>=KEY_1 and event.keycode<=KEY_4:
 			_select_tool(event.keycode-KEY_1)
-			_set_wheel(false)
+			get_viewport().set_input_as_handled()
 			return
-		if tool==Tool.SHOVEL and event.keycode in [KEY_Q,KEY_E]:
-			_cycle_shovel(-1 if event.keycode==KEY_Q else 1)
+		if event.keycode==KEY_T and not event.ctrl_pressed:
+			_select_tool(Tool.NONE)
+			get_viewport().set_input_as_handled()
+			return
+		if event.keycode==KEY_X:
+			if tool==Tool.SHOVEL:_cycle_shovel(1)
+			get_viewport().set_input_as_handled()
 			return
 	if event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_LEFT:
 		if not event.pressed:
@@ -1985,37 +2056,17 @@ func _unhandled_input(event: InputEvent) -> void:
 		camera_yaw-=event.relative.x*0.004
 		camera_pitch=clampf(camera_pitch+event.relative.y*0.004,deg_to_rad(-80),deg_to_rad(80))
 
-func _set_wheel(open: bool) -> void:
+func _set_wheel(_open: bool) -> void:
+	# Retained as a close hook for other modal interfaces; selection is direct now.
+	tool_wheel.hide()
 	_clear_use()
-	notice.visible=not open and not guide.visible
-	if open:
-		cursor.clear()
-		tool_wheel.open(tool)
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-		if not ControllerInput.using_pad: Input.warp_mouse(get_viewport().get_visible_rect().size*0.5)
-		var focused := get_viewport().gui_get_focus_owner()
-		if focused: focused.release_focus()
-	else:
-		tool_wheel.hide()
-		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED if not guide.visible else Input.MOUSE_MODE_VISIBLE
-	aiming = not open and not guide.visible
-	aim_dot.visible = aiming
-
-func _wheel_selected(index: int) -> void:
-	_select_tool(index)
-	if index==Tool.SHOVEL:tool_wheel.open_modes(floating_tool.shovel_mode)
-	else:_set_wheel(false)
-
-func _shovel_mode_selected(index: int) -> void:
-	floating_tool.shovel_mode=clampi(index,0,3)
-	_set_wheel(false)
-	_refresh_ui()
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT and is_instance_valid(guide):
 		_set_guide(true)
 
 func _physics_process(delta: float) -> void:
+	if is_instance_valid(hedgehog_intro) and hedgehog_intro.active:return
 	if release_required and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and not Input.is_action_pressed("pad_use"):release_required=false
 	repeat_wait=maxf(0.0,repeat_wait-delta)
 	if is_instance_valid(dev_console) and dev_console.opened:
@@ -2270,16 +2321,18 @@ func _create_garden_ui() -> void:
 		quit_button.text="Save & Quit"
 		quit_button.pressed.connect(get_tree().current_scene.save_and_quit)
 		pages.add_child(quit_button)
-	tool_wheel=preload("res://tool_wheel.gd").new()
+	tool_wheel=Control.new()
 	root.add_child(tool_wheel)
-	tool_wheel.tool_selected.connect(_wheel_selected)
-	tool_wheel.mode_selected.connect(_shovel_mode_selected)
-	tool_wheel.cancelled.connect(func(): _set_wheel(false))
+	tool_wheel.hide()
+	tool_wheel.mouse_filter=Control.MOUSE_FILTER_IGNORE
 
 func _toggle_guide() -> void:
 	_set_guide(not guide.visible)
 
 func _set_guide(open: bool) -> void:
+	if is_instance_valid(hedgehog_intro) and hedgehog_intro.active:
+		hedgehog_intro.set_paused(open)
+		return
 	_clear_use()
 	if is_instance_valid(dev_console) and dev_console.opened: dev_console.toggle(false)
 	if is_instance_valid(field_book) and field_book.visible: field_book.close()
@@ -2320,13 +2373,13 @@ func _refresh_ui() -> void:
 func _controller_prompts() -> void:
 	var pad := ControllerInput.using_pad
 	control_hint.text = _tool_controls()
-	guide_controls.text = ("Left stick  glide  ·  Right stick  look\n\nY / Triangle  opens the tool wheel.\nHold right trigger  continuously use your tool.\nLB / RB  shovel mode · R3  TARDIS.\nA / Cross  confirm  ·  B / Circle  back" if pad else "WASD  glide  ·  Mouse  look\n\nTAB  opens your tool wheel. Click to equip.\nHold left-click to use continuously.\nQ / E  shovel mode · Ctrl+T  TARDIS.") + "\n\nYour garden saves when you leave."
+	guide_controls.text = ("Left stick  glide  /  Right stick  look\n\nD-pad: Up Hoe / Right Seeds\nDown Watering can / Left Shovel\nX / Square  change mode\nB / Circle  put tool away\nHold RT  use / Start  pause\nR3  TARDIS" if pad else "WASD  glide  /  Mouse  look\n\n1 Hoe / 2 Seeds / 3 Watering can / 4 Shovel\nX  change mode / T  put tool away\nHold left-click  use / Esc  pause\nCtrl+T  TARDIS") + "\n\nYour garden saves when you leave."
 	if field_book.visible: ControllerInput.focus_first.call_deferred(field_book)
 	elif guide.visible: ControllerInput.focus_first.call_deferred(guide)
 
 func _tool_controls() -> String:
-	var text: String="Y  tools · Hold RT  use · R3  TARDIS" if ControllerInput.using_pad else "TAB  tools · Hold click  use · CTRL+T  TARDIS"
-	if tool==Tool.SHOVEL:text+="\nLB / RB  shovel mode" if ControllerInput.using_pad else "\nQ / E  shovel mode"
+	var text: String="D-pad  tools / B  put away / Hold RT  use" if ControllerInput.using_pad else "1-4  tools / T  put away / Hold click  use"
+	if tool==Tool.SHOVEL:text+="\nX / Square  change mode" if ControllerInput.using_pad else "\nX  change mode"
 	return text
 
 ```
@@ -2990,6 +3043,282 @@ func _process(delta: float) -> void:
 
 ```
 
+## hedgehog_intro.gd
+
+```gd
+extends Node3D
+signal finished
+const CAPTIONS=preload("res://arthur_hedgehog_subtitles.gd").CUES
+const VOICE=preload("res://assets/sounds/dialogue/Arthur_Hedgehogs.mp3")
+const TALK_CLIPS=["Talking_1","Talking_2"]
+const CAMERA_SECONDS:=0.85
+var garden: Node3D
+var arthur: Node3D
+var active:=false
+var paused:=false
+var completed:=false
+var pending:=false
+var phase:="idle"
+var phase_time:=0.0
+var clip_time:=0.0
+var clip_index:=0
+var played_clips: Array[String]=[]
+var camera: Camera3D
+var voice: AudioStreamPlayer
+var ui: CanvasLayer
+var bubble: PanelContainer
+var caption: Label
+var pause_label: Label
+var return_transform:=Transform3D.IDENTITY
+var portrait_transform:=Transform3D.IDENTITY
+var hidden_layers: Array[Dictionary]=[]
+var frozen_actors: Array[Dictionary]=[]
+var paused_audio: Array[Dictionary]=[]
+var previous_animation: StringName
+var previous_animation_position:=0.0
+var previous_animation_speed:=1.0
+var previous_mouse_mode:=Input.MOUSE_MODE_CAPTURED
+var tool_visible:=true
+var tool_processing:=true
+
+func setup(world: Node3D) -> void:
+ garden=world
+ arthur=garden.get_node("Arthur")
+ camera=Camera3D.new()
+ camera.name="ArthurPortraitCamera"
+ camera.near=0.04
+ camera.far=500.0
+ camera.fov=42.0
+ add_child(camera)
+ voice=AudioStreamPlayer.new()
+ voice.name="ArthurHedgehogVoice"
+ voice.stream=VOICE
+ voice.volume_db=-1.0
+ add_child(voice)
+ voice.finished.connect(_begin_return)
+ ui=CanvasLayer.new()
+ ui.layer=90
+ add_child(ui)
+ bubble=preload("res://arthur_speech_bubble.gd").new()
+ bubble.mouse_filter=Control.MOUSE_FILTER_IGNORE
+ bubble.custom_minimum_size=Vector2(420,0)
+ var style:=StyleBoxFlat.new()
+ style.bg_color=Color("f4ead2")
+ style.border_color=Color("b69755")
+ style.set_border_width_all(2)
+ style.set_corner_radius_all(18)
+ style.content_margin_left=24
+ style.content_margin_right=24
+ style.content_margin_top=16
+ style.content_margin_bottom=20
+ style.shadow_color=Color(0,0,0,0.3)
+ style.shadow_size=8
+ bubble.add_theme_stylebox_override("panel",style)
+ ui.add_child(bubble)
+ var stack:=VBoxContainer.new()
+ stack.add_theme_constant_override("separation",8)
+ bubble.add_child(stack)
+ stack.add_child(garden._label("ARTHUR",17,Color("796033")))
+ caption=garden._label("",22,Color("302e24"))
+ caption.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
+ caption.custom_minimum_size=Vector2(372,78)
+ stack.add_child(caption)
+ pause_label=garden._label("PAUSED\nEsc / Start to continue",20,Color("f4dfaa"))
+ ui.add_child(pause_label)
+ pause_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+ pause_label.offset_left=-220
+ pause_label.offset_right=220
+ pause_label.offset_top=-100
+ pause_label.offset_bottom=-28
+ pause_label.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
+ pause_label.add_theme_color_override("font_shadow_color",Color.BLACK)
+ pause_label.add_theme_constant_override("shadow_offset_y",2)
+ bubble.hide()
+ pause_label.hide()
+ ui.hide()
+ garden.wildlife.animal_event.connect(_animal_event)
+
+func _animal_event(kind: String, species: String, _day: int) -> void:
+ if kind=="visit" and species=="hedgehog" and not completed and not active:
+  pending=true
+
+func save_data() -> Dictionary:
+ return {"completed":completed,"pending":pending or (active and not completed)}
+
+func restore(data: Dictionary) -> void:
+ # Existing gardens with a previously recorded visit do not replay old arrivals.
+ completed=bool(data.get("completed",garden.wildlife.records.has("hedgehog")))
+ pending=not completed and (bool(data.get("pending",false)) or garden.wildlife.records.has("hedgehog"))
+
+func _can_begin() -> bool:
+ return garden.is_visible_in_tree() and not garden.guide.visible and not garden.tool_wheel.visible and not garden.field_book.visible and not garden.dev_console.opened
+
+func _begin() -> void:
+ if active or completed or not is_instance_valid(arthur):return
+ for clip in TALK_CLIPS:
+  if not arthur.animation_player.has_animation(clip):
+   push_error("Arthur is missing the talking animation: "+clip)
+   pending=false
+   return
+ active=true
+ pending=false
+ paused=false
+ phase="approach"
+ phase_time=0.0
+ garden._clear_use()
+ garden.player.velocity=Vector3.ZERO
+ garden.cursor.clear()
+ garden.aiming=false
+ previous_mouse_mode=Input.mouse_mode
+ Input.mouse_mode=Input.MOUSE_MODE_HIDDEN
+ tool_visible=garden.floating_tool.visible
+ tool_processing=garden.floating_tool.is_processing()
+ garden.floating_tool.hide()
+ garden.floating_tool.set_process(false)
+ hidden_layers.clear()
+ for layer in garden.find_children("*","CanvasLayer",true,false):
+  if layer==ui:continue
+  hidden_layers.append({"node":layer,"visible":layer.visible})
+  layer.hide()
+ frozen_actors.clear()
+ for actor in garden.get_children():
+  if actor is CharacterBody3D:
+   frozen_actors.append({"node":actor,"physics":actor.is_physics_processing()})
+   actor.set_physics_process(false)
+ paused_audio.clear()
+ for audio in garden.find_children("*","AudioStreamPlayer3D",true,false):
+  paused_audio.append({"node":audio,"paused":audio.stream_paused})
+  audio.stream_paused=true
+ garden.ambience.dialogue_duck=0.3
+ var player: AnimationPlayer=arthur.animation_player
+ previous_animation=player.current_animation
+ previous_animation_position=player.current_animation_position
+ previous_animation_speed=player.speed_scale
+ player.speed_scale=1.0
+ player.play("Happy_Idle",0.25)
+ return_transform=garden.camera.global_transform
+ camera.global_transform=return_transform
+ camera.environment=garden.camera.environment
+ var forward: Vector3=arthur.visual.global_basis.z.normalized()
+ forward.y=0.0
+ forward=forward.normalized()
+ var focus:=arthur.global_position+Vector3.UP*1.12
+ # Frame Arthur left of centre, keeping room for a readable speech bubble.
+ var screen_right:=Vector3.UP.cross(forward).normalized()
+ var at:=focus+forward*2.25+Vector3.UP*0.03
+ var target:=focus+screen_right*0.32
+ portrait_transform=Transform3D(Basis.looking_at(target-at,Vector3.UP),at)
+ camera.make_current()
+ played_clips.clear()
+ bubble.hide()
+ pause_label.hide()
+ ui.show()
+
+func _play_talk() -> void:
+ var clip: String=TALK_CLIPS[clip_index]
+ arthur.animation_player.play(clip,0.3)
+ arthur.animation_player.advance(0.0)
+ clip_time=0.0
+ if not played_clips.has(clip):played_clips.append(clip)
+
+func subtitle_at(seconds: float) -> String:
+ for cue in CAPTIONS:
+  if seconds>=float(cue.start) and seconds<float(cue.end):return cue.text
+ return ""
+
+func _process(delta: float) -> void:
+ if not active:
+  bubble.hide()
+  pause_label.hide()
+  ui.hide()
+  if pending and _can_begin():_begin()
+  return
+ if paused:return
+ phase_time+=delta
+ match phase:
+  "approach":
+   camera.global_transform=return_transform.interpolate_with(portrait_transform,smoothstep(0.0,CAMERA_SECONDS,phase_time))
+   arthur.animation_player.advance(delta)
+   if phase_time>=CAMERA_SECONDS:
+    phase="talk"
+    phase_time=0.0
+    clip_index=0
+    _play_talk()
+    voice.play()
+  "talk":
+   clip_time+=delta
+   var duration: float=minf(6.0,arthur.animation_player.get_animation(TALK_CLIPS[clip_index]).length)
+   if clip_time>=duration:
+    clip_index=(clip_index+1)%TALK_CLIPS.size()
+    _play_talk()
+   arthur.animation_player.advance(delta)
+   var seconds:=maxf(0.0,voice.get_playback_position()+AudioServer.get_time_since_last_mix()-AudioServer.get_output_latency())
+   caption.text=subtitle_at(seconds)
+   var face:=camera.unproject_position(arthur.global_position+Vector3.UP*1.35)
+   var viewport:=get_viewport().get_visible_rect().size
+   bubble.position=Vector2(clampf(face.x+140.0,32.0,viewport.x-452.0),clampf(face.y+20.0,40.0,viewport.y-240.0))
+   bubble.visible=voice.playing and not caption.text.is_empty()
+  "return":
+   arthur.animation_player.advance(delta)
+   camera.global_transform=portrait_transform.interpolate_with(return_transform,smoothstep(0.0,CAMERA_SECONDS,phase_time))
+   if phase_time>=CAMERA_SECONDS:_finish()
+
+func _begin_return() -> void:
+ if not active or phase=="return":return
+ completed=true
+ pending=false
+ phase="return"
+ phase_time=0.0
+ bubble.hide()
+ arthur.animation_player.play("Happy_Idle",0.3)
+
+func set_paused(value: bool) -> void:
+ if not active:return
+ paused=value
+ voice.stream_paused=value
+ pause_label.visible=value
+
+func _input(event: InputEvent) -> void:
+ if not active:return
+ if event.is_action_pressed("ui_cancel") or event.is_action_pressed("pad_guide"):
+  set_paused(not paused)
+ get_viewport().set_input_as_handled()
+
+func _finish() -> void:
+ voice.stop()
+ voice.stream_paused=false
+ bubble.hide()
+ caption.text=""
+ pause_label.hide()
+ ui.hide()
+ garden.camera.global_transform=return_transform
+ garden.camera.make_current()
+ for entry in hidden_layers:
+  if is_instance_valid(entry.node):entry.node.visible=entry.visible
+ for entry in frozen_actors:
+  if is_instance_valid(entry.node):entry.node.set_physics_process(entry.physics)
+ for entry in paused_audio:
+  if is_instance_valid(entry.node):entry.node.stream_paused=entry.paused
+ var player: AnimationPlayer=arthur.animation_player
+ if not previous_animation.is_empty() and player.has_animation(previous_animation):
+  player.play(previous_animation,0.25)
+  player.seek(previous_animation_position,true)
+ player.speed_scale=previous_animation_speed
+ garden.floating_tool.visible=tool_visible
+ garden.floating_tool.set_process(tool_processing)
+ garden.ambience.dialogue_duck=1.0
+ garden.aiming=true
+ Input.mouse_mode=previous_mouse_mode
+ garden._clear_use()
+ active=false
+ paused=false
+ phase="idle"
+ finished.emit()
+ var host:=garden.get_parent()
+ if host.has_method("_save_garden"):host.call_deferred("_save_garden")
+
+```
+
 ## hedgehog_npc.gd
 
 ```gd
@@ -3060,6 +3389,8 @@ extends Node3D
 const RESOLUTION := 12
 const WATER_LEVEL := 0.012
 const BASE_LEVEL := -0.95
+const MAX_MEADOW_HEIGHT := 0.18
+const HEIGHT_PROFILE_VERSION := 2
 var garden: Node3D
 signal sculpted
 var original_heights: Image
@@ -3100,9 +3431,9 @@ func _sculpt_meadow() -> void:
    # A smooth level join to the surrounding meadow, with gently rolling ground throughout.
    var edge := smoothstep(0.0, 2.0, minf(half.x-absf(p.x), half.y-absf(p.y)))
    var working_plot := lerpf(0.22, 1.0, smoothstep(2.0, 5.0, p.length()))
-   var rolling := 0.32 + noise.get_noise_2dv(p)*0.65
-   rolling += 0.07*sin(p.x*0.75)*cos(p.y*0.65)
-   heights.set_pixel(x,z,Color(maxf(0.0,rolling)*edge*working_plot,0,0))
+   var rolling := 0.10 + noise.get_noise_2dv(p)*0.18
+   rolling += 0.025*sin(p.x*0.75)*cos(p.y*0.65)
+   heights.set_pixel(x,z,Color(clampf(rolling,0.0,MAX_MEADOW_HEIGHT)*edge*working_plot,0,0))
 
 func _sculpt_pond() -> void:
  var banks: Array[PackedVector2Array] = []
@@ -3277,7 +3608,7 @@ func _rebuild_samples(rect: Rect2i) -> void:
  sculpted.emit()
 
 func _write_height(x: int, z: int, value: float) -> void:
- value=clampf(value,BASE_LEVEL+0.12,1.5)
+ value=clampf(value,BASE_LEVEL+0.12,MAX_MEADOW_HEIGHT)
  heights.set_pixel(x,z,Color(value,0,0))
  var index:=z*samples.x+x
  if absf(value-original_heights.get_pixel(x,z).r)<0.00001:edited.erase(index)
@@ -3306,14 +3637,11 @@ func sculpt(cell: Vector2i, mode: int) -> bool:
  var at: Vector3=garden.cell_center(cell)
  var center:=Vector2(at.x,at.z)
  var rect:=_sample_rect(center,radius)
- var sample: Vector2i=Vector2i(((center-garden.grid_min)/spacing).round()).clamp(Vector2i.ZERO,samples-Vector2i.ONE)
- var baseline: float=original_heights.get_pixel(sample.x,sample.y).r
+ var baseline:=0.0 # Thump always sets the entire selected tile to garden zero.
  # Integer bounds include every shared edge and corner of the selected tile.
  var tile_steps:=roundi(float(garden.MICRO_SIZE)/spacing)
  var tile_low:=cell*tile_steps
  var tile_high:=tile_low+Vector2i.ONE*tile_steps
- if mode==3 and (tile_low.x==0 or tile_low.y==0 or tile_high.x==samples.x-1 or tile_high.y==samples.y-1):
-  baseline=0.0 # Preserve the level join to the surrounding landscape.
  var bottom:=maxf(BASE_LEVEL+0.12,minf(-0.18,at.y-0.18))
  for z in range(rect.position.y,rect.end.y):
   for x in range(rect.position.x,rect.end.x):
@@ -3369,7 +3697,7 @@ func save_deformation() -> Dictionary:
  for index in edited:values.append([index,edited[index]])
  var holes:=[]
  for cell in seed_holes:holes.append([cell.x,cell.y])
- return {"samples":[samples.x,samples.y],"heights":values,"seed_holes":holes}
+ return {"profile_version":HEIGHT_PROFILE_VERSION,"samples":[samples.x,samples.y],"heights":values,"seed_holes":holes}
 
 func restore_deformation(data: Dictionary) -> void:
  var dimensions=data.get("samples",[])
@@ -3383,6 +3711,8 @@ func restore_deformation(data: Dictionary) -> void:
   if index<0 or index>=samples.x*samples.y or not is_finite(height):continue
   var cell:=Vector2i(index%samples.x,index/samples.x)
   if cell.x==0 or cell.y==0 or cell.x==samples.x-1 or cell.y==samples.y-1:continue
+  # Older positive edits used the much taller meadow. Preserve excavations.
+  if int(data.get("profile_version",1))<HEIGHT_PROFILE_VERSION and height>0.0:height*=0.35
   _write_height(cell.x,cell.y,height)
   var area:=Rect2i(cell,Vector2i.ONE)
   changed=area if changed.size==Vector2i.ZERO else changed.merge(area)
@@ -4191,7 +4521,8 @@ func _begin_garden(fresh: bool) -> void:
 	interface.hide()
 	ambience.update_mix(0,rain_strength,1,true)
 	garden.show()
-	for layer in garden.find_children("*","CanvasLayer",true,false): layer.show()
+	for layer in garden.find_children("*","CanvasLayer",true,false):
+		if layer!=garden.hedgehog_intro.ui:layer.show()
 	garden.process_mode = Node.PROCESS_MODE_INHERIT
 	garden.camera.make_current()
 	garden._set_guide(false)
@@ -4228,7 +4559,7 @@ func _save_garden() -> bool:
 	var data := {"version":1,"terrain":terrain,"crops":crops,"harvested":garden.harvested,
 		"player":[garden.player.cell.x,garden.player.cell.y],"player_position":[garden.player.position.x,garden.player.position.z],"elapsed":garden.valley_cycle.elapsed,
 		"weather":garden.valley_cycle.weather_index,"weather_elapsed":garden.valley_cycle.weather_elapsed,
-		"deformation":garden.heightfield.save_deformation(),"wildlife":garden.wildlife.save_data(),"wetness":garden.valley_cycle.wetness,"watered":_saved_watered(),"coins":coins,"purchases":purchases}
+		"deformation":garden.heightfield.save_deformation(),"wildlife":garden.wildlife.save_data(),"hedgehog_intro":garden.hedgehog_intro.save_data(),"wetness":garden.valley_cycle.wetness,"watered":_saved_watered(),"coins":coins,"purchases":purchases}
 	var file := FileAccess.open(SAVE_PATH,FileAccess.WRITE)
 	if not file: return false
 	file.store_string(JSON.stringify(data))
@@ -4278,6 +4609,7 @@ func _restore_garden() -> void:
 	coins=maxi(0,int(data.get("coins",500)))
 	garden.wildlife.suppress_events=true
 	garden.wildlife.restore(data.get("wildlife",{}))
+	garden.hedgehog_intro.restore(data.get("hedgehog_intro",{}))
 	purchases.clear()
 	for record in data.get("purchases",[]):
 		if not record is Dictionary or not record.has_all(["id","x","z"]): continue
@@ -4349,7 +4681,8 @@ func return_from_village() -> void:
 	village.free()
 	village=null
 	garden.show()
-	for layer in garden.find_children("*","CanvasLayer",true,false): layer.show()
+	for layer in garden.find_children("*","CanvasLayer",true,false):
+		if layer!=garden.hedgehog_intro.ui:layer.show()
 	garden.process_mode=Node.PROCESS_MODE_INHERIT
 	garden.camera.make_current()
 	garden._set_guide(false)
@@ -5986,6 +6319,7 @@ extends Node
 ## Original synthesized environmental loops; independent from NPC dialogue.
 var layers: Dictionary = {}
 var muted := false
+var dialogue_duck := 1.0
 var stream_level := 0.0
 
 func _ready() -> void:
@@ -6010,7 +6344,7 @@ func update_mix(delta: float, rain: float, daylight: float, paused: bool) -> voi
 		var player: AudioStreamPlayer = layers[sound]
 		player.stream_paused = paused or muted
 		if levels.has(sound):
-			var level: float = levels[sound]
+			var level: float = levels[sound]*dialogue_duck
 			player.volume_db = lerpf(player.volume_db, linear_to_db(maxf(level, 0.0001)), 1.0-exp(-delta*2.0))
 
 func thunder() -> void:
@@ -6115,7 +6449,7 @@ func _create_rain() -> void:
 func _process(delta: float) -> void:
 	if not is_instance_valid(garden):
 		return
-	var paused: bool = garden.guide.visible
+	var paused: bool = garden.guide.visible or (is_instance_valid(garden.hedgehog_intro) and garden.hedgehog_intro.active and garden.hedgehog_intro.paused)
 	rain.speed_scale = 0.0 if paused else 1.0
 	if not paused:
 		advance(delta)

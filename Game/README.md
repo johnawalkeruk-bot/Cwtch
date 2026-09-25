@@ -1,3 +1,43 @@
+# Current garden controls and terrain
+
+| Action | Keyboard / mouse | Controller |
+| --- | --- | --- |
+| Hoe | 1 | D-pad Up |
+| Seed packet | 2 | D-pad Right |
+| Watering can | 3 | D-pad Down |
+| Shovel | 4 | D-pad Left |
+| Cycle Dig / Pick / Pour / Thump | X | X / Square |
+| Put the current tool away | T | B / Circle |
+| Keep using the tool | Hold left mouse | Hold right trigger |
+| Pause | Esc / F | Start / Menu |
+| TARDIS | Ctrl+T | R3 |
+
+The radial tool menu has been replaced by direct selection. D-pad controls still
+navigate menus and the Field Guide; B/Circle still goes back while menus are open.
+Changing modes takes effect on the next stroke. Putting a tool away cancels its
+current stroke, particles and sound.
+
+Natural garden rises are capped at 18 cm, with gentler noise. Thump sets the entire
+selected micro-tile, including shared edges and corners, to Y=0, blending outside
+its boundary. Saved positive edits from the previous height profile are softened
+once on load; negative excavations keep their depth. New saves record the height
+profile version to avoid repeated changes on later loads.
+
+## Arthur's first-hedgehog conversation
+
+A hedgehog's first arrival triggers a face-on portrait of Arthur, alternating his
+Talking_1 and Talking_2 animations while Arthur_Hedgehogs.mp3 plays. Speech-bubble
+subtitles were generated locally from the recording and packaged with the game.
+The bubble stays hidden during ordinary play and the camera approach, appears only
+for spoken captions, and hides again before the camera returns. Garden and village
+transitions no longer reveal this private dialogue layer.
+
+The scene waits for menus to close; Esc/Start pauses it. After the recording ends,
+the camera and controls return. Completion persists per garden. Older saves with
+an existing hedgehog visit do not replay past arrivals. Interrupted conversations
+are saved as pending and restart after loading. No speech-recognition runtime or
+internet connection is required to play the scene.
+
 ## Village landscape and shared spirit cursor
 
 The village now has a blended gravel lane, meadow verges, grass tufts, woodland,
@@ -30,16 +70,16 @@ You can glide while working. Releasing finishes the current stroke without
 starting another; opening a menu or the console cancels use and requires a
 fresh press. Put away stows all models and disables tool actions.
 
-Choose Shovel in the Tab / Y tool wheel, then choose one of its four modes.
-Q/E or LB/RB cycles modes while equipped; a stroke already underway finishes
-in its original mode. Keys 1–4 equip hoe, grass seeds, watering can and shovel.
+Choose Shovel with 4 or D-pad Left. X / Square cycles modes while equipped;
+a stroke already underway finishes in its original mode. Keys 1–4 equip hoe,
+grass seeds, watering can and shovel.
 
 - Dig: scoop a sloped hollow. Water fills the below-ground depression; repeated
   scoops deepen it to a safe floor above the diorama base.
 - Pick: make a small, dry planting hole. Grass seeds planted there close the
   hole and grow the existing grass ground type.
 - Pour: restore the local original ground height and fill the hollow with dirt.
-- Thump: flatten the entire selected tile, including all edges and corners, to its original central elevation (zero at the garden boundary),
+- Thump: flatten the entire selected tile, including all edges and corners, to height zero,
   with a smooth transition at its edge. Holding repeats the levelling action.
 
 Each mode has a distinct procedural model animation and its matching sound.
@@ -211,7 +251,9 @@ textures were rendered and inspected in the garden.
 
 ---
 
-# CWTCH — tool wheel and widescreen garden
+# Earlier milestone notes (controls superseded by the table above)
+
+## Tool wheel and widescreen garden
 
 The game uses a 1280 x 720 (16:9) canvas and preserves that aspect ratio when
 resized. The interface uses rounded forest-green panels, warm gold accents and

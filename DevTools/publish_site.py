@@ -1,5 +1,5 @@
 """Publish only Website/ to CWTCH's GitHub Pages branch using GitHub CLI."""
-import base64,json,os,subprocess
+import base64,json,os,subprocess,sys
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 GH=ROOT/'DevTools/gh/bin/gh.exe'
@@ -16,9 +16,10 @@ def api(endpoint,method='GET',body=None,allow_missing=False):
   if allow_missing and '(HTTP 404)' in result.stderr:return None
   raise RuntimeError(result.stderr)
  return json.loads(result.stdout) if result.stdout.strip() else None
+subprocess.run([sys.executable,str(ROOT/'DevTools/build_changelog.py')],check=True)
 reference=api(REPO+'/git/ref/heads/gh-pages',allow_missing=True)
 entries=[]
-for name in ['index.html','style.css','release.js','.nojekyll','favicon.ico','assets/logo.png','assets/garden.png']:
+for name in ['index.html','changelog.html','style.css','release.js','.nojekyll','favicon.ico','assets/logo.png','assets/garden.png']:
  file=ROOT/'Website'/name
  blob=api(REPO+'/git/blobs','POST',{'content':base64.b64encode(file.read_bytes()).decode(),'encoding':'base64'})
  entries.append({'path':name,'mode':'100644','type':'blob','sha':blob['sha']})

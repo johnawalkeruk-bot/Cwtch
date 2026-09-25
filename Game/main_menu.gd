@@ -316,7 +316,8 @@ func _begin_garden(fresh: bool) -> void:
 	interface.hide()
 	ambience.update_mix(0,rain_strength,1,true)
 	garden.show()
-	for layer in garden.find_children("*","CanvasLayer",true,false): layer.show()
+	for layer in garden.find_children("*","CanvasLayer",true,false):
+		if layer!=garden.hedgehog_intro.ui:layer.show()
 	garden.process_mode = Node.PROCESS_MODE_INHERIT
 	garden.camera.make_current()
 	garden._set_guide(false)
@@ -475,7 +476,8 @@ func return_from_village() -> void:
 	village.free()
 	village=null
 	garden.show()
-	for layer in garden.find_children("*","CanvasLayer",true,false): layer.show()
+	for layer in garden.find_children("*","CanvasLayer",true,false):
+		if layer!=garden.hedgehog_intro.ui:layer.show()
 	garden.process_mode=Node.PROCESS_MODE_INHERIT
 	garden.camera.make_current()
 	garden._set_guide(false)

@@ -85,6 +85,8 @@ func setup(world: Node3D) -> void:
  pause_label.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
  pause_label.add_theme_color_override("font_shadow_color",Color.BLACK)
  pause_label.add_theme_constant_override("shadow_offset_y",2)
+ bubble.hide()
+ pause_label.hide()
  ui.hide()
  garden.wildlife.animal_event.connect(_animal_event)
 
@@ -178,6 +180,9 @@ func subtitle_at(seconds: float) -> String:
 
 func _process(delta: float) -> void:
  if not active:
+  bubble.hide()
+  pause_label.hide()
+  ui.hide()
   if pending and _can_begin():_begin()
   return
  if paused:return
@@ -201,10 +206,10 @@ func _process(delta: float) -> void:
    arthur.animation_player.advance(delta)
    var seconds:=maxf(0.0,voice.get_playback_position()+AudioServer.get_time_since_last_mix()-AudioServer.get_output_latency())
    caption.text=subtitle_at(seconds)
-   bubble.visible=not caption.text.is_empty()
    var face:=camera.unproject_position(arthur.global_position+Vector3.UP*1.35)
    var viewport:=get_viewport().get_visible_rect().size
    bubble.position=Vector2(clampf(face.x+140.0,32.0,viewport.x-452.0),clampf(face.y+20.0,40.0,viewport.y-240.0))
+   bubble.visible=voice.playing and not caption.text.is_empty()
   "return":
    arthur.animation_player.advance(delta)
    camera.global_transform=portrait_transform.interpolate_with(return_transform,smoothstep(0.0,CAMERA_SECONDS,phase_time))
@@ -234,6 +239,9 @@ func _input(event: InputEvent) -> void:
 func _finish() -> void:
  voice.stop()
  voice.stream_paused=false
+ bubble.hide()
+ caption.text=""
+ pause_label.hide()
  ui.hide()
  garden.camera.global_transform=return_transform
  garden.camera.make_current()
