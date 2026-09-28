@@ -9,11 +9,11 @@ static func panel(color: Color = Color(0.06,0.13,0.12,0.94)) -> StyleBoxFlat:
 	style.bg_color = color
 	style.border_color = Color(0.76,0.65,0.42,0.30)
 	style.set_border_width_all(1)
-	style.set_corner_radius_all(16)
+	style.set_corner_radius_all(12)
 	style.content_margin_left = 24
 	style.content_margin_right = 24
-	style.content_margin_top = 16
-	style.content_margin_bottom = 16
+	style.content_margin_top = 20
+	style.content_margin_bottom = 20
 	style.shadow_color = Color(0,0.025,0.02,0.22)
 	style.shadow_size = 10
 	style.shadow_offset = Vector2(0,4)
@@ -25,12 +25,14 @@ static func make() -> Theme:
 	font.font_names = PackedStringArray(["Segoe UI","Arial"])
 	theme.default_font = font
 	theme.default_font_size = 17
+	theme.set_constant("separation","VBoxContainer",10)
+	theme.set_constant("separation","HBoxContainer",12)
 	theme.set_color("font_color","Label",CREAM)
 	theme.set_stylebox("panel","PanelContainer",panel())
 	for type in ["Button","OptionButton"]:
-		theme.set_stylebox("normal",type,panel(Color("213c35")))
-		theme.set_stylebox("hover",type,panel(Color("355347")))
-		theme.set_stylebox("pressed",type,panel(Color("132b26")))
+		theme.set_stylebox("normal",type,button_style(Color("213c35")))
+		theme.set_stylebox("hover",type,button_style(Color("355347")))
+		theme.set_stylebox("pressed",type,button_style(Color("132b26")))
 		var focus := panel(Color(0,0,0,0))
 		focus.border_color = GOLD
 		focus.set_border_width_all(2)
@@ -41,3 +43,19 @@ static func make() -> Theme:
 	theme.set_stylebox("panel","PopupMenu",panel())
 	theme.set_color("font_color","PopupMenu",CREAM)
 	return theme
+
+static func button_style(color: Color) -> StyleBoxFlat:
+	var style := panel(color)
+	style.set_corner_radius_all(8)
+	style.content_margin_top=12
+	style.content_margin_bottom=12
+	style.shadow_size=0
+	return style
+
+static func compact_card() -> StyleBoxFlat:
+	var style := panel()
+	style.content_margin_left=18
+	style.content_margin_right=18
+	style.content_margin_top=12
+	style.content_margin_bottom=12
+	return style

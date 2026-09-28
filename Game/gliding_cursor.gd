@@ -14,6 +14,9 @@ var initialized := false
 var surface_height: Callable
 var source_vertices := PackedVector3Array()
 var source_colors := PackedColorArray()
+var top_color := Color("f4c568")
+var side_color := Color("369eea")
+var bottom_color := Color("2465ba")
 
 func _ready() -> void:
 	ring = MeshInstance3D.new()
@@ -51,7 +54,7 @@ func _arrow_ring() -> ArrayMesh:
 			Vector3(0.09, 0.025, 0.48), Vector3(0.0, 0.025, 0.30)]
 		for p in top:
 			vertices.append(turn * p)
-			colors.append(Color("f4c568"))
+			colors.append(top_color)
 		for edge in range(3):
 			var a := top[edge]
 			var b := top[(edge + 1) % 3]
@@ -59,10 +62,10 @@ func _arrow_ring() -> ArrayMesh:
 			var d := b - Vector3.UP * 0.065
 			for p in [a, c, b, b, c, d]:
 				vertices.append(turn * p)
-				colors.append(Color("369eea"))
+				colors.append(side_color)
 		for p in top:
 			vertices.append(turn * (p - Vector3.UP * 0.065))
-			colors.append(Color("2465ba"))
+			colors.append(bottom_color)
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = vertices

@@ -679,6 +679,8 @@ extends Node
 ## Common mapped controllers: left stick moves, right stick aims.
 signal mode_changed
 signal disconnected
+signal players_changed
+var players: Array[int] = []
 var using_pad := false
 var device := -1
 
@@ -686,28 +688,33 @@ func _ready() -> void:
 	for entry in [["pad_left",JOY_AXIS_LEFT_X,-1.0],["pad_right",JOY_AXIS_LEFT_X,1.0],["pad_up",JOY_AXIS_LEFT_Y,-1.0],["pad_down",JOY_AXIS_LEFT_Y,1.0],["look_left",JOY_AXIS_RIGHT_X,-1.0],["look_right",JOY_AXIS_RIGHT_X,1.0],["look_up",JOY_AXIS_RIGHT_Y,-1.0],["look_down",JOY_AXIS_RIGHT_Y,1.0],["pad_use",JOY_AXIS_TRIGGER_RIGHT,1.0]]:
 		InputMap.add_action(entry[0],0.22)
 		var event := InputEventJoypadMotion.new()
+		event.device=-1
 		event.axis=entry[1]
 		event.axis_value=entry[2]
 		InputMap.action_add_event(entry[0],event)
 	for entry in [["pad_guide",JOY_BUTTON_START],["pad_tardis",JOY_BUTTON_RIGHT_STICK]]:
 		InputMap.add_action(entry[0])
 		var event := InputEventJoypadButton.new()
+		event.device=-1
 		event.button_index=entry[1]
 		InputMap.action_add_event(entry[0],event)
 	for entry in [["ui_accept",JOY_BUTTON_A],["ui_cancel",JOY_BUTTON_B],["ui_left",JOY_BUTTON_DPAD_LEFT],["ui_right",JOY_BUTTON_DPAD_RIGHT],["ui_up",JOY_BUTTON_DPAD_UP],["ui_down",JOY_BUTTON_DPAD_DOWN]]:
 		var event := InputEventJoypadButton.new()
+		event.device=-1
 		event.button_index=entry[1]
 		if not InputMap.action_has_event(entry[0],event): InputMap.action_add_event(entry[0],event)
 	for entry in [["ui_left",JOY_AXIS_LEFT_X,-1.0],["ui_right",JOY_AXIS_LEFT_X,1.0],["ui_up",JOY_AXIS_LEFT_Y,-1.0],["ui_down",JOY_AXIS_LEFT_Y,1.0]]:
 		var event := InputEventJoypadMotion.new()
+		event.device=-1
 		event.axis=entry[1]
 		event.axis_value=entry[2]
 		if not InputMap.action_has_event(entry[0],event): InputMap.action_add_event(entry[0],event)
 	Input.joy_connection_changed.connect(_connection)
+	_assign_devices(Input.get_connected_joypads())
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventJoypadButton and event.pressed or event is InputEventJoypadMotion and absf(event.axis_value)>0.25:
-		device=event.device
+		device=primary_device()
 		_set_mode(true)
 	elif event is InputEventKey or event is InputEventMouseButton or event is InputEventMouseMotion and event.relative.length()>2.0:
 		_set_mode(false)
@@ -718,16 +725,41 @@ func _set_mode(pad: bool) -> void:
 	mode_changed.emit()
 
 func _connection(id: int, connected: bool) -> void:
-	if not connected and id==device:
-		device=-1
-		_set_mode(false)
+	var was_playing := id in players.slice(0,2)
+	_assign_devices(Input.get_connected_joypads())
+	if not connected and was_playing:
+		_set_mode(not players.is_empty())
 		disconnected.emit()
 
-func movement() -> Vector2:
-	return Input.get_vector("pad_left","pad_right","pad_up","pad_down",0.22)
+func _assign_devices(connected: Array[int]) -> void:
+	var previous := players.duplicate()
+	players.assign(players.filter(func(id): return id in connected))
+	for id in connected:
+		if id not in players: players.append(id)
+	device=primary_device()
+	if players!=previous: players_changed.emit()
 
-func look() -> Vector2:
-	return Input.get_vector("look_left","look_right","look_up","look_down",0.22)
+func primary_device() -> int:
+	return players[0] if not players.is_empty() else -1
+
+func secondary_device() -> int:
+	return players[1] if players.size()>1 else -1
+
+func _stick(id: int, x: int, y: int) -> Vector2:
+	if id<0: return Vector2.ZERO
+	var value := Vector2(Input.get_joy_axis(id,x),Input.get_joy_axis(id,y))
+	var length := value.length()
+	return Vector2.ZERO if length<=0.22 else value.normalized()*minf(1.0,(length-0.22)/0.78)
+
+func movement(id: int=-2) -> Vector2:
+	return _stick(primary_device() if id==-2 else id,JOY_AXIS_LEFT_X,JOY_AXIS_LEFT_Y)
+
+func look(id: int=-2) -> Vector2:
+	return _stick(primary_device() if id==-2 else id,JOY_AXIS_RIGHT_X,JOY_AXIS_RIGHT_Y)
+
+func use_held(id: int=-2) -> bool:
+	if id==-2: id=primary_device()
+	return id>=0 and Input.get_joy_axis(id,JOY_AXIS_TRIGGER_RIGHT)>0.25
 
 func focus_first(parent) -> void:
 	if not using_pad or not is_instance_valid(parent): return
@@ -735,6 +767,180 @@ func focus_first(parent) -> void:
 		if control.is_visible_in_tree() and control.focus_mode==Control.FOCUS_ALL:
 			control.grab_focus()
 			return
+
+```
+
+## coop_spirit.gd
+
+```gd
+extends Node3D
+const SelectionTarget=preload("res://selection_target.gd")
+## A second actor, sharing terrain and simulation but never input or tool state.
+var world: Node3D
+var village := false
+var enabled := false
+var release_required := true
+var player: CharacterBody3D
+var cursor: Node3D
+var camera: Camera3D
+var floating_tool: Node3D
+var camera_yaw := 0.0
+var camera_pitch := PI/4.0
+var message := "Welcome, player two."
+var message_time := 0.0
+var selected_shop := -1
+var guide: Control:
+	get: return world.guide
+var tool_wheel: Control:
+	get: return world.tool_wheel
+var dev_console: CanvasLayer:
+	get: return world.dev_console
+
+func setup(scene: Node3D, in_village: bool) -> void:
+	world=scene
+	village=in_village
+	name="PlayerTwo"
+	if village:
+		player=CharacterBody3D.new()
+		player.collision_layer=0
+		player.collision_mask=1
+		add_child(player)
+		var shape := CollisionShape3D.new()
+		var sphere := SphereShape3D.new()
+		sphere.radius=0.28
+		shape.shape=sphere
+		shape.position.y=0.4
+		player.add_child(shape)
+		player.position=Vector3(1,0,16)
+	else:
+		player=preload("res://third_person_player.gd").new()
+		add_child(player)
+		player.setup(world)
+		place_near_player_one()
+	cursor=preload("res://gliding_cursor.gd").new()
+	cursor.top_color=Color("fff02b")
+	cursor.side_color=Color("ef181b")
+	cursor.bottom_color=Color("c90f16")
+	add_child(cursor)
+	cursor.surface_height=func(point: Vector2) -> float: return 0.0 if village else world.heightfield.surface_at(point)
+	camera=Camera3D.new()
+	camera.fov=world.camera.fov
+	camera.near=world.camera.near
+	camera.far=world.camera.far
+	add_child(camera)
+	camera.current=false
+	if not village:
+		floating_tool=preload("res://floating_tool.gd").new()
+		add_child(floating_tool)
+		floating_tool.setup(self)
+		floating_tool.effect_applied.connect(_apply_tool)
+	set_enabled(false)
+
+func place_near_player_one() -> void:
+	for offset in [Vector3(0.9,0,0),Vector3(-0.9,0,0),Vector3(0,0,0.9),Vector3.ZERO]:
+		var point: Vector3=world.player.position+offset
+		if player._allowed(point):
+			player.restore_position(point)
+			return
+
+func set_enabled(value: bool) -> void:
+	enabled=value
+	visible=value
+	clear_use()
+	if is_instance_valid(floating_tool):floating_tool.process_mode=Node.PROCESS_MODE_INHERIT if value else Node.PROCESS_MODE_DISABLED
+
+func clear_use() -> void:
+	release_required=true
+	if is_instance_valid(player):player.velocity=Vector3.ZERO
+	if is_instance_valid(floating_tool):floating_tool.cancel_use()
+
+func blocked() -> bool:
+	if not enabled:return true
+	if village:return world.paused or world.current_shop>=0
+	return world.guide.visible or world.field_book.visible or world.dev_console.opened or world.hedgehog_intro.active
+
+func cell_center(cell: Vector2i) -> Vector3:
+	return world.cell_center(cell)
+
+func _apply_tool(cell: Vector2i, tool: int, mode: int) -> void:
+	if blocked():return
+	message=world._tool_result(cell,tool,mode)
+	message_time=3.2
+
+func handle_input(event: InputEvent) -> void:
+	if blocked() or not event is InputEventJoypadButton or not event.pressed:return
+	if village:
+		if event.button_index==JOY_BUTTON_A and selected_shop>=0:world.enter_shop(selected_shop)
+		return
+	var tool_map := {JOY_BUTTON_DPAD_UP:0,JOY_BUTTON_DPAD_RIGHT:1,JOY_BUTTON_DPAD_DOWN:2,JOY_BUTTON_DPAD_LEFT:3,JOY_BUTTON_B:4}
+	if tool_map.has(event.button_index):
+		clear_use()
+		floating_tool.equip(tool_map[event.button_index])
+	elif event.button_index==JOY_BUTTON_X and floating_tool.selected==3:
+		floating_tool.shovel_mode=posmod(floating_tool.shovel_mode+1,4)
+	elif event.button_index==JOY_BUTTON_RIGHT_STICK:world._trigger_tardis()
+
+func _physics_process(delta: float) -> void:
+	if not enabled:return
+	if blocked():
+		clear_use()
+		cursor.clear()
+		if is_instance_valid(floating_tool):floating_tool.hide()
+		return
+	message_time=maxf(0,message_time-delta)
+	var id: int=ControllerInput.secondary_device()
+	var use := ControllerInput.use_held(id)
+	if not use:release_required=false
+	var look := ControllerInput.look(id)
+	camera_yaw-=look.x*1.8*delta
+	camera_pitch=clampf(camera_pitch+look.y*1.5*delta,deg_to_rad(-80),deg_to_rad(80))
+	if village:
+		var move := ControllerInput.movement(id)
+		player.velocity=Basis(Vector3.UP,camera_yaw)*Vector3(move.x,0,move.y)*3.0
+		player.move_and_slide()
+		player.position.x=clampf(player.position.x,-12,12)
+		player.position.z=clampf(player.position.z,-24,19)
+		player.position.y=0
+	else:player.advance(delta,ControllerInput.movement(id),camera_yaw)
+	preload("res://diorama_camera.gd").follow(camera,player.position,camera_yaw,camera_pitch)
+	var origin := camera.global_position
+	var query := PhysicsRayQueryParameters3D.create(origin,origin-camera.global_basis.z*(24.0 if village else 100.0),17 if village else 3)
+	query.collide_with_areas=true
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	if village:
+		selected_shop=int(hit.collider.get_meta("shop",-1)) if not hit.is_empty() else -1
+		cursor.follow_feet(player.position,Vector2.ONE*0.7,delta)
+		if selected_shop>=0:
+			cursor.follow_object(Vector3(-7 if selected_shop%2==0 else 7,0,-10 if selected_shop<2 else 4),Vector2.ONE*6.4,delta)
+			if use and not release_required:
+				release_required=true
+				world.enter_shop(selected_shop)
+		return
+	var target: Area3D=null
+	if not floating_tool.busy and not hit.is_empty() and hit.collider is SelectionTarget:target=hit.collider
+	if floating_tool.busy:cursor.follow_object(floating_tool.target_point,Vector2.ONE*world.MICRO_SIZE,delta)
+	elif is_instance_valid(target):cursor.follow_object(world.to_local(target.subject.global_position),target.selection_size(),delta)
+	else:cursor.follow_feet(player.position,Vector2.ONE*world.MICRO_SIZE,delta)
+	if use and not release_required and not floating_tool.busy:
+		if is_instance_valid(target) and not world.contains_cell(target.crop_cell):
+			message=target.subject.get_meta("inspection_text",target.label+" is enjoying the valley.")
+			message_time=3.2
+		elif not world.blocked_cells.has(player.cell):
+			floating_tool.use_at(target.crop_cell if is_instance_valid(target) else player.cell)
+
+func save_data() -> Dictionary:
+	return {"position":[player.position.x,player.position.z],"tool":floating_tool.selected,"mode":floating_tool.shovel_mode,"yaw":camera_yaw,"pitch":camera_pitch}
+
+func restore(data: Dictionary) -> void:
+	place_near_player_one()
+	var point=data.get("position",[])
+	if point is Array and point.size()==2:player.restore_position(Vector3(float(point[0]),0,float(point[1])))
+	floating_tool.equip(clampi(int(data.get("tool",0)),0,4))
+	floating_tool.shovel_mode=clampi(int(data.get("mode",0)),0,3)
+	camera_yaw=float(data.get("yaw",0))
+	camera_pitch=clampf(float(data.get("pitch",PI/4)),deg_to_rad(-80),deg_to_rad(80))
+	if not is_finite(camera_yaw):camera_yaw=0
+	if not is_finite(camera_pitch):camera_pitch=PI/4
 
 ```
 
@@ -1697,6 +1903,7 @@ func use_at(cell: Vector2i) -> bool:
 func _process(delta: float) -> void:
  if not is_instance_valid(garden):return
  var paused: bool=garden.guide.visible or garden.tool_wheel.visible or (is_instance_valid(garden.dev_console) and garden.dev_console.opened)
+ if garden.has_method("blocked"):paused=paused or garden.blocked()
  particles.speed_scale=0.0 if paused else 1.0
  audio.stream_paused=paused
  visible=not paused
@@ -1791,6 +1998,7 @@ var dev_console: CanvasLayer
 var tardis: Node3D
 var animal_notices: CanvasLayer
 var wildlife: Node
+var local_coop: Node
 var hedgehog_intro: Node3D
 var additional_visitors: Array[Node3D] = []
 var background_meadow: Node3D
@@ -1919,6 +2127,9 @@ func _ready() -> void:
 	hedgehog_intro=preload("res://hedgehog_intro.gd").new()
 	add_child(hedgehog_intro)
 	hedgehog_intro.setup(self)
+	local_coop=preload("res://local_coop.gd").new()
+	add_child(local_coop)
+	local_coop.setup(self)
 	_refresh_ui()
 
 func _create_chunks() -> void:
@@ -1987,6 +2198,7 @@ func _cycle_shovel(direction: int) -> void:
 	_refresh_ui()
 
 func _unhandled_input(event: InputEvent) -> void:
+	if is_instance_valid(local_coop) and local_coop.route_input(event):return
 	if is_instance_valid(hedgehog_intro) and hedgehog_intro.active:return
 	if is_instance_valid(dev_console) and dev_console.opened:return
 	if field_book.visible:return
@@ -2068,7 +2280,8 @@ func _notification(what: int) -> void:
 
 func _physics_process(delta: float) -> void:
 	if is_instance_valid(hedgehog_intro) and hedgehog_intro.active:return
-	if release_required and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and not Input.is_action_pressed("pad_use"):release_required=false
+	if release_required and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and not ControllerInput.use_held():release_required=false
+	trigger_held=ControllerInput.use_held() and not release_required
 	repeat_wait=maxf(0.0,repeat_wait-delta)
 	if is_instance_valid(dev_console) and dev_console.opened:
 		action_pending=false
@@ -2104,7 +2317,7 @@ func _physics_process(delta: float) -> void:
 		elif contains_cell(target):
 			if is_instance_valid(selected_target): target=selected_target.crop_cell
 			if blocked_cells.has(target): message="This ground is occupied."
-			elif tool==Tool.NONE: message="Choose a tool from the wheel to tend the ground."
+			elif tool==Tool.NONE: message="Choose a tool with 1–4 or the D-pad to tend the ground."
 			else: floating_tool.use_at(target)
 		else:
 			message="Let the spirit settle, then tend this square."
@@ -2144,33 +2357,38 @@ func _act(cell: Vector2i) -> void:
 	_apply_tool(cell,tool)
 
 func _apply_tool(cell: Vector2i, active_tool: int, mode: int=-1) -> void:
-	if not contains_cell(cell) or blocked_cells.has(cell): return
+	message=_tool_result(cell,active_tool,mode)
+	_refresh_ui()
+
+func _tool_result(cell: Vector2i, active_tool: int, mode: int=-1) -> String:
+	if not contains_cell(cell) or blocked_cells.has(cell): return "This ground is occupied."
+	var result := "Choose a tool to tend the ground."
 	var terrain := get_terrain(cell)
 	match active_tool:
 		Tool.HOE:
 			if terrain in [Terrain.GRASS,Terrain.LONG_GRASS,Terrain.HARD_DIRT]:
 				_clear_old_crop(cell)
 				set_terrain(cell,Terrain.DIRT)
-				message="Fresh earth, ready for a little green."
-			else: message="Use the hoe on grass or hard earth."
+				result="Fresh earth, ready for a little green."
+			else: result="Use the hoe on grass or hard earth."
 		Tool.SEEDS:
 			if terrain==Terrain.DIRT:
 				_clear_old_crop(cell)
 				heightfield.plant_seed(cell)
 				set_terrain(cell,Terrain.GRASS)
-				message="A fresh patch of grass."
-			else: message="Scatter grass seed onto bare earth."
+				result="A fresh patch of grass."
+			else: result="Scatter grass seed onto bare earth."
 		Tool.SHOVEL:
 			var chosen: int=floating_tool.shovel_mode if mode<0 else mode
 			if heightfield.sculpt(cell,chosen):
-				message=["A hollow fills with water.","A small hole, ready for grass seed.","The hollow is filled with dirt.","The ground settles level."][chosen]
-			else:message="Leave a little room around people, plants and buildings."
+				result=["A hollow fills with water.","A small hole, ready for grass seed.","The hollow is filled with dirt.","The ground settles level."][chosen]
+			else:result="Leave a little room around people, plants and buildings."
 		Tool.WATER:
 			watered_cells[cell]=1.0
 			watered_image.set_pixel(cell.x,cell.y,Color(1,0,0))
 			watered_texture.update(watered_image)
-			message="A gentle drink for the ground."
-	_refresh_ui()
+			result="A gentle drink for the ground."
+	return result
 
 func _clear_old_crop(cell: Vector2i) -> void:
 	if crops.has(cell):
@@ -2335,6 +2553,7 @@ func _set_guide(open: bool) -> void:
 		hedgehog_intro.set_paused(open)
 		return
 	_clear_use()
+	if is_instance_valid(local_coop):local_coop.second.clear_use()
 	if is_instance_valid(dev_console) and dev_console.opened: dev_console.toggle(false)
 	if is_instance_valid(field_book) and field_book.visible: field_book.close()
 	guide.visible=open
@@ -2783,6 +3002,9 @@ var initialized := false
 var surface_height: Callable
 var source_vertices := PackedVector3Array()
 var source_colors := PackedColorArray()
+var top_color := Color("f4c568")
+var side_color := Color("369eea")
+var bottom_color := Color("2465ba")
 
 func _ready() -> void:
 	ring = MeshInstance3D.new()
@@ -2820,7 +3042,7 @@ func _arrow_ring() -> ArrayMesh:
 			Vector3(0.09, 0.025, 0.48), Vector3(0.0, 0.025, 0.30)]
 		for p in top:
 			vertices.append(turn * p)
-			colors.append(Color("f4c568"))
+			colors.append(top_color)
 		for edge in range(3):
 			var a := top[edge]
 			var b := top[(edge + 1) % 3]
@@ -2828,10 +3050,10 @@ func _arrow_ring() -> ArrayMesh:
 			var d := b - Vector3.UP * 0.065
 			for p in [a, c, b, b, c, d]:
 				vertices.append(turn * p)
-				colors.append(Color("369eea"))
+				colors.append(side_color)
 		for p in top:
 			vertices.append(turn * (p - Vector3.UP * 0.065))
-			colors.append(Color("2465ba"))
+			colors.append(bottom_color)
 	var arrays := []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = vertices
@@ -4037,6 +4259,160 @@ void fragment(){
 
 ```
 
+## local_coop.gd
+
+```gd
+extends Node
+## Two cameras render the same World3D. Simulation and saves remain shared.
+var world: Node3D
+var village := false
+var second: Node3D
+var split := false
+var rendering := false
+var layer: CanvasLayer
+var views: Array[SubViewport]=[]
+var cameras: Array[Camera3D]=[]
+var labels: Array[Label]=[]
+var notes: Array[Label]=[]
+var dots: Array[Label]=[]
+
+func setup(scene: Node3D, in_village: bool=false) -> void:
+	world=scene
+	village=in_village
+	process_priority=100
+	second=preload("res://coop_spirit.gd").new()
+	world.add_child(second)
+	second.setup(world,village)
+	layer=CanvasLayer.new()
+	layer.name="LocalSplitScreen"
+	layer.layer=-1
+	add_child(layer)
+	var row := HBoxContainer.new()
+	layer.add_child(row)
+	row.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	row.mouse_filter=Control.MOUSE_FILTER_IGNORE
+	row.add_theme_constant_override("separation",3)
+	for index in 2:
+		var container := SubViewportContainer.new()
+		container.stretch=true
+		container.size_flags_horizontal=Control.SIZE_EXPAND_FILL
+		container.mouse_filter=Control.MOUSE_FILTER_IGNORE
+		row.add_child(container)
+		var view := SubViewport.new()
+		view.world_3d=world.get_world_3d()
+		view.handle_input_locally=false
+		view.gui_disable_input=true
+		view.audio_listener_enable_3d=true
+		container.add_child(view)
+		views.append(view)
+		var cam := Camera3D.new()
+		view.add_child(cam)
+		cam.make_current()
+		cameras.append(cam)
+		var ui := CanvasLayer.new()
+		view.add_child(ui)
+		var title := Label.new()
+		ui.add_child(title)
+		title.position=Vector2(20,22)
+		title.add_theme_font_size_override("font_size",17)
+		title.add_theme_color_override("font_color",Color("f4c568") if index==0 else Color("ffd45a"))
+		title.add_theme_color_override("font_shadow_color",Color("14231f"))
+		title.add_theme_constant_override("shadow_offset_y",2)
+		labels.append(title)
+		var note := Label.new()
+		ui.add_child(note)
+		note.position=Vector2(20,105)
+		note.add_theme_font_size_override("font_size",14)
+		note.add_theme_color_override("font_shadow_color",Color.BLACK)
+		note.add_theme_constant_override("shadow_offset_y",2)
+		note.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
+		notes.append(note)
+		var dot := Label.new()
+		ui.add_child(dot)
+		dot.text="·"
+		dot.add_theme_font_size_override("font_size",24)
+		dots.append(dot)
+	layer.hide()
+	ControllerInput.players_changed.connect(_players_changed)
+	_players_changed()
+
+func _players_changed() -> void:
+	split=ControllerInput.secondary_device()>=0
+	second.set_enabled(split)
+	if not village:world._clear_use()
+	if not split:suspend_render()
+
+func suspend_render() -> void:
+	if rendering:
+		get_viewport().disable_3d=false
+		get_viewport().audio_listener_enable_3d=true
+	rendering=false
+	if is_instance_valid(layer):layer.hide()
+	for view in views:view.render_target_update_mode=SubViewport.UPDATE_DISABLED
+
+func _exit_tree() -> void:
+	suspend_render()
+
+func _process(_delta: float) -> void:
+	var fullscreen_scene: bool=world.current_shop>=0 if village else world.hedgehog_intro.active
+	var visible_split: bool=split and world.is_visible_in_tree() and not fullscreen_scene
+	if not visible_split:
+		suspend_render()
+	else:
+		rendering=true
+		get_viewport().disable_3d=true
+		get_viewport().audio_listener_enable_3d=false
+		layer.show()
+		for i in 2:
+			views[i].render_target_update_mode=SubViewport.UPDATE_ALWAYS
+			var source: Camera3D=world.camera if i==0 else second.camera
+			cameras[i].global_transform=source.global_transform
+			cameras[i].fov=source.fov
+			cameras[i].near=source.near
+			cameras[i].far=source.far
+			cameras[i].environment=world.camera.environment
+			cameras[i].attributes=source.attributes
+			var forward: Vector3=-source.global_basis.z
+			var bearing := fposmod(rad_to_deg(atan2(forward.x,-forward.z)),360.0)
+			var heading: String=["N","NE","E","SE","S","SW","W","NW"][int(round(bearing/45.0))%8]
+			var text := "PLAYER %d   ·   %s  %03d°" % [i+1,heading,int(bearing)]
+			if not village:
+				var tool: Node3D=world.floating_tool if i==0 else second.floating_tool
+				text+="\n"+world.TOOL_NAMES[tool.selected]
+				if tool.selected==3:text+=" · "+tool.MODES[tool.shovel_mode]+" [X / Square]"
+				text+="\nD-pad tools · RT use · B put away"
+			else:text+="\nExplore together · Start to pause"
+			labels[i].text=text
+			labels[i].visible=not second.blocked()
+			dots[i].visible=not second.blocked()
+			dots[i].position=Vector2(views[i].size)*0.5-Vector2(4,16)
+			notes[i].size=Vector2(maxf(100,views[i].size.x-40),70)
+			notes[i].visible=not second.blocked()
+			if village:
+				var shop: int=world.selected_shop if i==0 else second.selected_shop
+				notes[i].text="A / RT · "+world.SHOPS[shop] if shop>=0 else ""
+			else:notes[i].text=(world.message if world.toast_timer>0 else "") if i==0 else (second.message if second.message_time>0 else "")
+	# The full-screen menus, clock, guide and animal notices remain shared overlays.
+	world.hud.get_parent().get_parent().visible=not visible_split
+	world.compass_view.visible=not visible_split and (not world.paused and world.current_shop<0 if village else not world.guide.visible and not world.hedgehog_intro.active)
+	if village:world.prompt.visible=not visible_split and world.current_shop<0
+	else:
+		world.aim_dot.visible=not visible_split and not world.guide.visible
+		world.notice.visible=not visible_split and not world.guide.visible
+
+func route_input(event: InputEvent) -> bool:
+	if not event is InputEventJoypadButton and not event is InputEventJoypadMotion:return false
+	# Shared modal UI accepts either controller. Gameplay has fixed controller owners.
+	if second.blocked():return false
+	if event is InputEventJoypadButton and event.button_index==JOY_BUTTON_START:return false
+	if event.device==ControllerInput.secondary_device() and split:
+		second.handle_input(event)
+		get_viewport().set_input_as_handled()
+		return true
+	return event.device!=ControllerInput.primary_device()
+
+```
+
 ## main.gd
 
 ```gd
@@ -4589,6 +4965,7 @@ func open_menu() -> void:
 	garden.ambience.update_mix(0,0,0,true)
 	for audio in garden.find_children("*","AudioStreamPlayer3D",true,false):
 		audio.stream_paused = true
+	garden.local_coop.suspend_render()
 	garden.process_mode = Node.PROCESS_MODE_DISABLED
 	garden.hide()
 	for layer in garden.find_children("*","CanvasLayer",true,false): layer.hide()
@@ -4612,7 +4989,7 @@ func _save_garden() -> bool:
 	var data := {"version":1,"terrain":terrain,"crops":crops,"harvested":garden.harvested,
 		"player":[garden.player.cell.x,garden.player.cell.y],"player_position":[garden.player.position.x,garden.player.position.z],"elapsed":garden.valley_cycle.elapsed,
 		"weather":garden.valley_cycle.weather_index,"weather_elapsed":garden.valley_cycle.weather_elapsed,
-		"deformation":garden.heightfield.save_deformation(),"wildlife":garden.wildlife.save_data(),"hedgehog_intro":garden.hedgehog_intro.save_data(),"wetness":garden.valley_cycle.wetness,"watered":_saved_watered(),"coins":coins,"purchases":purchases}
+		"local_coop":garden.local_coop.second.save_data(),"deformation":garden.heightfield.save_deformation(),"wildlife":garden.wildlife.save_data(),"hedgehog_intro":garden.hedgehog_intro.save_data(),"wetness":garden.valley_cycle.wetness,"watered":_saved_watered(),"coins":coins,"purchases":purchases}
 	var file := FileAccess.open(SAVE_PATH,FileAccess.WRITE)
 	if not file: return false
 	file.store_string(JSON.stringify(data))
@@ -4670,6 +5047,7 @@ func _restore_garden() -> void:
 		if not garden.contains_cell(Vector2i(int(record.x),int(record.z))): continue
 		purchases.append(record)
 		preload("res://village_stock.gd").deliver(garden,record)
+	garden.local_coop.second.restore(data.get("local_coop",{}))
 	garden.wildlife.suppress_events=false
 	garden.valley_cycle._update_visuals()
 	garden._refresh_ui()
@@ -4721,6 +5099,7 @@ func open_village() -> void:
 	garden._set_guide(true)
 	garden.ambience.update_mix(0,0,0,true)
 	for audio in garden.find_children("*","AudioStreamPlayer3D",true,false): audio.stream_paused=true
+	garden.local_coop.suspend_render()
 	garden.process_mode=Node.PROCESS_MODE_DISABLED
 	garden.hide()
 	for layer in garden.find_children("*","CanvasLayer",true,false): layer.hide()
@@ -6892,6 +7271,8 @@ var clock_label: Label
 var sun: DirectionalLight3D
 var outdoor_environment: Environment
 var indoor_environment: Environment
+var local_coop: Node
+var compass_view: Control
 var host: Node3D
 var exterior: Node3D
 var interior: Node3D
@@ -6954,6 +7335,7 @@ func _ready() -> void:
  var compass:=preload("res://garden_compass.gd").new()
  compass_layer.add_child(compass)
  compass.setup(camera)
+ compass_view=compass
  ambience=preload("res://valley_ambience.gd").new()
  add_child(ambience)
  ControllerInput.mode_changed.connect(_input_mode)
@@ -6984,6 +7366,9 @@ func activate(owner_menu: Node3D) -> void:
  camera.make_current()
  _leave_shop()
  preload("res://diorama_camera.gd").follow(camera,spirit.position,yaw,pitch)
+ local_coop=preload("res://local_coop.gd").new()
+ add_child(local_coop)
+ local_coop.setup(self,true)
 
 func _solid(parent: Node3D, dimensions: Vector3, at: Vector3, shop: int=-1) -> void:
  var body:=StaticBody3D.new()
@@ -7189,6 +7574,7 @@ func _physics_process(delta: float) -> void:
  prompt.text=(SHOPS[selected_shop]+"\n"+("A / Cross · enter" if ControllerInput.using_pad else "Click / E · enter")) if selected_shop>=0 else "·"
 
 func _unhandled_input(event: InputEvent) -> void:
+ if is_instance_valid(local_coop) and local_coop.route_input(event):return
  if not is_instance_valid(host): return
  if event.is_action_pressed("ui_cancel") or event.is_action_pressed("pad_guide"):
   if current_shop>=0: _leave_shop()

@@ -75,7 +75,7 @@ func setup(world: Node3D) -> void:
  caption.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
  caption.custom_minimum_size=Vector2(372,78)
  stack.add_child(caption)
- pause_label=garden._label("PAUSED\nEsc / Start to continue",20,Color("f4dfaa"))
+ pause_label=garden._label("PAUSED",20,Color("f4dfaa"))
  ui.add_child(pause_label)
  pause_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
  pause_label.offset_left=-220

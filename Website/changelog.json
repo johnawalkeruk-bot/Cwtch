@@ -8,6 +8,23 @@
       "sections": []
     },
     {
+      "id": "0.1.14",
+      "label": "v0.1.14",
+      "date": "2026-09-28",
+      "title": "A garden for two",
+      "sections": [
+        {
+          "heading": "Local co-op",
+          "items": [
+            "Connect two controllers for automatic side-by-side play in the garden and village. Each spirit has its own movement, camera, tool selection and shovel mode.",
+            "Player one keeps the gold-and-blue spirit; player two uses the original red-and-gold spirit. Both can tend the same garden with continuous tool use.",
+            "Pause menus, the Field Guide, shop interiors and story conversations are shared. Disconnecting a controller returns to one view and pauses safely; reconnecting restores the second spirit.",
+            "Existing gardens remain compatible. Player two’s garden position, selected tool and shovel mode are saved with the shared garden."
+          ]
+        }
+      ]
+    },
+    {
       "id": "0.1.13",
       "label": "v0.1.13",
       "date": "2026-09-28",

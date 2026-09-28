@@ -37,3 +37,20 @@ Use a public repository so players do not need GitHub credentials.
 
 The launcher is a native Windows application with a bundled Python updater; it
 does not require PowerShell scripts or change execution policies. Full game source is also in `Game/FULL_SOURCE.md`.
+
+## Local split-screen
+
+Connect two controllers before entering the garden, or connect a second during play.
+The first connected controller owns the left view (gold/blue); the second owns
+the right view (red/gold). Both use left stick to glide and right stick to aim.
+D-pad Up/Right/Down/Left selects Hoe/Seeds/Watering Can/Shovel; hold RT to use,
+X / Square changes shovel mode, and B / Circle puts the tool away.
+Keyboard and mouse continue to control player one. Extra controllers do not
+control either spirit during play.
+
+The garden, time, weather, wildlife, purse and save are shared. Either player can
+open the shared pause menu with Start. Village streets also split; shops and story
+conversations use one full-screen view. Disconnecting either active controller
+pauses and returns to a single view; resume from the pause menu. Player two’s
+garden position and equipment persist in the garden save, including older saves
+that had no second player. Use Play Development.cmd to try unpublished changes.

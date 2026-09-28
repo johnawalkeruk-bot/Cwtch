@@ -22,6 +22,7 @@ var coins := 500
 var purchases: Array = []
 var menu_active := true
 var elapsed := 1000.0
+var weather_pattern := preload("res://weather_pattern.gd").new()
 var weather_elapsed := 0.0
 var weather_index := 0
 var rain_strength := 0.0
@@ -128,10 +129,6 @@ func _button(text: String, action: Callable, parent: Node) -> Button:
 	button.text = text.to_upper()
 	button.custom_minimum_size = Vector2(280,51)
 	button.add_theme_font_size_override("font_size",19)
-	button.add_theme_color_override("font_color",Color("ecdfbd"))
-	button.add_theme_stylebox_override("normal",_style(Color(0.08,0.15,0.13,0.89)))
-	button.add_theme_stylebox_override("hover",_style(Color(0.22,0.29,0.21,0.97)))
-	button.add_theme_stylebox_override("pressed",_style(Color("172a24")))
 	button.pressed.connect(action)
 	parent.add_child(button)
 	return button
@@ -149,7 +146,7 @@ func _build_ui() -> void:
 	heading.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
 	heading.offset_left = -300
 	heading.offset_right = 300
-	heading.offset_top = 146
+	heading.offset_top = 130
 	var title := _label("CWTCH",112,Color("ffbf55"))
 	var font := SystemFont.new()
 	font.font_names = PackedStringArray(["Arial","Segoe UI"])
@@ -169,15 +166,15 @@ func _build_ui() -> void:
 	menu_buttons.add_theme_constant_override("separation",12)
 	root.add_child(menu_buttons)
 	menu_buttons.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
-	menu_buttons.offset_left = -150
-	menu_buttons.offset_right = 150
+	menu_buttons.offset_left = -180
+	menu_buttons.offset_right = 180
 	menu_buttons.offset_top = -285
 	menu_buttons.offset_bottom = -24
 	_button("enter garden",func(): _begin_garden(false),menu_buttons)
 	_button("new garden",_request_new,menu_buttons)
 	_button("options",func(): options.show(); menu_buttons.hide(); heading.hide(); ControllerInput.focus_first.call_deferred(options),menu_buttons)
 	_button("QUIT GAME",save_and_quit,menu_buttons)
-	weather_label = _label("",14,Color("66818a"))
+	weather_label = _label("",14,Color("e5c17c"))
 	root.add_child(weather_label)
 	weather_label.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
 	weather_label.offset_left = 24
@@ -201,12 +198,13 @@ func _build_ui() -> void:
 	options.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	options.offset_left = -220
 	options.offset_right = 220
-	options.offset_top = -55
+	options.offset_top = -160
+	options.offset_bottom = 160
 	options.add_theme_stylebox_override("panel",_style(Color(0.07,0.13,0.12,0.97)))
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation",10)
 	options.add_child(box)
-	box.add_child(_label("options",24,Color("e2bf6e")))
+	box.add_child(_label("OPTIONS",24,Color("e2bf6e")))
 	box.add_child(_label("Sound volume",16,Color("eee6d0")))
 	var volume := HSlider.new()
 	volume.name = "Volume"
@@ -236,10 +234,9 @@ func _process(delta: float) -> void:
 	_update_weather(delta)
 
 func _update_weather(delta: float) -> void:
-	weather_elapsed += delta
-	while weather_elapsed >= Weather.WEATHER_DURATIONS[weather_index]:
-		weather_elapsed -= Weather.WEATHER_DURATIONS[weather_index]
-		weather_index = (weather_index+1)%Weather.WEATHER_NAMES.size()
+	var next := weather_pattern.advance(weather_index,weather_elapsed,delta)
+	weather_index=int(next[0])
+	weather_elapsed=float(next[1])
 	var index := weather_index if weather_override < 0 else weather_override
 	rain_strength = move_toward(rain_strength,Weather.RAIN_LEVELS[index],delta/12.0)
 	cloud_cover = move_toward(cloud_cover,Weather.CLOUD_LEVELS[index],delta/30.0)
@@ -331,6 +328,7 @@ func open_menu() -> void:
 	garden.ambience.update_mix(0,0,0,true)
 	for audio in garden.find_children("*","AudioStreamPlayer3D",true,false):
 		audio.stream_paused = true
+	garden.local_coop.suspend_render()
 	garden.process_mode = Node.PROCESS_MODE_DISABLED
 	garden.hide()
 	for layer in garden.find_children("*","CanvasLayer",true,false): layer.hide()
@@ -353,8 +351,8 @@ func _save_garden() -> bool:
 		crops.append({"x":cell.x,"z":cell.y,"age":crop.age,"watered":crop.watered})
 	var data := {"version":1,"terrain":terrain,"crops":crops,"harvested":garden.harvested,
 		"player":[garden.player.cell.x,garden.player.cell.y],"player_position":[garden.player.position.x,garden.player.position.z],"elapsed":garden.valley_cycle.elapsed,
-		"weather":garden.valley_cycle.weather_index,"weather_elapsed":garden.valley_cycle.weather_elapsed,
-		"deformation":garden.heightfield.save_deformation(),"wildlife":garden.wildlife.save_data(),"hedgehog_intro":garden.hedgehog_intro.save_data(),"wetness":garden.valley_cycle.wetness,"watered":_saved_watered(),"coins":coins,"purchases":purchases}
+		"weather_pattern":garden.valley_cycle.weather_pattern.save_data(),"weather":garden.valley_cycle.weather_index,"weather_elapsed":garden.valley_cycle.weather_elapsed,
+		"local_coop":garden.local_coop.second.save_data(),"deformation":garden.heightfield.save_deformation(),"wildlife":garden.wildlife.save_data(),"hedgehog_intro":garden.hedgehog_intro.save_data(),"wetness":garden.valley_cycle.wetness,"watered":_saved_watered(),"coins":coins,"purchases":purchases}
 	var file := FileAccess.open(SAVE_PATH,FileAccess.WRITE)
 	if not file: return false
 	file.store_string(JSON.stringify(data))
@@ -393,7 +391,7 @@ func _restore_garden() -> void:
 		garden.player.restore_position(Vector3(float(free_position[0]),0,float(free_position[1])))
 	garden.valley_cycle.elapsed = float(data.get("elapsed",0))
 	garden.valley_cycle.weather_index = clampi(int(data.get("weather",0)),0,6)
-	garden.valley_cycle.weather_elapsed = float(data.get("weather_elapsed",0))
+	garden.valley_cycle.weather_elapsed = garden.valley_cycle.weather_pattern.restore(data.get("weather_pattern",{}),garden.valley_cycle.weather_index,float(data.get("weather_elapsed",0)))
 	garden.valley_cycle.wetness = float(data.get("wetness",0))
 	for value in data.get("watered",[]):
 		var wet_cell := Vector2i(int(value[0]),int(value[1]))
@@ -412,6 +410,7 @@ func _restore_garden() -> void:
 		if not garden.contains_cell(Vector2i(int(record.x),int(record.z))): continue
 		purchases.append(record)
 		preload("res://village_stock.gd").deliver(garden,record)
+	garden.local_coop.second.restore(data.get("local_coop",{}))
 	garden.wildlife.suppress_events=false
 	garden.valley_cycle._update_visuals()
 	garden._refresh_ui()
@@ -463,6 +462,7 @@ func open_village() -> void:
 	garden._set_guide(true)
 	garden.ambience.update_mix(0,0,0,true)
 	for audio in garden.find_children("*","AudioStreamPlayer3D",true,false): audio.stream_paused=true
+	garden.local_coop.suspend_render()
 	garden.process_mode=Node.PROCESS_MODE_DISABLED
 	garden.hide()
 	for layer in garden.find_children("*","CanvasLayer",true,false): layer.hide()

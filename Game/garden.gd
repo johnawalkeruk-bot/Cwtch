@@ -28,6 +28,7 @@ var dev_console: CanvasLayer
 var tardis: Node3D
 var animal_notices: CanvasLayer
 var wildlife: Node
+var local_coop: Node
 var hedgehog_intro: Node3D
 var additional_visitors: Array[Node3D] = []
 var background_meadow: Node3D
@@ -71,6 +72,7 @@ var hud: Label
 var hint: Label
 var notice: Label
 var field_book: Control
+var pause_shade: ColorRect
 var guide: PanelContainer
 var control_hint: Label
 var guide_controls: Label
@@ -156,6 +158,9 @@ func _ready() -> void:
 	hedgehog_intro=preload("res://hedgehog_intro.gd").new()
 	add_child(hedgehog_intro)
 	hedgehog_intro.setup(self)
+	local_coop=preload("res://local_coop.gd").new()
+	add_child(local_coop)
+	local_coop.setup(self)
 	_refresh_ui()
 
 func _create_chunks() -> void:
@@ -178,7 +183,7 @@ func _create_cursor() -> void:
 func _toggle_ambience() -> void:
 	ambience_muted = not ambience_muted
 	ambience.muted = ambience_muted
-	ambience_button.text = "Ambience: off [M]" if ambience_muted else "Ambience: on [M]"
+	ambience_button.text = "Ambient sounds · off" if ambience_muted else "Ambient sounds · on"
 
 func _create_view() -> void:
 	super._create_view()
@@ -224,6 +229,7 @@ func _cycle_shovel(direction: int) -> void:
 	_refresh_ui()
 
 func _unhandled_input(event: InputEvent) -> void:
+	if is_instance_valid(local_coop) and local_coop.route_input(event):return
 	if is_instance_valid(hedgehog_intro) and hedgehog_intro.active:return
 	if is_instance_valid(dev_console) and dev_console.opened:return
 	if field_book.visible:return
@@ -305,7 +311,8 @@ func _notification(what: int) -> void:
 
 func _physics_process(delta: float) -> void:
 	if is_instance_valid(hedgehog_intro) and hedgehog_intro.active:return
-	if release_required and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and not Input.is_action_pressed("pad_use"):release_required=false
+	if release_required and not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT) and not ControllerInput.use_held():release_required=false
+	trigger_held=ControllerInput.use_held() and not release_required
 	repeat_wait=maxf(0.0,repeat_wait-delta)
 	if is_instance_valid(dev_console) and dev_console.opened:
 		action_pending=false
@@ -341,7 +348,7 @@ func _physics_process(delta: float) -> void:
 		elif contains_cell(target):
 			if is_instance_valid(selected_target): target=selected_target.crop_cell
 			if blocked_cells.has(target): message="This ground is occupied."
-			elif tool==Tool.NONE: message="Choose a tool from the wheel to tend the ground."
+			elif tool==Tool.NONE: message="Choose a tool to tend the ground."
 			else: floating_tool.use_at(target)
 		else:
 			message="Let the spirit settle, then tend this square."
@@ -381,33 +388,38 @@ func _act(cell: Vector2i) -> void:
 	_apply_tool(cell,tool)
 
 func _apply_tool(cell: Vector2i, active_tool: int, mode: int=-1) -> void:
-	if not contains_cell(cell) or blocked_cells.has(cell): return
+	message=_tool_result(cell,active_tool,mode)
+	_refresh_ui()
+
+func _tool_result(cell: Vector2i, active_tool: int, mode: int=-1) -> String:
+	if not contains_cell(cell) or blocked_cells.has(cell): return "This ground is occupied."
+	var result := "Choose a tool to tend the ground."
 	var terrain := get_terrain(cell)
 	match active_tool:
 		Tool.HOE:
 			if terrain in [Terrain.GRASS,Terrain.LONG_GRASS,Terrain.HARD_DIRT]:
 				_clear_old_crop(cell)
 				set_terrain(cell,Terrain.DIRT)
-				message="Fresh earth, ready for a little green."
-			else: message="Use the hoe on grass or hard earth."
+				result="Fresh earth, ready for a little green."
+			else: result="Use the hoe on grass or hard earth."
 		Tool.SEEDS:
 			if terrain==Terrain.DIRT:
 				_clear_old_crop(cell)
 				heightfield.plant_seed(cell)
 				set_terrain(cell,Terrain.GRASS)
-				message="A fresh patch of grass."
-			else: message="Scatter grass seed onto bare earth."
+				result="A fresh patch of grass."
+			else: result="Scatter grass seed onto bare earth."
 		Tool.SHOVEL:
 			var chosen: int=floating_tool.shovel_mode if mode<0 else mode
 			if heightfield.sculpt(cell,chosen):
-				message=["A hollow fills with water.","A small hole, ready for grass seed.","The hollow is filled with dirt.","The ground settles level."][chosen]
-			else:message="Leave a little room around people, plants and buildings."
+				result=["A hollow fills with water.","A small hole, ready for grass seed.","The hollow is filled with dirt.","The ground settles level."][chosen]
+			else:result="Leave a little room around people, plants and buildings."
 		Tool.WATER:
 			watered_cells[cell]=1.0
 			watered_image.set_pixel(cell.x,cell.y,Color(1,0,0))
 			watered_texture.update(watered_image)
-			message="A gentle drink for the ground."
-	_refresh_ui()
+			result="A gentle drink for the ground."
+	return result
 
 func _clear_old_crop(cell: Vector2i) -> void:
 	if crops.has(cell):
@@ -491,7 +503,8 @@ func _create_garden_ui() -> void:
 	aim_dot.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
 	var top := PanelContainer.new()
 	root.add_child(top)
-	top.position=Vector2(28,24)
+	top.position=Vector2(24,24)
+	top.add_theme_stylebox_override("panel",preload("res://cwtch_theme.gd").compact_card())
 	top.mouse_filter=Control.MOUSE_FILTER_IGNORE
 	var stack := VBoxContainer.new()
 	stack.add_theme_constant_override("separation",5)
@@ -501,6 +514,7 @@ func _create_garden_ui() -> void:
 	stack.add_child(hud)
 	control_hint=_label("",12,Color("9cb7a8"))
 	stack.add_child(control_hint)
+	control_hint.hide()
 	notice=_label("",16,Color("f3ead4"))
 	root.add_child(notice)
 	notice.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
@@ -511,20 +525,27 @@ func _create_garden_ui() -> void:
 	notice.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
 	notice.add_theme_color_override("font_shadow_color",Color("132b26"))
 	notice.add_theme_constant_override("shadow_offset_y",2)
+	pause_shade=ColorRect.new()
+	root.add_child(pause_shade)
+	pause_shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	pause_shade.color=Color(0.025,0.055,0.05,0.45)
+	pause_shade.mouse_filter=Control.MOUSE_FILTER_IGNORE
+	pause_shade.hide()
 	guide=PanelContainer.new()
 	root.add_child(guide)
 	guide.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	guide.offset_left=-250
-	guide.offset_right=250
-	guide.offset_top=-310
-	guide.offset_bottom=310
+	guide.offset_left=-240
+	guide.offset_right=240
+	guide.offset_top=-225
+	guide.offset_bottom=225
 	var pages := VBoxContainer.new()
-	pages.add_theme_constant_override("separation",6)
+	pages.add_theme_constant_override("separation",10)
 	guide.add_child(pages)
 	pages.add_child(_label("A MOMENT OF REST",24,Color("e5c17c")))
 	pages.add_child(_label("A little care goes a long way.",16,Color("b2c6bb")))
 	guide_controls=_label("",16,Color("eee5d1"))
 	pages.add_child(guide_controls)
+	guide_controls.hide()
 	field_book=preload("res://field_book.gd").new()
 	root.add_child(field_book)
 	field_book.closed.connect(func():
@@ -539,18 +560,20 @@ func _create_garden_ui() -> void:
 		field_book.open(self))
 	pages.add_child(book_button)
 	ambience_button=Button.new()
-	ambience_button.text="Ambient sounds  ·  on [M]"
+	ambience_button.text="Ambient sounds · on"
 	ambience_button.pressed.connect(_toggle_ambience)
 	pages.add_child(ambience_button)
 	var close := Button.new()
 	close.text="Return to the garden"
 	close.pressed.connect(_toggle_guide)
 	pages.add_child(close)
+	pages.move_child(close,2)
 	if is_instance_valid(get_tree().current_scene) and get_tree().current_scene!=self and get_tree().current_scene.has_method("open_menu"):
 		var village_button:=Button.new()
 		village_button.text="Visit the village"
 		village_button.pressed.connect(get_tree().current_scene.open_village)
 		pages.add_child(village_button)
+		pages.move_child(village_button,5)
 		var back := Button.new()
 		back.text="Save & return to main menu"
 		back.pressed.connect(get_tree().current_scene.open_menu)
@@ -572,9 +595,11 @@ func _set_guide(open: bool) -> void:
 		hedgehog_intro.set_paused(open)
 		return
 	_clear_use()
+	if is_instance_valid(local_coop):local_coop.second.clear_use()
 	if is_instance_valid(dev_console) and dev_console.opened: dev_console.toggle(false)
 	if is_instance_valid(field_book) and field_book.visible: field_book.close()
 	guide.visible=open
+	pause_shade.visible=open
 	notice.visible=not open
 	if is_instance_valid(compass_view):compass_view.visible=not open
 	if open: ControllerInput.focus_first.call_deferred(guide)
@@ -609,13 +634,10 @@ func _refresh_ui() -> void:
 	notice.modulate.a=smoothstep(0,0.5,toast_timer)
 
 func _controller_prompts() -> void:
-	var pad := ControllerInput.using_pad
-	control_hint.text = _tool_controls()
-	guide_controls.text = ("Left stick  glide  /  Right stick  look\n\nD-pad: Up Hoe / Right Seeds\nDown Watering can / Left Shovel\nX / Square  change mode\nB / Circle  put tool away\nHold RT  use / Start  pause\nR3  TARDIS" if pad else "WASD  glide  /  Mouse  look\n\n1 Hoe / 2 Seeds / 3 Watering can / 4 Shovel\nX  change mode / T  put tool away\nHold left-click  use / Esc  pause\nCtrl+T  TARDIS") + "\n\nYour garden saves when you leave."
+	control_hint.text=""
+	guide_controls.text=""
 	if field_book.visible: ControllerInput.focus_first.call_deferred(field_book)
 	elif guide.visible: ControllerInput.focus_first.call_deferred(guide)
 
 func _tool_controls() -> String:
-	var text: String="D-pad  tools / B  put away / Hold RT  use" if ControllerInput.using_pad else "1-4  tools / T  put away / Hold click  use"
-	if tool==Tool.SHOVEL:text+="\nX / Square  change mode" if ControllerInput.using_pad else "\nX  change mode"
-	return text
+	return ""

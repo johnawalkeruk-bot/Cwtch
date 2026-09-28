@@ -119,6 +119,7 @@ func use_at(cell: Vector2i) -> bool:
 func _process(delta: float) -> void:
  if not is_instance_valid(garden):return
  var paused: bool=garden.guide.visible or garden.tool_wheel.visible or (is_instance_valid(garden.dev_console) and garden.dev_console.opened)
+ if garden.has_method("blocked"):paused=paused or garden.blocked()
  particles.speed_scale=0.0 if paused else 1.0
  audio.stream_paused=paused
  visible=not paused

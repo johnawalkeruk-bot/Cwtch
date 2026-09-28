@@ -57,7 +57,7 @@ func _ready() -> void:
 		var label: String=CATEGORIES[i]
 		var tab:=_button(label,Vector2(-82,154+i*70),Vector2(128,54),func(): _category(label))
 		tabs.append(tab)
-	navigation_hint=_text("LB / RB  ·  category\nArrows  ·  entries     B / Esc  ·  close",Vector2(580,48),Vector2(425,76),15)
+	navigation_hint=_text("",Vector2(580,48),Vector2(425,76),15)
 	section=_text("",Vector2(84,98),Vector2(410,28),14)
 	title=_text("",Vector2(580,139),Vector2(405,65),35)
 	description=_text("",Vector2(580,232),Vector2(395,210),21)
@@ -234,11 +234,11 @@ func _show_entry() -> void:
 		land_page.setup(garden,serif)
 		title.text="Land area"
 		section.text="LAND AREA   /   GARDEN SURVEY"
-		navigation_hint.text="LB / RB  ·  category\nArrows / hover  ·  inspect tiles"
+		navigation_hint.text=""
 		folio.text="Garden survey"
 		return
 	viewport.render_target_update_mode=SubViewport.UPDATE_ALWAYS
-	navigation_hint.text="LB / RB  ·  category\nArrows  ·  entries     B / Esc  ·  close"
+	navigation_hint.text=""
 	if entries.is_empty():
 		title.text="No animal visits yet"
 		description.text="Make a little grass and watch the wild edge. Your first visitor will appear here after entering the garden."

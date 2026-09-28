@@ -5,7 +5,7 @@ const FULL_CYCLE := DAY_SECONDS * 2.0
 const WEATHER_NAMES := ["Fair", "Cloudy", "Light rain", "Rain", "Heavy rain", "Thunderstorm", "Clearing"]
 const RAIN_LEVELS := [0.0, 0.0, 0.18, 0.45, 0.8, 1.0, 0.0]
 const CLOUD_LEVELS := [0.15, 0.8, 0.85, 0.95, 1.0, 1.0, 0.4]
-const WEATHER_DURATIONS := [180.0, 90.0, 150.0, 150.0, 120.0, 90.0, 120.0]
+var weather_pattern := preload("res://weather_pattern.gd").new()
 var elapsed := 0.0
 var weather_elapsed := 0.0
 var weather_index := 0
@@ -44,11 +44,11 @@ func setup(world: Node3D) -> void:
 	layer.add_child(panel)
 	panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 	panel.offset_left = -220
-	panel.offset_right = -28
+	panel.offset_right = -24
 	panel.offset_top = 24
 	panel.offset_bottom = 104
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	panel.add_theme_stylebox_override("panel", garden._panel_style(Color("263a35")))
+	panel.add_theme_stylebox_override("panel", preload("res://cwtch_theme.gd").compact_card())
 	clock_label = garden._label("", 16, Color("eedeb9"))
 	panel.add_child(clock_label)
 	lightning = DirectionalLight3D.new()
@@ -98,10 +98,9 @@ func _process(delta: float) -> void:
 
 func advance(delta: float) -> void:
 	elapsed += delta
-	weather_elapsed += delta
-	while weather_elapsed >= WEATHER_DURATIONS[weather_index]:
-		weather_elapsed -= WEATHER_DURATIONS[weather_index]
-		weather_index = (weather_index + 1) % WEATHER_NAMES.size()
+	var next := weather_pattern.advance(weather_index,weather_elapsed,delta)
+	weather_index=int(next[0])
+	weather_elapsed=float(next[1])
 	rain_strength = move_toward(rain_strength, RAIN_LEVELS[weather_index], delta / 12.0)
 	cloud_cover = move_toward(cloud_cover, CLOUD_LEVELS[weather_index], delta / 30.0)
 	_advance_storm(delta)

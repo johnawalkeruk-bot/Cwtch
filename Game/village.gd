@@ -13,6 +13,8 @@ var clock_label: Label
 var sun: DirectionalLight3D
 var outdoor_environment: Environment
 var indoor_environment: Environment
+var local_coop: Node
+var compass_view: Control
 var host: Node3D
 var exterior: Node3D
 var interior: Node3D
@@ -33,6 +35,7 @@ var shop_note: Label
 var balance: Label
 var stock_list: VBoxContainer
 var receipt: Label
+var pause_shade: ColorRect
 var pause_panel: PanelContainer
 var showcase: Node3D
 var ambience: Node
@@ -75,6 +78,7 @@ func _ready() -> void:
  var compass:=preload("res://garden_compass.gd").new()
  compass_layer.add_child(compass)
  compass.setup(camera)
+ compass_view=compass
  ambience=preload("res://valley_ambience.gd").new()
  add_child(ambience)
  ControllerInput.mode_changed.connect(_input_mode)
@@ -105,6 +109,9 @@ func activate(owner_menu: Node3D) -> void:
  camera.make_current()
  _leave_shop()
  preload("res://diorama_camera.gd").follow(camera,spirit.position,yaw,pitch)
+ local_coop=preload("res://local_coop.gd").new()
+ add_child(local_coop)
+ local_coop.setup(self,true)
 
 func _solid(parent: Node3D, dimensions: Vector3, at: Vector3, shop: int=-1) -> void:
  var body:=StaticBody3D.new()
@@ -221,11 +228,19 @@ func _build_ui() -> void:
  var panel:=PanelContainer.new()
  root.add_child(panel)
  panel.position=Vector2(24,24)
+ panel.add_theme_stylebox_override("panel",preload("res://cwtch_theme.gd").compact_card())
  var stack:=VBoxContainer.new()
  panel.add_child(stack)
- _label(stack,"C W T C H  /  THE VILLAGE",21)
+ _label(stack,"THE VILLAGE",20).add_theme_color_override("font_color",preload("res://cwtch_theme.gd").GOLD)
  hud=_label(stack,"",15)
- clock_label=_label(stack,"",16)
+ var clock_panel:=PanelContainer.new()
+ root.add_child(clock_panel)
+ clock_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+ clock_panel.offset_left=-220
+ clock_panel.offset_right=-24
+ clock_panel.offset_top=24
+ clock_panel.add_theme_stylebox_override("panel",preload("res://cwtch_theme.gd").compact_card())
+ clock_label=_label(clock_panel,"",16)
  prompt=_label(root,"",21)
  prompt.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
  prompt.offset_left=-270; prompt.offset_right=270
@@ -238,34 +253,49 @@ func _build_ui() -> void:
  root.add_child(shop_panel)
  shop_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER_RIGHT)
  shop_panel.offset_left=-440; shop_panel.offset_right=-28
- shop_panel.offset_top=-280; shop_panel.offset_bottom=280
+ shop_panel.offset_top=-236; shop_panel.offset_bottom=336
  var shop_stack:=VBoxContainer.new()
  shop_stack.add_theme_constant_override("separation",10)
  shop_panel.add_child(shop_stack)
  shop_title=_label(shop_stack,"",22)
  shop_note=_label(shop_stack,"",15)
  balance=_label(shop_stack,"",19)
+ var stock_scroll:=ScrollContainer.new()
+ stock_scroll.custom_minimum_size=Vector2(0,180)
+ stock_scroll.size_flags_vertical=Control.SIZE_EXPAND_FILL
+ stock_scroll.horizontal_scroll_mode=ScrollContainer.SCROLL_MODE_DISABLED
+ stock_scroll.follow_focus=true
+ shop_stack.add_child(stock_scroll)
  stock_list=VBoxContainer.new()
+ stock_list.size_flags_horizontal=Control.SIZE_EXPAND_FILL
  stock_list.add_theme_constant_override("separation",8)
- shop_stack.add_child(stock_list)
+ stock_scroll.add_child(stock_list)
  receipt=_label(shop_stack,"Purchases are delivered to clear ground\nin your garden.",16)
  receipt.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
- receipt.custom_minimum_size=Vector2(350,70)
+ receipt.custom_minimum_size=Vector2(350,60)
  _button(shop_stack,"Back to the street",_leave_shop)
  shop_panel.hide()
+ pause_shade=ColorRect.new()
+ root.add_child(pause_shade)
+ pause_shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+ pause_shade.color=Color(0.025,0.055,0.05,0.45)
+ pause_shade.mouse_filter=Control.MOUSE_FILTER_IGNORE
+ pause_shade.hide()
  pause_panel=PanelContainer.new()
  root.add_child(pause_panel)
  pause_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
- pause_panel.offset_left=-210; pause_panel.offset_right=210
+ pause_panel.offset_left=-240; pause_panel.offset_right=240
  pause_panel.offset_top=-160; pause_panel.offset_bottom=160
  var pause_stack:=VBoxContainer.new()
  pause_stack.add_theme_constant_override("separation",12)
  pause_panel.add_child(pause_stack)
- _label(pause_stack,"A MOMENT IN THE VILLAGE",22)
+ _label(pause_stack,"A MOMENT OF REST",24).add_theme_color_override("font_color",preload("res://cwtch_theme.gd").GOLD)
+ _label(pause_stack,"The village can wait a little.",16)
  _button(pause_stack,"Continue exploring",func(): _pause(false))
  _button(pause_stack,"Return to the garden",func(): host.return_from_village())
  _button(pause_stack,"Save & Quit",func(): host.save_and_quit())
  pause_panel.hide()
+ pause_shade.hide()
 
 func _input_mode() -> void:
  if current_shop>=0: ControllerInput.focus_first.call_deferred(shop_panel)
@@ -274,6 +304,7 @@ func _input_mode() -> void:
 func _pause(value: bool) -> void:
  paused=value
  pause_panel.visible=value
+ pause_shade.visible=value
  Input.mouse_mode=Input.MOUSE_MODE_VISIBLE if value else Input.MOUSE_MODE_CAPTURED
  if value: ControllerInput.focus_first.call_deferred(pause_panel)
  else:
@@ -284,7 +315,7 @@ func _physics_process(delta: float) -> void:
  if not is_instance_valid(host): return
  ambience.muted=host.garden.ambience_muted
  _sync_weather(delta)
- hud.text="%d coins  ·  %s"%[host.coins,"Left stick move · Right stick look · Menu pause" if ControllerInput.using_pad else "WASD move · Mouse look · Esc travel menu"]
+ hud.text="%d coins"%host.coins
  if current_shop>=0:
   showcase.rotation.y+=delta*.2
   return
@@ -307,9 +338,10 @@ func _physics_process(delta: float) -> void:
   var side: float=-1.0 if selected_shop%2==0 else 1.0
   ring.follow_object(Vector3(side*7,0,-10 if selected_shop<2 else 4),Vector2(6.4,6.4),delta)
  else: ring.follow_object(spirit.position,Vector2.ONE*0.7,delta)
- prompt.text=(SHOPS[selected_shop]+"\n"+("A / Cross · enter" if ControllerInput.using_pad else "Click / E · enter")) if selected_shop>=0 else "·"
+ prompt.text=SHOPS[selected_shop] if selected_shop>=0 else "·"
 
 func _unhandled_input(event: InputEvent) -> void:
+ if is_instance_valid(local_coop) and local_coop.route_input(event):return
  if not is_instance_valid(host): return
  if event.is_action_pressed("ui_cancel") or event.is_action_pressed("pad_guide"):
   if current_shop>=0: _leave_shop()
@@ -341,6 +373,7 @@ func enter_shop(index: int) -> void:
  prompt.hide()
  paused=false
  pause_panel.hide()
+ pause_shade.hide()
  camera.position=Vector3(1.3,2.4,-93.5)
  camera.look_at(to_global(Vector3(0,1.2,-102)))
  Input.mouse_mode=Input.MOUSE_MODE_VISIBLE
