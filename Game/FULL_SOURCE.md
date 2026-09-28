@@ -1182,6 +1182,7 @@ const ENTRIES := [
  ["People","Meera","A familiar face among the garden paths. Meera wanders between the plots and the wild edge, taking in the changing light.","Meera"],
  ["People","Angus McDoogal","There is always a little movement where Angus stands. His lively gestures bring a welcome touch of company to a quiet afternoon.","Angus"],
  ["People","The visitor","A traveller passing through the valley. Stop for a moment and watch: even an unhurried garden has its small conversations.","WanderingVisitor"],
+ ["Animals","Robin","A bright little visitor with a warm red breast. Robins visit when water covers at least 1% of the garden, then hop and pause along the dry banks.","Robin"],
  ["Animals","Peacock","A colourful garden companion, with an iridescent neck and a magnificent tail.","Peacock"],
  ["Animals","Chicken","A small, busy companion on the garden paths. Watch those quick steps and curious pauses as it explores the ground.","WanderingChicken"],
  ["Animals","Hedgehog","Low to the ground and never in a hurry. The hedgehog noses around the garden, stopping now and then before continuing its little journey.","Hedgehog"],
@@ -2545,9 +2546,12 @@ var life_events: Array[Dictionary]=[]
 var garden: Node3D
 var records: Dictionary={}
 var hedgehog: Node3D
+var robin: Node3D
 var wild_hedgehog_enabled := true
 var grass_dirty := true
 var cached_ratio := 0.0
+var cached_water_ratio := 0.0
+var cached_water_cells: Array[Vector2i]=[]
 
 func setup(world: Node3D) -> void:
  garden=world
@@ -2557,17 +2561,38 @@ func setup(world: Node3D) -> void:
  garden.add_child(hedgehog)
  hedgehog.setup(garden)
  preload("res://selection_target.gd").attach(hedgehog,"Hedgehog",Vector3(0.35,0.30,0.4))
+ robin=preload("res://visiting_robin.gd").new()
+ robin.name="Robin"
+ garden.add_child(robin)
+ robin.setup(garden)
+ preload("res://selection_target.gd").attach(robin,"Robin",Vector3(0.28,0.24,0.32))
 
-func grass_ratio() -> float:
- if not grass_dirty:return cached_ratio
- var total: int = garden.grid_size.x*garden.grid_size.y
+func _refresh_coverage() -> void:
+ if not grass_dirty:return
+ var total: int=garden.grid_size.x*garden.grid_size.y
  var grass:=0
+ cached_water_cells.clear()
  for y in range(garden.grid_size.y):
   for x in range(garden.grid_size.x):
-   if garden.get_terrain(Vector2i(x,y)) in [garden.Terrain.GRASS,garden.Terrain.LONG_GRASS]:grass+=1
+   var cell:=Vector2i(x,y)
+   var kind: int=garden.get_terrain(cell)
+   if kind in [garden.Terrain.GRASS,garden.Terrain.LONG_GRASS]:grass+=1
+   if kind in [garden.Terrain.WATER,garden.Terrain.DEEP_WATER]:cached_water_cells.append(cell)
  cached_ratio=float(grass)/float(total)
+ cached_water_ratio=float(cached_water_cells.size())/float(total)
  grass_dirty=false
+
+func grass_ratio() -> float:
+ _refresh_coverage()
  return cached_ratio
+
+func water_ratio() -> float:
+ _refresh_coverage()
+ return cached_water_ratio
+
+func water_cells() -> Array[Vector2i]:
+ _refresh_coverage()
+ return cached_water_cells
 
 func day() -> int:
  return floori((garden.valley_cycle.elapsed+600.0)/garden.valley_cycle.FULL_CYCLE)+1
@@ -2622,7 +2647,7 @@ func actor_for(id: String) -> Node3D:
  return null
 
 func save_data() -> Dictionary:
- return {"life_events":life_events.duplicate(true),"wild_hedgehog_enabled":wild_hedgehog_enabled,"records":records.duplicate(true),"hedgehog_position":[hedgehog.position.x,hedgehog.position.z],"patrol_corner":hedgehog.patrol_corner}
+ return {"robin_position":[robin.position.x,robin.position.z],"robin_patrol_corner":robin.patrol_corner,"life_events":life_events.duplicate(true),"wild_hedgehog_enabled":wild_hedgehog_enabled,"records":records.duplicate(true),"hedgehog_position":[hedgehog.position.x,hedgehog.position.z],"patrol_corner":hedgehog.patrol_corner}
 
 func restore(data: Dictionary) -> void:
  records.clear()
@@ -2634,10 +2659,12 @@ func restore(data: Dictionary) -> void:
     life_events.append({"kind":str(event.kind),"species":str(event.species),"individual_id":str(event.individual_id),"day":maxi(1,int(event.day))})
  var saved=data.get("records",{})
  if saved is Dictionary:
-  for id in ["hedgehog","chicken","badger","dragon","peacock"]:
+  for id in ["hedgehog","chicken","badger","dragon","peacock","robin"]:
    var entry=saved.get(id,{})
    if entry is Dictionary and int(entry.get("visit_day",0))>0:
     records[id]={"visit_day":maxi(1,int(entry.visit_day)),"resident_day":maxi(0,int(entry.get("resident_day",0)))}
+ grass_dirty=true
+ robin.restore_visit(data)
  hedgehog.patrol_corner=clampi(int(data.get("patrol_corner",1)),0,3)
  wild_hedgehog_enabled=bool(data.get("wild_hedgehog_enabled",true))
  if not wild_hedgehog_enabled:
@@ -3799,6 +3826,32 @@ for name in ('Arthur', 'Meera'):
         export_format='GLB', export_animation_mode='NLA_TRACKS',
         export_anim_slide_to_zero=True, export_force_sampling=True)
     print('EXPORTED', name, [label for label, _ in actions])
+
+```
+
+## import_robin.py
+
+```py
+"""Run with Blender --background --python Game/import_robin.py to rebuild the supplied robin asset."""
+import bpy,json
+from pathlib import Path
+root=Path(__file__).resolve().parents[1]
+bpy.ops.wm.read_factory_settings(use_empty=True)
+bpy.ops.import_scene.fbx(filepath=str(root/'Animals/Robin/Robin.fbx'))
+print('OBJECTS',[(o.name,o.type) for o in bpy.context.scene.objects])
+print('ANIMATIONS',[(a.name,list(a.frame_range)) for a in bpy.data.actions])
+for o in bpy.context.scene.objects:
+ if o.type=='ARMATURE':print('BONES',list(o.data.bones.keys()))
+texture=bpy.data.images.load(str(root/'Animals/Robin/Robin.fbm/Robin_basecolor.jpg'))
+texture.pack()
+material=bpy.data.materials.new('Robin Plumage');material.use_nodes=True
+bsdf=material.node_tree.nodes.get('Principled BSDF');bsdf.inputs['Roughness'].default_value=0.9
+node=material.node_tree.nodes.new('ShaderNodeTexImage');node.image=texture
+material.node_tree.links.new(node.outputs['Color'],bsdf.inputs['Base Color'])
+for o in bpy.context.scene.objects:
+ if o.type=='MESH':o.data.materials.clear();o.data.materials.append(material)
+out=root/'Game/assets/animals/Robin';out.mkdir(parents=True,exist_ok=True)
+bpy.ops.export_scene.gltf(filepath=str(out/'robin.glb'),export_format='GLB',export_animations=True)
 
 ```
 
@@ -7539,6 +7592,159 @@ func advance(delta: float) -> void:
    destination=garden.cell_center(cell)
    add_to_group("garden_npcs")
    visit_state="inside"
+
+```
+
+## visiting_robin.gd
+
+```gd
+extends "res://wandering_npc.gd"
+## A wild robin waits outside until the garden has at least 1% water.
+var visit_state:="outside"
+var patrol_corner:=0
+var entry_cell:=Vector2i.ZERO
+var entry_retry:=0.0
+var gait:=0.0
+var rest_time:=0.0
+var body: Node3D
+
+func _create_visual() -> void:
+ collision_radius=0.10
+ collision_height=0.22
+ move_speed=0.42
+ visual=Node3D.new()
+ add_child(visual)
+ body=load("res://assets/animals/Robin/robin.glb").instantiate()
+ var bounds: AABB=preload("res://floating_tool.gd").bounds(body)
+ var factor:=0.22/maxf(bounds.size.y,0.001)
+ body.scale*=factor
+ body.position=-Vector3(bounds.get_center().x,bounds.position.y,bounds.get_center().z)*factor
+ visual.add_child(body)
+ animation_player=AnimationPlayer.new()
+ add_child(animation_player)
+ set_meta("animal_id","robin")
+ set_meta("inspection_text","A robin is exploring the water's edge.")
+
+func setup(world: Node3D) -> void:
+ super.setup(world)
+ remove_from_group("garden_npcs")
+ position=Vector3(0,0,garden.grid_min.y-1.25)
+ position.y=garden.background_meadow.height_at(Vector2(position.x,position.z))
+
+func _entry() -> bool:
+ var nearest:=INF
+ var found:=false
+ for z in range(garden.grid_size.y):
+  for x in range(garden.grid_size.x):
+   if x!=0 and z!=0 and x!=garden.grid_size.x-1 and z!=garden.grid_size.y-1:continue
+   var candidate:=Vector2i(x,z)
+   if not _can_reserve(candidate):continue
+   var distance: float=position.distance_squared_to(garden.cell_center(candidate))
+   if distance<nearest:
+    nearest=distance
+    entry_cell=candidate
+    found=true
+ return found
+
+func _choose_destination() -> void:
+ if rng.randf()<0.28:
+  rest_time=rng.randf_range(0.5,1.5)
+  walking=false
+  travel_speed=0.0
+  return
+ super._choose_destination()
+ # Prefer dry neighbours closer to the water, without stepping into ponds.
+ if not walking or rng.randf()>0.75:return
+ var waters: Array[Vector2i]=garden.wildlife.water_cells()
+ if waters.is_empty():return
+ var best:=INF
+ for direction in DIRECTIONS:
+  var candidate: Vector2i=cell+direction
+  if not _can_reserve(candidate):continue
+  var distance:=INF
+  for water in waters:distance=minf(distance,Vector2(candidate).distance_squared_to(Vector2(water)))
+  if distance<best:
+   best=distance
+   next_cell=candidate
+ destination=garden.cell_center(next_cell)
+
+func advance(delta: float) -> void:
+ if garden.guide.visible or garden.tool_wheel.visible:return
+ gait+=delta
+ if rest_time>0.0:
+  rest_time=maxf(0.0,rest_time-delta)
+  motion_ratio=0.0
+ elif visit_state=="inside":
+  super.advance(delta)
+ else:
+  _advance_outside(delta)
+ # The source is unrigged: move its parent pivot, retaining the textured mesh.
+ var pivot: Node3D=body.get_parent()
+ pivot.position.y=absf(sin(gait*9.0))*0.045*motion_ratio
+ pivot.rotation.x=sin(gait*5.0)*0.035 if rest_time<=0.0 else maxf(0.0,sin(gait*7.0))*0.20
+
+func _advance_outside(delta: float) -> void:
+ entry_retry=maxf(0.0,entry_retry-delta)
+ if visit_state=="outside" and garden.wildlife.water_ratio()>=0.01 and entry_retry<=0.0:
+  entry_retry=1.0
+  if _entry():visit_state="entering"
+ if visit_state=="entering" and not garden.wildlife.records.has("robin") and garden.wildlife.water_ratio()<0.01:
+  _resume_patrol()
+ if visit_state=="entering" and not _can_reserve(entry_cell):
+  if not _entry():_resume_patrol()
+ var half: Vector2=-garden.grid_min+Vector2.ONE*1.25
+ var corners: Array[Vector3]=[Vector3(half.x,0,-half.y),Vector3(half.x,0,half.y),Vector3(-half.x,0,half.y),Vector3(-half.x,0,-half.y)]
+ var target: Vector3=corners[patrol_corner] if visit_state=="outside" else garden.cell_center(entry_cell)
+ var offset:=Vector3(target.x-position.x,0,target.z-position.z)
+ var before:=position
+ if offset.length()>0.01:
+  visual.rotation.y=lerp_angle(visual.rotation.y,atan2(offset.x,offset.z),1.0-exp(-4.0*delta))
+  var hit:=move_and_collide(offset.normalized()*minf(offset.length(),delta*move_speed))
+  if hit and visit_state=="entering":_entry()
+ motion_ratio=clampf(position.distance_to(before)/maxf(delta*move_speed,0.0001),0,1)
+ var inside: bool=garden.contains_cell(garden.local_to_cell(position))
+ position.y=garden.heightfield.height_at(Vector2(position.x,position.z)) if inside else garden.background_meadow.height_at(Vector2(position.x,position.z))
+ if inside and visit_state=="entering":garden.wildlife.record_visit("robin")
+ if Vector2(target.x-position.x,target.z-position.z).length()<0.025:
+  if visit_state=="outside":patrol_corner=(patrol_corner+1)%4
+  else:
+   cell=entry_cell
+   next_cell=cell
+   destination=garden.cell_center(cell)
+   add_to_group("garden_npcs")
+   visit_state="inside"
+
+func _resume_patrol() -> void:
+ visit_state="outside"
+ # Return along the current outside edge, never cut diagonally across the plot.
+ if position.z<garden.grid_min.y:patrol_corner=0
+ elif position.x>-garden.grid_min.x:patrol_corner=1
+ elif position.z>-garden.grid_min.y:patrol_corner=2
+ else:patrol_corner=3
+
+func restore_visit(data: Dictionary) -> void:
+ patrol_corner=clampi(int(data.get("robin_patrol_corner",0)),0,3)
+ if not garden.wildlife.records.has("robin"):return
+ var saved=data.get("robin_position",[])
+ var candidate:=Vector2i(garden.grid_size.x/2,0)
+ if saved is Array and saved.size()==2 and is_finite(float(saved[0])) and is_finite(float(saved[1])):
+  candidate=garden.local_to_cell(Vector3(float(saved[0]),0,float(saved[1])))
+ if not _can_reserve(candidate):
+  var found:=false
+  for z in range(garden.grid_size.y):
+   for x in range(garden.grid_size.x):
+    if _can_reserve(Vector2i(x,z)):
+     candidate=Vector2i(x,z)
+     found=true
+     break
+   if found:break
+  if not found:return # No dry space: wait outside; retain the recorded visit.
+ cell=candidate
+ next_cell=cell
+ position=garden.cell_center(cell)
+ destination=position
+ visit_state="inside"
+ add_to_group("garden_npcs")
 
 ```
 

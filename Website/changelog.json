@@ -8,6 +8,22 @@
       "sections": []
     },
     {
+      "id": "0.1.13",
+      "label": "v0.1.13",
+      "date": "2026-09-28",
+      "title": "A robin by the water",
+      "sections": [
+        {
+          "heading": "Wildlife",
+          "items": [
+            "Added the supplied robin model and plumage texture, with gentle hopping and pecking movements.",
+            "Robins wait outside and visit when water and deep-water tiles cover at least 1% of the garden (13 tiles in the current plot). Temporary rain puddles do not count.",
+            "The first actual entry triggers a visitor notice and unlocks the robin’s 3D Field Guide preview and visit day. Visits and position persist across saved games."
+          ]
+        }
+      ]
+    },
+    {
       "id": "0.1.12",
       "label": "v0.1.12",
       "date": "2026-09-25",

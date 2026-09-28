@@ -6,9 +6,12 @@ var life_events: Array[Dictionary]=[]
 var garden: Node3D
 var records: Dictionary={}
 var hedgehog: Node3D
+var robin: Node3D
 var wild_hedgehog_enabled := true
 var grass_dirty := true
 var cached_ratio := 0.0
+var cached_water_ratio := 0.0
+var cached_water_cells: Array[Vector2i]=[]
 
 func setup(world: Node3D) -> void:
  garden=world
@@ -18,17 +21,38 @@ func setup(world: Node3D) -> void:
  garden.add_child(hedgehog)
  hedgehog.setup(garden)
  preload("res://selection_target.gd").attach(hedgehog,"Hedgehog",Vector3(0.35,0.30,0.4))
+ robin=preload("res://visiting_robin.gd").new()
+ robin.name="Robin"
+ garden.add_child(robin)
+ robin.setup(garden)
+ preload("res://selection_target.gd").attach(robin,"Robin",Vector3(0.28,0.24,0.32))
 
-func grass_ratio() -> float:
- if not grass_dirty:return cached_ratio
- var total: int = garden.grid_size.x*garden.grid_size.y
+func _refresh_coverage() -> void:
+ if not grass_dirty:return
+ var total: int=garden.grid_size.x*garden.grid_size.y
  var grass:=0
+ cached_water_cells.clear()
  for y in range(garden.grid_size.y):
   for x in range(garden.grid_size.x):
-   if garden.get_terrain(Vector2i(x,y)) in [garden.Terrain.GRASS,garden.Terrain.LONG_GRASS]:grass+=1
+   var cell:=Vector2i(x,y)
+   var kind: int=garden.get_terrain(cell)
+   if kind in [garden.Terrain.GRASS,garden.Terrain.LONG_GRASS]:grass+=1
+   if kind in [garden.Terrain.WATER,garden.Terrain.DEEP_WATER]:cached_water_cells.append(cell)
  cached_ratio=float(grass)/float(total)
+ cached_water_ratio=float(cached_water_cells.size())/float(total)
  grass_dirty=false
+
+func grass_ratio() -> float:
+ _refresh_coverage()
  return cached_ratio
+
+func water_ratio() -> float:
+ _refresh_coverage()
+ return cached_water_ratio
+
+func water_cells() -> Array[Vector2i]:
+ _refresh_coverage()
+ return cached_water_cells
 
 func day() -> int:
  return floori((garden.valley_cycle.elapsed+600.0)/garden.valley_cycle.FULL_CYCLE)+1
@@ -83,7 +107,7 @@ func actor_for(id: String) -> Node3D:
  return null
 
 func save_data() -> Dictionary:
- return {"life_events":life_events.duplicate(true),"wild_hedgehog_enabled":wild_hedgehog_enabled,"records":records.duplicate(true),"hedgehog_position":[hedgehog.position.x,hedgehog.position.z],"patrol_corner":hedgehog.patrol_corner}
+ return {"robin_position":[robin.position.x,robin.position.z],"robin_patrol_corner":robin.patrol_corner,"life_events":life_events.duplicate(true),"wild_hedgehog_enabled":wild_hedgehog_enabled,"records":records.duplicate(true),"hedgehog_position":[hedgehog.position.x,hedgehog.position.z],"patrol_corner":hedgehog.patrol_corner}
 
 func restore(data: Dictionary) -> void:
  records.clear()
@@ -95,10 +119,12 @@ func restore(data: Dictionary) -> void:
     life_events.append({"kind":str(event.kind),"species":str(event.species),"individual_id":str(event.individual_id),"day":maxi(1,int(event.day))})
  var saved=data.get("records",{})
  if saved is Dictionary:
-  for id in ["hedgehog","chicken","badger","dragon","peacock"]:
+  for id in ["hedgehog","chicken","badger","dragon","peacock","robin"]:
    var entry=saved.get(id,{})
    if entry is Dictionary and int(entry.get("visit_day",0))>0:
     records[id]={"visit_day":maxi(1,int(entry.visit_day)),"resident_day":maxi(0,int(entry.get("resident_day",0)))}
+ grass_dirty=true
+ robin.restore_visit(data)
  hedgehog.patrol_corner=clampi(int(data.get("patrol_corner",1)),0,3)
  wild_hedgehog_enabled=bool(data.get("wild_hedgehog_enabled",true))
  if not wild_hedgehog_enabled:

@@ -1,3 +1,17 @@
+## Robin visits
+
+The supplied Animals/Robin FBX and plumage texture are imported as a portable GLB.
+A small robin patrols outside the garden. It visits when WATER and DEEP_WATER tiles
+together reach 1% coverage: 13 of the current 1,296 micro-tiles. Watering moisture
+and temporary rain puddles do not count. Reducing coverage before the robin crosses
+the boundary cancels the arrival.
+
+The unrigged bird uses procedural hopping and pecking, avoids occupied ground and
+water, and prefers dry neighbours near the ponds. Its actual first entry triggers
+a visitor notice and unlocks its Field Guide preview and visit day. Position and
+visit records survive save/load; older gardens gain the outside visitor normally.
+No robin residency requirement or shop purchase has been added.
+
 # Current garden controls and terrain
 
 | Action | Keyboard / mouse | Controller |
