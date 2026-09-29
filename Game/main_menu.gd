@@ -318,7 +318,8 @@ func _begin_garden(fresh: bool) -> void:
 	garden.process_mode = Node.PROCESS_MODE_INHERIT
 	garden.camera.make_current()
 	garden._set_guide(false)
-	garden.hedgehog_intro.request_welcome()
+	if fresh: garden.northern_arrival.start()
+	else: garden.hedgehog_intro.request_welcome()
 	_save_garden()
 	loading_label.text = ""
 	menu_buttons.show()

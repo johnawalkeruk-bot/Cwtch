@@ -24,6 +24,7 @@ static func plant(parent: Node3D, terrain: Mesh, label: String, density: float, 
    var u:=sqrt(random.randf())
    var v:=random.randf()
    var point: Vector3=(1.0-u)*a+u*(1.0-v)*b+u*v*c+Vector3.UP*0.01
+   if preload("res://northern_arrival.gd").in_path(point,1.65):continue
    var key:=Vector2i(floori(point.x/16),floori(point.z/16))
    if not groups.has(key):groups[key]=[]
    var scale_factor:=random.randf_range(1.3,2.7)

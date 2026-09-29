@@ -118,3 +118,24 @@ notes with a light-hearted introduction and explicitly says detailed reasons or
 additional issues were not recorded. It does not invent bugs, fixes or test results.
 Published snapshots live in `Website/blog/posts.json`; older releases are not
 backfilled automatically. Preview posts are explicitly marked as unreleased.
+
+
+## Northern arrival
+
+New Garden plays a roughly 40-second arrival before Arthur's welcome. A camera at
+walking height follows the existing gravel-textured approach downhill, with a
+small footstep bob and eased looks toward a crossing creature, a flying bird, a
+birch and two distant animals. Escape, B / Circle or Start skips the walk. Both
+players share the arrival and return to their own cameras afterwards. Existing
+gardens receive the scenery but do not replay the walk when loaded.
+
+The permanent path runs from the northern mountain scenery to the garden boundary.
+Its height samples the actual meadow and ridge triangles. The walk uses the lower
+34 metres; the upper stretch remains background scenery. Garden movement still
+stays within the playable plot. Clock, weather and ambience continue during the
+arrival. The simple animal and bird meshes are placeholders, not visitor/resident
+animals, and do not change wildlife records or XP. The bird and crossing creature
+animate during the arrival; this is not a new background wildlife AI system.
+
+Tune timing, positions and placeholder shapes in Game/northern_arrival.gd. No
+save migration is needed. Player positions are saved at the northern garden entry.

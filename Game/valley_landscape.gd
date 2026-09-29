@@ -185,6 +185,7 @@ func _forest() -> void:
    # Angular modulation gathers the trees into irregular woodland clusters.
    var radius:=rng.randf_range(29,64)
    if sin(angle*11.0)+cos(radius*0.3)<-0.6: continue
+   if preload("res://northern_arrival.gd").in_path(Vector3(cos(angle)*radius,0,sin(angle)*radius),6.0):continue
    var height:=_ridge_height(radius,angle,false)-0.18
    var size:=rng.randf_range(0.65,1.35)
    placements.append(Transform3D(Basis(Vector3.UP,rng.randf()*TAU).scaled(Vector3.ONE*size),Vector3(cos(angle)*radius,height,sin(angle)*radius)))
@@ -198,6 +199,7 @@ func _wild_edge() -> void:
   var placements: Array[Transform3D]=[]
   for i in range(520):
    var point:=Vector2(rng.randf_range(-32,32),rng.randf_range(-32,32))
+   if preload("res://northern_arrival.gd").in_path(Vector3(point.x,0,point.y),2.0):continue
    var outside: float=maxf(absf(point.x)-half.x,absf(point.y)-half.y)
    if outside<1.2 or point.length()>33: continue
    if rng.randf()>lerpf(0.12,0.85,smoothstep(1.2,14.0,outside)): continue

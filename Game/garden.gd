@@ -18,6 +18,7 @@ const ValleyAmbience = preload("res://valley_ambience.gd")
 const ValleyCycle = preload("res://valley_cycle.gd")
 const BackgroundMeadow = preload("res://background_meadow.gd")
 const ValleyLandscape = preload("res://valley_landscape.gd")
+var northern_arrival: Node3D
 var valley_landscape: Node3D
 const CyclingNPC = preload("res://cycling_npc.gd")
 const ProceduralAnimal = preload("res://procedural_animal.gd")
@@ -164,6 +165,9 @@ func _ready() -> void:
 	local_coop=preload("res://local_coop.gd").new()
 	add_child(local_coop)
 	local_coop.setup(self)
+	northern_arrival=preload("res://northern_arrival.gd").new()
+	add_child(northern_arrival)
+	northern_arrival.setup(self)
 	_refresh_ui()
 
 func _create_chunks() -> void:

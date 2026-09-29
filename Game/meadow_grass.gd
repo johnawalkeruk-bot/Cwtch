@@ -36,6 +36,7 @@ func build(world: Node3D) -> void:
 			for i in range(batch.instance_count):
 				var point := Vector3(x * 4.0 + rng.randf_range(0.12, 3.88), 0.008, z * 4.0 + rng.randf_range(0.12, 3.88))
 				var scale_factor := rng.randf_range(0.65, 1.3)
+				if preload("res://northern_arrival.gd").in_path(point,1.65):scale_factor=0.0
 				var ground_point := Vector2(point.x, point.z)
 				point.y += world.heightfield.height_at(ground_point) if world.contains_cell(world.local_to_cell(point)) else world.background_meadow.height_at(ground_point)
 				var basis := Basis(Vector3.UP, rng.randf() * TAU).scaled(Vector3.ONE * scale_factor)
