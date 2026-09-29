@@ -64,12 +64,13 @@ func _draw() -> void:
 	var device: int=ControllerInput.primary_device() if player_slot==0 else ControllerInput.secondary_device()
 	var pad: bool=device>=0 and (player_slot==1 or ControllerInput.using_pad)
 	var items:=prompts()
-	draw_style_box(style,Rect2(153,12,140,items.size()*34+12))
 	for i in items.size():
 		var action: String=items[i][0]
 		var y := 19+i*34
 		if pad:draw_texture_rect(Icons.texture(action,device),Rect2(160,y,28,28),false)
 		else:
 			var key: String={"accept":"Enter" if garden.guide.visible or village or (not village and garden.tool_wheel.visible) else "Tab","back":"Esc" if garden.guide.visible or village or (not village and garden.tool_wheel.visible) else "T","mode":"X","use":"Click","pause":"Esc","move":"Mouse","left":"←","right":"→"}.get(action,"")
+			draw_string_outline(font,Vector2(157,y+19),key,HORIZONTAL_ALIGNMENT_LEFT,-1,11,3,Color("172d2a"))
 			_text(key,Vector2(157,y+19),11,Petals.GOLD)
+		draw_string_outline(font,Vector2(195,y+20),items[i][1],HORIZONTAL_ALIGNMENT_LEFT,-1,14,3,Color("172d2a"))
 		_text(items[i][1],Vector2(195,y+20),14,Petals.PAPER)

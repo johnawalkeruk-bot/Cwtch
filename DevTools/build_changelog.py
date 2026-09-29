@@ -50,7 +50,7 @@ def render(data):
 <title>CWTCH — Changelog</title><meta name="description" content="Follow CWTCH’s development: garden tools, valley life, wildlife, weather and fixes, from the first foundation to the newest changes.">
 <meta name="theme-color" content="#213e35"><link rel="icon" href="favicon.ico"><link rel="stylesheet" href="style.css"></head>
 <body><a class="skip" href="#main">Skip to content</a>
-<header class="wrap"><a class="wordmark" href="./">CWTCH<span>YOUR SLICE OF THE VALLEY.</span></a><nav aria-label="Main navigation"><a href="./#valley">The Valley</a><a href="changelog.html" aria-current="page">Changelog</a><a href="./#download">Download</a></nav></header>
+<header class="wrap"><a class="wordmark" href="./">CWTCH<span>YOUR SLICE OF THE VALLEY.</span></a><nav aria-label="Main navigation"><a href="./#valley">The Valley</a><a href="blog.html">Blog</a><a href="changelog.html" aria-current="page">Changelog</a><a href="./#download">Download</a></nav></header>
 <main id="main" class="changelog wrap"><div class="change-intro"><p class="eyebrow">NOTES FROM THE VALLEY</p><h1>A little more<br><em>with every update.</em></h1><p class="lede">New arrivals, small improvements, and the work that makes the valley feel like home.</p><p>Newest changes first. Open an earlier milestone to explore its notes. Early development is grouped into the first release; later changes supersede older behaviour.</p><a href="./#download">Get the latest published game →</a></div>
 <div class="change-list">'''+''.join(cards)+'''</div></main>
 <footer class="wrap"><a class="wordmark" href="./">CWTCH</a><p>Made for the quieter moments.</p><a href="./#download">Download the launcher</a></footer></body></html>

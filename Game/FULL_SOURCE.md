@@ -2724,7 +2724,6 @@ func _create_garden_ui() -> void:
 	clock_ui=preload("res://petal_clock.gd").new()
 	root.add_child(clock_ui)
 	clock_ui.setup(self)
-	preload("res://cwtch_theme.gd").decorate_menu(guide)
 
 func _toggle_guide() -> void:
 	_set_guide(not guide.visible)
@@ -6192,14 +6191,15 @@ func _draw() -> void:
 	var device: int=ControllerInput.primary_device() if player_slot==0 else ControllerInput.secondary_device()
 	var pad: bool=device>=0 and (player_slot==1 or ControllerInput.using_pad)
 	var items:=prompts()
-	draw_style_box(style,Rect2(153,12,140,items.size()*34+12))
 	for i in items.size():
 		var action: String=items[i][0]
 		var y := 19+i*34
 		if pad:draw_texture_rect(Icons.texture(action,device),Rect2(160,y,28,28),false)
 		else:
 			var key: String={"accept":"Enter" if garden.guide.visible or village or (not village and garden.tool_wheel.visible) else "Tab","back":"Esc" if garden.guide.visible or village or (not village and garden.tool_wheel.visible) else "T","mode":"X","use":"Click","pause":"Esc","move":"Mouse","left":"←","right":"→"}.get(action,"")
+			draw_string_outline(font,Vector2(157,y+19),key,HORIZONTAL_ALIGNMENT_LEFT,-1,11,3,Color("172d2a"))
 			_text(key,Vector2(157,y+19),11,Petals.GOLD)
+		draw_string_outline(font,Vector2(195,y+20),items[i][1],HORIZONTAL_ALIGNMENT_LEFT,-1,14,3,Color("172d2a"))
 		_text(items[i][1],Vector2(195,y+20),14,Petals.PAPER)
 
 ```
@@ -7989,8 +7989,6 @@ func _build_ui() -> void:
  _button(pause_stack,"Save & Quit",func(): host.save_and_quit())
  pause_panel.hide()
  pause_shade.hide()
- preload("res://cwtch_theme.gd").decorate_menu(pause_panel)
- preload("res://cwtch_theme.gd").decorate_menu(shop_panel)
 
 func _input_mode() -> void:
  if current_shop>=0: ControllerInput.focus_first.call_deferred(shop_panel)

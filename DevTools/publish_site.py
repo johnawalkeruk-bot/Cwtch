@@ -17,9 +17,15 @@ def api(endpoint,method='GET',body=None,allow_missing=False):
   raise RuntimeError(result.stderr)
  return json.loads(result.stdout) if result.stdout.strip() else None
 subprocess.run([sys.executable,str(ROOT/'DevTools/build_changelog.py')],check=True)
+subprocess.run([sys.executable,str(ROOT/'DevTools/build_blog.py')],check=True)
 reference=api(REPO+'/git/ref/heads/gh-pages',allow_missing=True)
 entries=[]
-for name in ['index.html','changelog.html','style.css','release.js','.nojekyll','favicon.ico','assets/logo.png','assets/garden.png']:
+names=['index.html','changelog.html','blog.html','style.css','release.js','.nojekyll','favicon.ico','assets/logo.png','assets/garden.png']
+names += [p.relative_to(ROOT/'Website').as_posix() for p in sorted((ROOT/'Website/blog').glob('*.html')) if p.name != 'preview.html']
+# Include the current preview only while it is linked from the blog index.
+if 'blog/preview.html' in (ROOT/'Website/blog.html').read_text(encoding='utf-8'):names.append('blog/preview.html')
+names += [p.relative_to(ROOT/'Website').as_posix() for p in sorted((ROOT/'Website/assets/blog').glob('*')) if p.suffix.lower() in {'.png','.jpg','.webp'}]
+for name in names:
  file=ROOT/'Website'/name
  blob=api(REPO+'/git/blobs','POST',{'content':base64.b64encode(file.read_bytes()).decode(),'encoding':'base64'})
  entries.append({'path':name,'mode':'100644','type':'blob','sha':blob['sha']})

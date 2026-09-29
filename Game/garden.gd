@@ -621,7 +621,6 @@ func _create_garden_ui() -> void:
 	clock_ui=preload("res://petal_clock.gd").new()
 	root.add_child(clock_ui)
 	clock_ui.setup(self)
-	preload("res://cwtch_theme.gd").decorate_menu(guide)
 
 func _toggle_guide() -> void:
 	_set_guide(not guide.visible)

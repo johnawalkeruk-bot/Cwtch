@@ -93,5 +93,28 @@ to see this panel; game updates do not replace the running launcher.
   Remapping software that presents a PlayStation pad as Xbox will show Xbox icons.
   Keyboard/mouse input shows compact key labels instead.
 
-The in-game pause and shop menus use parchment, serif lettering and gold petal
-frames. The leather Field Guide keeps its book presentation.
+The in-game pause and shop menus use the clean woodland-green style, without
+decorative petal frames. Button hints float over the scenery with outlined text.
+The daffodil tool wheel, analogue clock and leather Field Guide keep their designs.
+
+
+## Studio blog and manual releases
+
+`Website/blog.html` is the studio blog. `DevTools/build_blog.py` renders it locally;
+`Publish Next Version.cmd` automatically freezes a new post after promoting the
+changelog and publishes it with the website. Retrying the same version keeps its
+existing post. The author is always **Waldas Gamer Studios**. Nothing is published
+by generating the local preview.
+
+For each update, add `blog` to the unreleased changelog entry: `intro` (a lightly
+humorous paragraph), `why` (paragraphs explaining decisions), `issues` (honest
+recorded problems or limitations), and `screenshots` (optional objects with `path`
+and `caption`). Store screenshots under `Website/assets/blog/` with unique names;
+never overwrite images used by an older post. Only use actual development captures.
+Run `Launcher/Python/python.exe DevTools/build_blog.py` to refresh the preview.
+
+If editorial notes are omitted, publishing still creates a post from the release
+notes with a light-hearted introduction and explicitly says detailed reasons or
+additional issues were not recorded. It does not invent bugs, fixes or test results.
+Published snapshots live in `Website/blog/posts.json`; older releases are not
+backfilled automatically. Preview posts are explicitly marked as unreleased.

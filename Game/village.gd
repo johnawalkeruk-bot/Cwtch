@@ -301,8 +301,6 @@ func _build_ui() -> void:
  _button(pause_stack,"Save & Quit",func(): host.save_and_quit())
  pause_panel.hide()
  pause_shade.hide()
- preload("res://cwtch_theme.gd").decorate_menu(pause_panel)
- preload("res://cwtch_theme.gd").decorate_menu(shop_panel)
 
 func _input_mode() -> void:
  if current_shop>=0: ControllerInput.focus_first.call_deferred(shop_panel)

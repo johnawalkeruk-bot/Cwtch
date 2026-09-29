@@ -37,6 +37,7 @@ def main(version=None):
  pending.parent.mkdir(exist_ok=True);pending.write_text(version)
  release=build(version)
  run([sys.executable,ROOT/'DevTools/build_changelog.py','--release',version])
+ run([sys.executable,ROOT/'DevTools/build_blog.py','--release',version])
  sys.path.insert(0,str(ROOT/'Launcher'))
  from update import format_patch_notes
  changelog=json.loads((ROOT/'Website/changelog.json').read_text(encoding='utf-8'))
