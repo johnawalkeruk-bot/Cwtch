@@ -278,13 +278,71 @@ const CUES = [
 
 ```gd
 extends PanelContainer
-## Parchment speech bubble; the tail points back toward Arthur's portrait.
+## Alternating daffodils follow the bubble perimeter, leaving its text unobstructed.
+const FLOWERS = [preload("res://assets/ui/Border-1.png"),preload("res://assets/ui/Border-2.png")]
+func _ready() -> void:
+ resized.connect(queue_redraw)
 func _draw() -> void:
  var fill:=Color("f4ead2")
  var edge:=Color("b69755")
  var points:=PackedVector2Array([Vector2(2,42),Vector2(-23,63),Vector2(2,69)])
  draw_colored_polygon(points,fill)
  draw_polyline(PackedVector2Array([points[0],points[1],points[2]]),edge,2.0,true)
+
+ var perimeter := 2.0*(size.x+size.y)
+ var count := maxi(4,int(ceil(perimeter/29.0)))
+ if count%2!=0:count+=1
+ for i in count:
+  var distance := float(i)*perimeter/count
+  var at: Vector2
+  var turn: float
+  if distance<size.x:
+   at=Vector2(distance,0);turn=0
+  elif distance<size.x+size.y:
+   at=Vector2(size.x,distance-size.x);turn=PI/2
+  elif distance<2*size.x+size.y:
+   at=Vector2(2*size.x+size.y-distance,size.y);turn=PI
+  else:
+   at=Vector2(0,perimeter-distance);turn=3*PI/2
+  turn+=deg_to_rad(-17.0 if i%2==0 else 21.0)
+  draw_set_transform(at,turn,Vector2.ONE)
+  draw_texture_rect(FLOWERS[i%2],Rect2(-Vector2.ONE*17,Vector2.ONE*34),false)
+ draw_set_transform(Vector2.ZERO,0,Vector2.ONE)
+
+```
+
+## arthur_welcome_subtitles.gd
+
+```gd
+extends RefCounted
+## Generated locally from Welcome.mp3 with Whisper small.en timestamps.
+const CUES = [
+ {
+  "start": 0.0,
+  "end": 2.18,
+  "text": "Oh, wow, welcome back."
+ },
+ {
+  "start": 3.16,
+  "end": 4.3,
+  "text": "There's been a few changes."
+ },
+ {
+  "start": 4.98,
+  "end": 6.5,
+  "text": "Have you checked the changelog?"
+ },
+ {
+  "start": 7.36,
+  "end": 8.88,
+  "text": "Well, have a look around."
+ },
+ {
+  "start": 9.78,
+  "end": 10.04,
+  "text": "Enjoy!"
+ }
+]
 
 ```
 
@@ -1037,11 +1095,11 @@ static func panel(color: Color = Color(0.06,0.13,0.12,0.94)) -> StyleBoxFlat:
 	style.bg_color = color
 	style.border_color = Color(0.76,0.65,0.42,0.30)
 	style.set_border_width_all(1)
-	style.set_corner_radius_all(16)
+	style.set_corner_radius_all(12)
 	style.content_margin_left = 24
 	style.content_margin_right = 24
-	style.content_margin_top = 16
-	style.content_margin_bottom = 16
+	style.content_margin_top = 20
+	style.content_margin_bottom = 20
 	style.shadow_color = Color(0,0.025,0.02,0.22)
 	style.shadow_size = 10
 	style.shadow_offset = Vector2(0,4)
@@ -1053,12 +1111,14 @@ static func make() -> Theme:
 	font.font_names = PackedStringArray(["Segoe UI","Arial"])
 	theme.default_font = font
 	theme.default_font_size = 17
+	theme.set_constant("separation","VBoxContainer",10)
+	theme.set_constant("separation","HBoxContainer",12)
 	theme.set_color("font_color","Label",CREAM)
 	theme.set_stylebox("panel","PanelContainer",panel())
 	for type in ["Button","OptionButton"]:
-		theme.set_stylebox("normal",type,panel(Color("213c35")))
-		theme.set_stylebox("hover",type,panel(Color("355347")))
-		theme.set_stylebox("pressed",type,panel(Color("132b26")))
+		theme.set_stylebox("normal",type,button_style(Color("213c35")))
+		theme.set_stylebox("hover",type,button_style(Color("355347")))
+		theme.set_stylebox("pressed",type,button_style(Color("132b26")))
 		var focus := panel(Color(0,0,0,0))
 		focus.border_color = GOLD
 		focus.set_border_width_all(2)
@@ -1069,6 +1129,22 @@ static func make() -> Theme:
 	theme.set_stylebox("panel","PopupMenu",panel())
 	theme.set_color("font_color","PopupMenu",CREAM)
 	return theme
+
+static func button_style(color: Color) -> StyleBoxFlat:
+	var style := panel(color)
+	style.set_corner_radius_all(8)
+	style.content_margin_top=12
+	style.content_margin_bottom=12
+	style.shadow_size=0
+	return style
+
+static func compact_card() -> StyleBoxFlat:
+	var style := panel()
+	style.content_margin_left=18
+	style.content_margin_right=18
+	style.content_margin_top=12
+	style.content_margin_bottom=12
+	return style
 
 ```
 
@@ -1438,7 +1514,7 @@ func _ready() -> void:
 		var label: String=CATEGORIES[i]
 		var tab:=_button(label,Vector2(-82,154+i*70),Vector2(128,54),func(): _category(label))
 		tabs.append(tab)
-	navigation_hint=_text("LB / RB  ·  category\nArrows  ·  entries     B / Esc  ·  close",Vector2(580,48),Vector2(425,76),15)
+	navigation_hint=_text("",Vector2(580,48),Vector2(425,76),15)
 	section=_text("",Vector2(84,98),Vector2(410,28),14)
 	title=_text("",Vector2(580,139),Vector2(405,65),35)
 	description=_text("",Vector2(580,232),Vector2(395,210),21)
@@ -1615,11 +1691,11 @@ func _show_entry() -> void:
 		land_page.setup(garden,serif)
 		title.text="Land area"
 		section.text="LAND AREA   /   GARDEN SURVEY"
-		navigation_hint.text="LB / RB  ·  category\nArrows / hover  ·  inspect tiles"
+		navigation_hint.text=""
 		folio.text="Garden survey"
 		return
 	viewport.render_target_update_mode=SubViewport.UPDATE_ALWAYS
-	navigation_hint.text="LB / RB  ·  category\nArrows  ·  entries     B / Esc  ·  close"
+	navigation_hint.text=""
 	if entries.is_empty():
 		title.text="No animal visits yet"
 		description.text="Make a little grass and watch the wild edge. Your first visitor will appear here after entering the garden."
@@ -2042,6 +2118,7 @@ var hud: Label
 var hint: Label
 var notice: Label
 var field_book: Control
+var pause_shade: ColorRect
 var guide: PanelContainer
 var control_hint: Label
 var guide_controls: Label
@@ -2152,7 +2229,7 @@ func _create_cursor() -> void:
 func _toggle_ambience() -> void:
 	ambience_muted = not ambience_muted
 	ambience.muted = ambience_muted
-	ambience_button.text = "Ambience: off [M]" if ambience_muted else "Ambience: on [M]"
+	ambience_button.text = "Ambient sounds · off" if ambience_muted else "Ambient sounds · on"
 
 func _create_view() -> void:
 	super._create_view()
@@ -2317,7 +2394,7 @@ func _physics_process(delta: float) -> void:
 		elif contains_cell(target):
 			if is_instance_valid(selected_target): target=selected_target.crop_cell
 			if blocked_cells.has(target): message="This ground is occupied."
-			elif tool==Tool.NONE: message="Choose a tool with 1–4 or the D-pad to tend the ground."
+			elif tool==Tool.NONE: message="Choose a tool to tend the ground."
 			else: floating_tool.use_at(target)
 		else:
 			message="Let the spirit settle, then tend this square."
@@ -2472,7 +2549,8 @@ func _create_garden_ui() -> void:
 	aim_dot.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
 	var top := PanelContainer.new()
 	root.add_child(top)
-	top.position=Vector2(28,24)
+	top.position=Vector2(24,24)
+	top.add_theme_stylebox_override("panel",preload("res://cwtch_theme.gd").compact_card())
 	top.mouse_filter=Control.MOUSE_FILTER_IGNORE
 	var stack := VBoxContainer.new()
 	stack.add_theme_constant_override("separation",5)
@@ -2482,6 +2560,7 @@ func _create_garden_ui() -> void:
 	stack.add_child(hud)
 	control_hint=_label("",12,Color("9cb7a8"))
 	stack.add_child(control_hint)
+	control_hint.hide()
 	notice=_label("",16,Color("f3ead4"))
 	root.add_child(notice)
 	notice.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
@@ -2492,20 +2571,27 @@ func _create_garden_ui() -> void:
 	notice.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
 	notice.add_theme_color_override("font_shadow_color",Color("132b26"))
 	notice.add_theme_constant_override("shadow_offset_y",2)
+	pause_shade=ColorRect.new()
+	root.add_child(pause_shade)
+	pause_shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	pause_shade.color=Color(0.025,0.055,0.05,0.45)
+	pause_shade.mouse_filter=Control.MOUSE_FILTER_IGNORE
+	pause_shade.hide()
 	guide=PanelContainer.new()
 	root.add_child(guide)
 	guide.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	guide.offset_left=-250
-	guide.offset_right=250
-	guide.offset_top=-310
-	guide.offset_bottom=310
+	guide.offset_left=-240
+	guide.offset_right=240
+	guide.offset_top=-225
+	guide.offset_bottom=225
 	var pages := VBoxContainer.new()
-	pages.add_theme_constant_override("separation",6)
+	pages.add_theme_constant_override("separation",10)
 	guide.add_child(pages)
 	pages.add_child(_label("A MOMENT OF REST",24,Color("e5c17c")))
 	pages.add_child(_label("A little care goes a long way.",16,Color("b2c6bb")))
 	guide_controls=_label("",16,Color("eee5d1"))
 	pages.add_child(guide_controls)
+	guide_controls.hide()
 	field_book=preload("res://field_book.gd").new()
 	root.add_child(field_book)
 	field_book.closed.connect(func():
@@ -2520,18 +2606,20 @@ func _create_garden_ui() -> void:
 		field_book.open(self))
 	pages.add_child(book_button)
 	ambience_button=Button.new()
-	ambience_button.text="Ambient sounds  ·  on [M]"
+	ambience_button.text="Ambient sounds · on"
 	ambience_button.pressed.connect(_toggle_ambience)
 	pages.add_child(ambience_button)
 	var close := Button.new()
 	close.text="Return to the garden"
 	close.pressed.connect(_toggle_guide)
 	pages.add_child(close)
+	pages.move_child(close,2)
 	if is_instance_valid(get_tree().current_scene) and get_tree().current_scene!=self and get_tree().current_scene.has_method("open_menu"):
 		var village_button:=Button.new()
 		village_button.text="Visit the village"
 		village_button.pressed.connect(get_tree().current_scene.open_village)
 		pages.add_child(village_button)
+		pages.move_child(village_button,5)
 		var back := Button.new()
 		back.text="Save & return to main menu"
 		back.pressed.connect(get_tree().current_scene.open_menu)
@@ -2557,6 +2645,7 @@ func _set_guide(open: bool) -> void:
 	if is_instance_valid(dev_console) and dev_console.opened: dev_console.toggle(false)
 	if is_instance_valid(field_book) and field_book.visible: field_book.close()
 	guide.visible=open
+	pause_shade.visible=open
 	notice.visible=not open
 	if is_instance_valid(compass_view):compass_view.visible=not open
 	if open: ControllerInput.focus_first.call_deferred(guide)
@@ -2591,16 +2680,13 @@ func _refresh_ui() -> void:
 	notice.modulate.a=smoothstep(0,0.5,toast_timer)
 
 func _controller_prompts() -> void:
-	var pad := ControllerInput.using_pad
-	control_hint.text = _tool_controls()
-	guide_controls.text = ("Left stick  glide  /  Right stick  look\n\nD-pad: Up Hoe / Right Seeds\nDown Watering can / Left Shovel\nX / Square  change mode\nB / Circle  put tool away\nHold RT  use / Start  pause\nR3  TARDIS" if pad else "WASD  glide  /  Mouse  look\n\n1 Hoe / 2 Seeds / 3 Watering can / 4 Shovel\nX  change mode / T  put tool away\nHold left-click  use / Esc  pause\nCtrl+T  TARDIS") + "\n\nYour garden saves when you leave."
+	control_hint.text=""
+	guide_controls.text=""
 	if field_book.visible: ControllerInput.focus_first.call_deferred(field_book)
 	elif guide.visible: ControllerInput.focus_first.call_deferred(guide)
 
 func _tool_controls() -> String:
-	var text: String="D-pad  tools / B  put away / Hold RT  use" if ControllerInput.using_pad else "1-4  tools / T  put away / Hold click  use"
-	if tool==Tool.SHOVEL:text+="\nX / Square  change mode" if ControllerInput.using_pad else "\nX  change mode"
-	return text
+	return ""
 
 ```
 
@@ -3301,6 +3387,9 @@ const CAPTIONS=preload("res://arthur_hedgehog_subtitles.gd").CUES
 const VOICE=preload("res://assets/sounds/dialogue/Arthur_Hedgehogs.mp3")
 const TALK_CLIPS=["Talking_1","Talking_2"]
 const CAMERA_SECONDS:=0.85
+var welcome_pending:=false
+var dialogue_kind:="hedgehog"
+var active_captions: Array=CAPTIONS
 var garden: Node3D
 var arthur: Node3D
 var active:=false
@@ -3372,7 +3461,7 @@ func setup(world: Node3D) -> void:
  caption.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
  caption.custom_minimum_size=Vector2(372,78)
  stack.add_child(caption)
- pause_label=garden._label("PAUSED\nEsc / Start to continue",20,Color("f4dfaa"))
+ pause_label=garden._label("PAUSED",20,Color("f4dfaa"))
  ui.add_child(pause_label)
  pause_label.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
  pause_label.offset_left=-220
@@ -3388,11 +3477,11 @@ func setup(world: Node3D) -> void:
  garden.wildlife.animal_event.connect(_animal_event)
 
 func _animal_event(kind: String, species: String, _day: int) -> void:
- if kind=="visit" and species=="hedgehog" and not completed and not active:
+ if kind=="visit" and species=="hedgehog" and not completed:
   pending=true
 
 func save_data() -> Dictionary:
- return {"completed":completed,"pending":pending or (active and not completed)}
+ return {"completed":completed,"pending":pending or (active and dialogue_kind=="hedgehog" and not completed)}
 
 func restore(data: Dictionary) -> void:
  # Existing gardens with a previously recorded visit do not replay old arrivals.
@@ -3402,15 +3491,26 @@ func restore(data: Dictionary) -> void:
 func _can_begin() -> bool:
  return garden.is_visible_in_tree() and not garden.guide.visible and not garden.tool_wheel.visible and not garden.field_book.visible and not garden.dev_console.opened
 
-func _begin() -> void:
- if active or completed or not is_instance_valid(arthur):return
+func request_welcome() -> void:
+ welcome_pending=true
+
+func _begin(kind: String="hedgehog") -> void:
+ if active or (kind=="hedgehog" and completed) or not is_instance_valid(arthur):return
  for clip in TALK_CLIPS:
   if not arthur.animation_player.has_animation(clip):
    push_error("Arthur is missing the talking animation: "+clip)
    pending=false
    return
+ dialogue_kind=kind
+ if kind=="welcome":
+  welcome_pending=false
+  voice.stream=load("res://assets/sounds/dialogue/Welcome.mp3")
+  active_captions=preload("res://arthur_welcome_subtitles.gd").CUES
+ else:
+  pending=false
+  voice.stream=VOICE
+  active_captions=CAPTIONS
  active=true
- pending=false
  paused=false
  phase="approach"
  phase_time=0.0
@@ -3471,7 +3571,7 @@ func _play_talk() -> void:
  if not played_clips.has(clip):played_clips.append(clip)
 
 func subtitle_at(seconds: float) -> String:
- for cue in CAPTIONS:
+ for cue in active_captions:
   if seconds>=float(cue.start) and seconds<float(cue.end):return cue.text
  return ""
 
@@ -3480,7 +3580,8 @@ func _process(delta: float) -> void:
   bubble.hide()
   pause_label.hide()
   ui.hide()
-  if pending and _can_begin():_begin()
+  if welcome_pending and _can_begin():_begin("welcome")
+  elif pending and _can_begin():_begin()
   return
  if paused:return
  phase_time+=delta
@@ -3514,8 +3615,9 @@ func _process(delta: float) -> void:
 
 func _begin_return() -> void:
  if not active or phase=="return":return
- completed=true
- pending=false
+ if dialogue_kind=="hedgehog":
+  completed=true
+  pending=false
  phase="return"
  phase_time=0.0
  bubble.hide()
@@ -4312,8 +4414,13 @@ func setup(scene: Node3D, in_village: bool=false) -> void:
 		var ui := CanvasLayer.new()
 		view.add_child(ui)
 		var title := Label.new()
-		ui.add_child(title)
-		title.position=Vector2(20,22)
+		var card := PanelContainer.new()
+		card.theme=preload("res://cwtch_theme.gd").make()
+		card.add_theme_stylebox_override("panel",preload("res://cwtch_theme.gd").compact_card())
+		card.position=Vector2(24,24)
+		card.mouse_filter=Control.MOUSE_FILTER_IGNORE
+		ui.add_child(card)
+		card.add_child(title)
 		title.add_theme_font_size_override("font_size",17)
 		title.add_theme_color_override("font_color",Color("f4c568") if index==0 else Color("ffd45a"))
 		title.add_theme_color_override("font_shadow_color",Color("14231f"))
@@ -4321,7 +4428,7 @@ func setup(scene: Node3D, in_village: bool=false) -> void:
 		labels.append(title)
 		var note := Label.new()
 		ui.add_child(note)
-		note.position=Vector2(20,105)
+		note.position=Vector2(24,116)
 		note.add_theme_font_size_override("font_size",14)
 		note.add_theme_color_override("font_shadow_color",Color.BLACK)
 		note.add_theme_constant_override("shadow_offset_y",2)
@@ -4379,18 +4486,17 @@ func _process(_delta: float) -> void:
 			if not village:
 				var tool: Node3D=world.floating_tool if i==0 else second.floating_tool
 				text+="\n"+world.TOOL_NAMES[tool.selected]
-				if tool.selected==3:text+=" · "+tool.MODES[tool.shovel_mode]+" [X / Square]"
-				text+="\nD-pad tools · RT use · B put away"
-			else:text+="\nExplore together · Start to pause"
+				if tool.selected==3:text+=" · "+tool.MODES[tool.shovel_mode]
+			else:text+="\nThe village · %d coins"%world.host.coins
 			labels[i].text=text
-			labels[i].visible=not second.blocked()
+			labels[i].get_parent().visible=not second.blocked()
 			dots[i].visible=not second.blocked()
 			dots[i].position=Vector2(views[i].size)*0.5-Vector2(4,16)
 			notes[i].size=Vector2(maxf(100,views[i].size.x-40),70)
 			notes[i].visible=not second.blocked()
 			if village:
 				var shop: int=world.selected_shop if i==0 else second.selected_shop
-				notes[i].text="A / RT · "+world.SHOPS[shop] if shop>=0 else ""
+				notes[i].text=world.SHOPS[shop] if shop>=0 else ""
 			else:notes[i].text=(world.message if world.toast_timer>0 else "") if i==0 else (second.message if second.message_time>0 else "")
 	# The full-screen menus, clock, guide and animal notices remain shared overlays.
 	world.hud.get_parent().get_parent().visible=not visible_split
@@ -4656,6 +4762,7 @@ var coins := 500
 var purchases: Array = []
 var menu_active := true
 var elapsed := 1000.0
+var weather_pattern := preload("res://weather_pattern.gd").new()
 var weather_elapsed := 0.0
 var weather_index := 0
 var rain_strength := 0.0
@@ -4703,8 +4810,8 @@ func _build_landscape() -> void:
 	stage.add_child(camera)
 	camera.projection = Camera3D.PROJECTION_PERSPECTIVE
 	camera.fov = 48
-	camera.position = Vector3(17,16,110)
-	camera.look_at(Vector3(-5,31,-80))
+	camera.position = Vector3(12,16,62)
+	camera.look_at(Vector3(-5,27,-110))
 	camera.far = 300
 	camera.current = true
 	sun = DirectionalLight3D.new()
@@ -4762,10 +4869,6 @@ func _button(text: String, action: Callable, parent: Node) -> Button:
 	button.text = text.to_upper()
 	button.custom_minimum_size = Vector2(280,51)
 	button.add_theme_font_size_override("font_size",19)
-	button.add_theme_color_override("font_color",Color("ecdfbd"))
-	button.add_theme_stylebox_override("normal",_style(Color(0.08,0.15,0.13,0.89)))
-	button.add_theme_stylebox_override("hover",_style(Color(0.22,0.29,0.21,0.97)))
-	button.add_theme_stylebox_override("pressed",_style(Color("172a24")))
 	button.pressed.connect(action)
 	parent.add_child(button)
 	return button
@@ -4783,7 +4886,7 @@ func _build_ui() -> void:
 	heading.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
 	heading.offset_left = -300
 	heading.offset_right = 300
-	heading.offset_top = 146
+	heading.offset_top = 130
 	var title := _label("CWTCH",112,Color("ffbf55"))
 	var font := SystemFont.new()
 	font.font_names = PackedStringArray(["Arial","Segoe UI"])
@@ -4803,15 +4906,15 @@ func _build_ui() -> void:
 	menu_buttons.add_theme_constant_override("separation",12)
 	root.add_child(menu_buttons)
 	menu_buttons.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
-	menu_buttons.offset_left = -150
-	menu_buttons.offset_right = 150
+	menu_buttons.offset_left = -180
+	menu_buttons.offset_right = 180
 	menu_buttons.offset_top = -285
 	menu_buttons.offset_bottom = -24
 	_button("enter garden",func(): _begin_garden(false),menu_buttons)
 	_button("new garden",_request_new,menu_buttons)
 	_button("options",func(): options.show(); menu_buttons.hide(); heading.hide(); ControllerInput.focus_first.call_deferred(options),menu_buttons)
 	_button("QUIT GAME",save_and_quit,menu_buttons)
-	weather_label = _label("",14,Color("66818a"))
+	weather_label = _label("",14,Color("e5c17c"))
 	root.add_child(weather_label)
 	weather_label.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
 	weather_label.offset_left = 24
@@ -4835,12 +4938,13 @@ func _build_ui() -> void:
 	options.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	options.offset_left = -220
 	options.offset_right = 220
-	options.offset_top = -55
+	options.offset_top = -160
+	options.offset_bottom = 160
 	options.add_theme_stylebox_override("panel",_style(Color(0.07,0.13,0.12,0.97)))
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation",10)
 	options.add_child(box)
-	box.add_child(_label("options",24,Color("e2bf6e")))
+	box.add_child(_label("OPTIONS",24,Color("e2bf6e")))
 	box.add_child(_label("Sound volume",16,Color("eee6d0")))
 	var volume := HSlider.new()
 	volume.name = "Volume"
@@ -4870,10 +4974,9 @@ func _process(delta: float) -> void:
 	_update_weather(delta)
 
 func _update_weather(delta: float) -> void:
-	weather_elapsed += delta
-	while weather_elapsed >= Weather.WEATHER_DURATIONS[weather_index]:
-		weather_elapsed -= Weather.WEATHER_DURATIONS[weather_index]
-		weather_index = (weather_index+1)%Weather.WEATHER_NAMES.size()
+	var next := weather_pattern.advance(weather_index,weather_elapsed,delta)
+	weather_index=int(next[0])
+	weather_elapsed=float(next[1])
 	var index := weather_index if weather_override < 0 else weather_override
 	rain_strength = move_toward(rain_strength,Weather.RAIN_LEVELS[index],delta/12.0)
 	cloud_cover = move_toward(cloud_cover,Weather.CLOUD_LEVELS[index],delta/30.0)
@@ -4915,7 +5018,7 @@ func _update_weather(delta: float) -> void:
 	lightning.light_energy = flash
 	landscape.animate(elapsed,daylight,rain_strength)
 	camera.position.x = 17+sin(elapsed*0.025)*7
-	camera.look_at(Vector3(-5,31,-80))
+	camera.look_at(Vector3(-5,27,-110))
 	sky_material.set_shader_parameter("lightning",flash)
 	ambience.update_mix(delta,rain_strength,daylight,false)
 	var minutes := int(fposmod(6+elapsed*24/Weather.FULL_CYCLE,24)*60)
@@ -4955,6 +5058,7 @@ func _begin_garden(fresh: bool) -> void:
 	garden.process_mode = Node.PROCESS_MODE_INHERIT
 	garden.camera.make_current()
 	garden._set_guide(false)
+	garden.hedgehog_intro.request_welcome()
 	_save_garden()
 	loading_label.text = ""
 	menu_buttons.show()
@@ -4988,7 +5092,7 @@ func _save_garden() -> bool:
 		crops.append({"x":cell.x,"z":cell.y,"age":crop.age,"watered":crop.watered})
 	var data := {"version":1,"terrain":terrain,"crops":crops,"harvested":garden.harvested,
 		"player":[garden.player.cell.x,garden.player.cell.y],"player_position":[garden.player.position.x,garden.player.position.z],"elapsed":garden.valley_cycle.elapsed,
-		"weather":garden.valley_cycle.weather_index,"weather_elapsed":garden.valley_cycle.weather_elapsed,
+		"weather_pattern":garden.valley_cycle.weather_pattern.save_data(),"weather":garden.valley_cycle.weather_index,"weather_elapsed":garden.valley_cycle.weather_elapsed,
 		"local_coop":garden.local_coop.second.save_data(),"deformation":garden.heightfield.save_deformation(),"wildlife":garden.wildlife.save_data(),"hedgehog_intro":garden.hedgehog_intro.save_data(),"wetness":garden.valley_cycle.wetness,"watered":_saved_watered(),"coins":coins,"purchases":purchases}
 	var file := FileAccess.open(SAVE_PATH,FileAccess.WRITE)
 	if not file: return false
@@ -5028,7 +5132,7 @@ func _restore_garden() -> void:
 		garden.player.restore_position(Vector3(float(free_position[0]),0,float(free_position[1])))
 	garden.valley_cycle.elapsed = float(data.get("elapsed",0))
 	garden.valley_cycle.weather_index = clampi(int(data.get("weather",0)),0,6)
-	garden.valley_cycle.weather_elapsed = float(data.get("weather_elapsed",0))
+	garden.valley_cycle.weather_elapsed = garden.valley_cycle.weather_pattern.restore(data.get("weather_pattern",{}),garden.valley_cycle.weather_index,float(data.get("weather_elapsed",0)))
 	garden.valley_cycle.wetness = float(data.get("wetness",0))
 	for value in data.get("watered",[]):
 		var wet_cell := Vector2i(int(value[0]),int(value[1]))
@@ -5118,6 +5222,7 @@ func return_from_village() -> void:
 	garden.process_mode=Node.PROCESS_MODE_INHERIT
 	garden.camera.make_current()
 	garden._set_guide(false)
+	garden.hedgehog_intro.request_welcome()
 	_save_garden()
 
 func purchase_village_item(id: String) -> String:
@@ -5490,45 +5595,10 @@ func _finish(builder: SurfaceTool, label: String) -> MeshInstance3D:
 	return instance
 
 func _build_mountain() -> void:
-	const SEGMENTS := 72
-	const RINGS := 24
-	var points: Array[Vector3] = []
-	for ring in range(RINGS+1):
-		var t := float(ring)/RINGS
-		for segment in range(SEGMENTS):
-			var angle := float(segment)/SEGMENTS*TAU
-			var ridge := 1.0+0.13*sin(angle*5.0+0.7)+0.055*cos(angle*9.0)
-			var radius := t*79*ridge
-			var height := 76.0*pow(1.0-t,1.42)
-			height += sin(PI*t)*(sin(angle*5+0.5)*6.5+cos(angle*8)*2.0)
-			# The peak leans toward the left; ridges run down all sides.
-			points.append(Vector3(-5+cos(angle)*radius-8*(1-t),maxf(0,height),-87+sin(angle)*radius*0.82-3*(1-t)))
-	var builder := SurfaceTool.new()
-	builder.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for ring in range(RINGS):
-		for segment in range(SEGMENTS):
-			var a := ring*SEGMENTS+segment
-			var b := ring*SEGMENTS+(segment+1)%SEGMENTS
-			var c := a+SEGMENTS
-			var d := b+SEGMENTS
-			for tri in [[a,c,d],[a,d,b]]:
-				var p: Vector3 = (points[tri[0]]+points[tri[1]]+points[tri[2]])/3.0
-				var snowline := 43.0+sin(p.x*0.28+p.z*0.12)*4.5+cos(p.z*0.3)*2.0
-				var color := Color("356c75").lerp(Color("648b94"),clampf(p.y/72.0,0,1))
-				if p.y > snowline:
-					color = Color("b9dce9").lerp(Color("f0f7f8"),smoothstep(45,73,p.y))
-				color *= rng.randf_range(0.94,1.05)
-				_triangle(builder,points[tri[0]],points[tri[1]],points[tri[2]],color)
-	# Seal the underside so this is a model with volume, not a camera-facing card.
-	for segment in range(SEGMENTS):
-		var a: Vector3 = points[RINGS*SEGMENTS+segment]
-		var b: Vector3 = points[RINGS*SEGMENTS+(segment+1)%SEGMENTS]
-		for point in [Vector3(-5,-0.1,-87),b,a]:
-			builder.set_normal(Vector3.DOWN)
-			builder.set_color(Color("31555c"))
-			builder.add_vertex(point)
-	var mountain := _finish(builder,"SnowcapMountain3D")
-	preload("res://scenery_grass.gd").plant(self,mountain.mesh,"MenuHillsideGrass",0.5,22.0)
+	var ridges := preload("res://valley_landscape.gd").new()
+	ridges.name="GardenMountainBackdrop"
+	add_child(ridges)
+	ridges.build_ridges(material)
 
 func _build_ground() -> void:
 	var builder := SurfaceTool.new()
@@ -6797,7 +6867,7 @@ const FULL_CYCLE := DAY_SECONDS * 2.0
 const WEATHER_NAMES := ["Fair", "Cloudy", "Light rain", "Rain", "Heavy rain", "Thunderstorm", "Clearing"]
 const RAIN_LEVELS := [0.0, 0.0, 0.18, 0.45, 0.8, 1.0, 0.0]
 const CLOUD_LEVELS := [0.15, 0.8, 0.85, 0.95, 1.0, 1.0, 0.4]
-const WEATHER_DURATIONS := [180.0, 90.0, 150.0, 150.0, 120.0, 90.0, 120.0]
+var weather_pattern := preload("res://weather_pattern.gd").new()
 var elapsed := 0.0
 var weather_elapsed := 0.0
 var weather_index := 0
@@ -6836,11 +6906,11 @@ func setup(world: Node3D) -> void:
 	layer.add_child(panel)
 	panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
 	panel.offset_left = -220
-	panel.offset_right = -28
+	panel.offset_right = -24
 	panel.offset_top = 24
 	panel.offset_bottom = 104
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	panel.add_theme_stylebox_override("panel", garden._panel_style(Color("263a35")))
+	panel.add_theme_stylebox_override("panel", preload("res://cwtch_theme.gd").compact_card())
 	clock_label = garden._label("", 16, Color("eedeb9"))
 	panel.add_child(clock_label)
 	lightning = DirectionalLight3D.new()
@@ -6890,10 +6960,9 @@ func _process(delta: float) -> void:
 
 func advance(delta: float) -> void:
 	elapsed += delta
-	weather_elapsed += delta
-	while weather_elapsed >= WEATHER_DURATIONS[weather_index]:
-		weather_elapsed -= WEATHER_DURATIONS[weather_index]
-		weather_index = (weather_index + 1) % WEATHER_NAMES.size()
+	var next := weather_pattern.advance(weather_index,weather_elapsed,delta)
+	weather_index=int(next[0])
+	weather_elapsed=float(next[1])
 	rain_strength = move_toward(rain_strength, RAIN_LEVELS[weather_index], delta / 12.0)
 	cloud_cover = move_toward(cloud_cover, CLOUD_LEVELS[weather_index], delta / 30.0)
 	_advance_storm(delta)
@@ -6981,8 +7050,7 @@ func build(world: Node3D) -> void:
  plants_material.set_shader_parameter("vegetation", true)
  terrain_material.shader = preload("res://landscape_surface.gdshader")
  terrain_material.set_shader_parameter("color_maps",load("res://assets/textures/terrain_colors.res"))
- _ridge(false)
- _ridge(true)
+ build_ridges(terrain_material)
  _forest()
  _wild_edge()
  mist_material = ShaderMaterial.new()
@@ -7001,6 +7069,13 @@ func build(world: Node3D) -> void:
   cloud.set_meta("origin",cloud.position)
   clouds.append(cloud)
  update_atmosphere()
+
+func build_ridges(shared_material: ShaderMaterial) -> void:
+ # Menu and garden use the very same geometry, seed and surface materials.
+ rng.seed=1891
+ terrain_material=shared_material
+ _ridge(false)
+ _ridge(true)
 
 func _ridge_height(radius: float, angle: float, far: bool) -> float:
  if far:
@@ -7293,6 +7368,7 @@ var shop_note: Label
 var balance: Label
 var stock_list: VBoxContainer
 var receipt: Label
+var pause_shade: ColorRect
 var pause_panel: PanelContainer
 var showcase: Node3D
 var ambience: Node
@@ -7485,11 +7561,19 @@ func _build_ui() -> void:
  var panel:=PanelContainer.new()
  root.add_child(panel)
  panel.position=Vector2(24,24)
+ panel.add_theme_stylebox_override("panel",preload("res://cwtch_theme.gd").compact_card())
  var stack:=VBoxContainer.new()
  panel.add_child(stack)
- _label(stack,"C W T C H  /  THE VILLAGE",21)
+ _label(stack,"THE VILLAGE",20).add_theme_color_override("font_color",preload("res://cwtch_theme.gd").GOLD)
  hud=_label(stack,"",15)
- clock_label=_label(stack,"",16)
+ var clock_panel:=PanelContainer.new()
+ root.add_child(clock_panel)
+ clock_panel.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+ clock_panel.offset_left=-220
+ clock_panel.offset_right=-24
+ clock_panel.offset_top=24
+ clock_panel.add_theme_stylebox_override("panel",preload("res://cwtch_theme.gd").compact_card())
+ clock_label=_label(clock_panel,"",16)
  prompt=_label(root,"",21)
  prompt.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
  prompt.offset_left=-270; prompt.offset_right=270
@@ -7502,34 +7586,49 @@ func _build_ui() -> void:
  root.add_child(shop_panel)
  shop_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER_RIGHT)
  shop_panel.offset_left=-440; shop_panel.offset_right=-28
- shop_panel.offset_top=-280; shop_panel.offset_bottom=280
+ shop_panel.offset_top=-236; shop_panel.offset_bottom=336
  var shop_stack:=VBoxContainer.new()
  shop_stack.add_theme_constant_override("separation",10)
  shop_panel.add_child(shop_stack)
  shop_title=_label(shop_stack,"",22)
  shop_note=_label(shop_stack,"",15)
  balance=_label(shop_stack,"",19)
+ var stock_scroll:=ScrollContainer.new()
+ stock_scroll.custom_minimum_size=Vector2(0,180)
+ stock_scroll.size_flags_vertical=Control.SIZE_EXPAND_FILL
+ stock_scroll.horizontal_scroll_mode=ScrollContainer.SCROLL_MODE_DISABLED
+ stock_scroll.follow_focus=true
+ shop_stack.add_child(stock_scroll)
  stock_list=VBoxContainer.new()
+ stock_list.size_flags_horizontal=Control.SIZE_EXPAND_FILL
  stock_list.add_theme_constant_override("separation",8)
- shop_stack.add_child(stock_list)
+ stock_scroll.add_child(stock_list)
  receipt=_label(shop_stack,"Purchases are delivered to clear ground\nin your garden.",16)
  receipt.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
- receipt.custom_minimum_size=Vector2(350,70)
+ receipt.custom_minimum_size=Vector2(350,60)
  _button(shop_stack,"Back to the street",_leave_shop)
  shop_panel.hide()
+ pause_shade=ColorRect.new()
+ root.add_child(pause_shade)
+ pause_shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+ pause_shade.color=Color(0.025,0.055,0.05,0.45)
+ pause_shade.mouse_filter=Control.MOUSE_FILTER_IGNORE
+ pause_shade.hide()
  pause_panel=PanelContainer.new()
  root.add_child(pause_panel)
  pause_panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
- pause_panel.offset_left=-210; pause_panel.offset_right=210
+ pause_panel.offset_left=-240; pause_panel.offset_right=240
  pause_panel.offset_top=-160; pause_panel.offset_bottom=160
  var pause_stack:=VBoxContainer.new()
  pause_stack.add_theme_constant_override("separation",12)
  pause_panel.add_child(pause_stack)
- _label(pause_stack,"A MOMENT IN THE VILLAGE",22)
+ _label(pause_stack,"A MOMENT OF REST",24).add_theme_color_override("font_color",preload("res://cwtch_theme.gd").GOLD)
+ _label(pause_stack,"The village can wait a little.",16)
  _button(pause_stack,"Continue exploring",func(): _pause(false))
  _button(pause_stack,"Return to the garden",func(): host.return_from_village())
  _button(pause_stack,"Save & Quit",func(): host.save_and_quit())
  pause_panel.hide()
+ pause_shade.hide()
 
 func _input_mode() -> void:
  if current_shop>=0: ControllerInput.focus_first.call_deferred(shop_panel)
@@ -7538,6 +7637,7 @@ func _input_mode() -> void:
 func _pause(value: bool) -> void:
  paused=value
  pause_panel.visible=value
+ pause_shade.visible=value
  Input.mouse_mode=Input.MOUSE_MODE_VISIBLE if value else Input.MOUSE_MODE_CAPTURED
  if value: ControllerInput.focus_first.call_deferred(pause_panel)
  else:
@@ -7548,7 +7648,7 @@ func _physics_process(delta: float) -> void:
  if not is_instance_valid(host): return
  ambience.muted=host.garden.ambience_muted
  _sync_weather(delta)
- hud.text="%d coins  ·  %s"%[host.coins,"Left stick move · Right stick look · Menu pause" if ControllerInput.using_pad else "WASD move · Mouse look · Esc travel menu"]
+ hud.text="%d coins"%host.coins
  if current_shop>=0:
   showcase.rotation.y+=delta*.2
   return
@@ -7571,7 +7671,7 @@ func _physics_process(delta: float) -> void:
   var side: float=-1.0 if selected_shop%2==0 else 1.0
   ring.follow_object(Vector3(side*7,0,-10 if selected_shop<2 else 4),Vector2(6.4,6.4),delta)
  else: ring.follow_object(spirit.position,Vector2.ONE*0.7,delta)
- prompt.text=(SHOPS[selected_shop]+"\n"+("A / Cross · enter" if ControllerInput.using_pad else "Click / E · enter")) if selected_shop>=0 else "·"
+ prompt.text=SHOPS[selected_shop] if selected_shop>=0 else "·"
 
 func _unhandled_input(event: InputEvent) -> void:
  if is_instance_valid(local_coop) and local_coop.route_input(event):return
@@ -7606,6 +7706,7 @@ func enter_shop(index: int) -> void:
  prompt.hide()
  paused=false
  pause_panel.hide()
+ pause_shade.hide()
  camera.position=Vector3(1.3,2.4,-93.5)
  camera.look_at(to_global(Vector3(0,1.2,-102)))
  Input.mouse_mode=Input.MOUSE_MODE_VISIBLE
@@ -8447,6 +8548,65 @@ void fragment() {
  vec2 slope=(n1.xy+n2.xy)*(pond ? 0.10 : 0.035)+normalize(ripple_uv+vec2(0.0001))*ripple*0.07;
  NORMAL=normalize(mat3(VIEW_MATRIX*MODEL_MATRIX)*normalize(vec3(slope.x,1.0,slope.y)));
 }
+
+```
+
+## weather_pattern.gd
+
+```gd
+extends RefCounted
+## Weighted fronts: variable lengths, occasional persistence, no fixed itinerary.
+const LENGTHS := [Vector2(210,480),Vector2(90,300),Vector2(60,180),Vector2(70,240),Vector2(40,120),Vector2(35,90),Vector2(90,240)]
+const WEIGHTS := [
+	[25,60,15,0,0,0,0],
+	[20,15,35,20,0,0,10],
+	[0,20,15,35,5,0,25],
+	[0,10,25,15,25,5,20],
+	[0,0,15,40,10,20,15],
+	[0,0,5,45,30,0,20],
+	[50,25,15,0,0,0,10]
+]
+var rng := RandomNumberGenerator.new()
+var scheduled_index := 0
+var duration := 300.0
+
+func _init() -> void:
+	rng.randomize()
+	_schedule(0)
+
+func _schedule(index: int) -> void:
+	scheduled_index=clampi(index,0,6)
+	var limits: Vector2=LENGTHS[scheduled_index]
+	duration=rng.randf_range(limits.x,limits.y)
+
+func advance(index: int, age: float, delta: float) -> Array:
+	index=clampi(index,0,6)
+	if index!=scheduled_index:_schedule(index)
+	age=maxf(0,age)+maxf(0,delta)
+	while age>=duration:
+		age-=duration
+		var pick := rng.randf()*100.0
+		var weights: Array=WEIGHTS[index]
+		for candidate in weights.size():
+			pick-=float(weights[candidate])
+			if pick<0:
+				index=candidate
+				break
+		_schedule(index)
+	return [index,age]
+
+func save_data() -> Dictionary:
+	# String avoids JSON floating-point rounding of the 64-bit random state.
+	return {"index":scheduled_index,"duration":duration,"rng":str(rng.state)}
+
+func restore(data: Dictionary, index: int, age: float) -> float:
+	_schedule(index)
+	if int(data.get("index",-1))==index:
+		var restored := float(data.get("duration",duration))
+		if is_finite(restored):duration=clampf(restored,LENGTHS[index].x,LENGTHS[index].y)
+		var state_text := str(data.get("rng",""))
+		if state_text.is_valid_int():rng.state=state_text.to_int()
+	return clampf(age,0,duration-0.001) if is_finite(age) else 0.0
 
 ```
 

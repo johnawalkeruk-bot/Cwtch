@@ -48,45 +48,10 @@ func _finish(builder: SurfaceTool, label: String) -> MeshInstance3D:
 	return instance
 
 func _build_mountain() -> void:
-	const SEGMENTS := 72
-	const RINGS := 24
-	var points: Array[Vector3] = []
-	for ring in range(RINGS+1):
-		var t := float(ring)/RINGS
-		for segment in range(SEGMENTS):
-			var angle := float(segment)/SEGMENTS*TAU
-			var ridge := 1.0+0.13*sin(angle*5.0+0.7)+0.055*cos(angle*9.0)
-			var radius := t*79*ridge
-			var height := 76.0*pow(1.0-t,1.42)
-			height += sin(PI*t)*(sin(angle*5+0.5)*6.5+cos(angle*8)*2.0)
-			# The peak leans toward the left; ridges run down all sides.
-			points.append(Vector3(-5+cos(angle)*radius-8*(1-t),maxf(0,height),-87+sin(angle)*radius*0.82-3*(1-t)))
-	var builder := SurfaceTool.new()
-	builder.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for ring in range(RINGS):
-		for segment in range(SEGMENTS):
-			var a := ring*SEGMENTS+segment
-			var b := ring*SEGMENTS+(segment+1)%SEGMENTS
-			var c := a+SEGMENTS
-			var d := b+SEGMENTS
-			for tri in [[a,c,d],[a,d,b]]:
-				var p: Vector3 = (points[tri[0]]+points[tri[1]]+points[tri[2]])/3.0
-				var snowline := 43.0+sin(p.x*0.28+p.z*0.12)*4.5+cos(p.z*0.3)*2.0
-				var color := Color("356c75").lerp(Color("648b94"),clampf(p.y/72.0,0,1))
-				if p.y > snowline:
-					color = Color("b9dce9").lerp(Color("f0f7f8"),smoothstep(45,73,p.y))
-				color *= rng.randf_range(0.94,1.05)
-				_triangle(builder,points[tri[0]],points[tri[1]],points[tri[2]],color)
-	# Seal the underside so this is a model with volume, not a camera-facing card.
-	for segment in range(SEGMENTS):
-		var a: Vector3 = points[RINGS*SEGMENTS+segment]
-		var b: Vector3 = points[RINGS*SEGMENTS+(segment+1)%SEGMENTS]
-		for point in [Vector3(-5,-0.1,-87),b,a]:
-			builder.set_normal(Vector3.DOWN)
-			builder.set_color(Color("31555c"))
-			builder.add_vertex(point)
-	var mountain := _finish(builder,"SnowcapMountain3D")
-	preload("res://scenery_grass.gd").plant(self,mountain.mesh,"MenuHillsideGrass",0.5,22.0)
+	var ridges := preload("res://valley_landscape.gd").new()
+	ridges.name="GardenMountainBackdrop"
+	add_child(ridges)
+	ridges.build_ridges(material)
 
 func _build_ground() -> void:
 	var builder := SurfaceTool.new()

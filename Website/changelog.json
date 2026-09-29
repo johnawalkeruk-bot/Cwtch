@@ -8,6 +8,38 @@
       "sections": []
     },
     {
+      "id": "0.1.15",
+      "label": "v0.1.15",
+      "date": "2026-09-29",
+      "title": "A warm welcome to the valley",
+      "sections": [
+        {
+          "heading": "Arthur and the valley",
+          "items": [
+            "Arthur welcomes you whenever you enter or return to the garden, playing Welcome.mp3 with a face-on camera, alternating talking animations and timed subtitles. The camera returns to normal afterwards.",
+            "Speech bubbles have a daffodil border using alternating Border-1 and Border-2 artwork with staggered angles. Welcome and hedgehog conversations queue separately.",
+            "The main menu now uses the same rolling ridges, mountain geometry, grass and stone material system as the garden, with its moving birds and changing sky."
+          ]
+        },
+        {
+          "heading": "Interface and weather",
+          "items": [
+            "Removed keyboard and controller reminders from the HUD, pause menus, Field Guide and speech pause display. Tool names, compass headings, time and weather remain visible.",
+            "Unified panel and button styling, tidied pause and options layouts, added a dimmed pause backdrop and scrollable shop lists, and matched the split-screen status panels.",
+            "Natural weather now chooses from weighted transitions with variable durations. Clear spells can linger and showers can ease, return or build into storms; the garden and village continue to share one weather state.",
+            "Weather timing and random state persist in saves. Existing saves remain supported."
+          ]
+        },
+        {
+          "heading": "Launcher",
+          "items": [
+            "The launcher displays scrollable patch notes for the latest published version and keeps a saved copy available offline.",
+            "Future manual releases use the website changelog as their player-facing GitHub release notes. Failed note retrieval does not block updates or playing the installed game."
+          ]
+        }
+      ]
+    },
+    {
       "id": "0.1.14",
       "label": "v0.1.14",
       "date": "2026-09-28",

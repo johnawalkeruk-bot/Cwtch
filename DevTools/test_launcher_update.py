@@ -19,7 +19,7 @@ class InstallerTests(unittest.TestCase):
  def fetch(self,url):return json.dumps(self.release).encode() if '/latest' in url else self.digest.encode()
  def install(self,blob=None,length=True):
   events=[]
-  with patch.object(u,'read_url',side_effect=self.fetch),patch.object(u.urllib.request,'urlopen',return_value=Response(self.blob if blob is None else blob,length)):
+  with patch.object(u,'read_url',side_effect=self.fetch),patch.object(u.urllib.request,'urlopen',side_effect=lambda request,**kwargs: Response(json.dumps({'entries':[{'id':'unreleased','title':'Not published','sections':[]},{'id':self.release['tag_name'][1:],'title':'Garden improvements','sections':[{'heading':'Changed','items':['A clearer interface.']}]}]}).encode()) if 'raw.githubusercontent.com' in request.full_url else Response(self.blob if blob is None else blob,length)):
    result=u.install(self.root,'owner/game',events.append)
   return result,events
  def test_progress_and_existing_install(self):
@@ -33,6 +33,20 @@ class InstallerTests(unittest.TestCase):
   self.assertTrue(Path(result['executable']).exists())
   _,again=self.install()
   self.assertNotIn('downloading',[e['stage'] for e in again])
+ def test_notes_match_published_version_and_cache(self):
+  _,events=self.install()
+  available=next(e for e in events if e['stage']=='available')
+  self.assertIn('A clearer interface.',available['notes'])
+  self.assertNotIn('Not published',available['notes'])
+  cached=json.loads((self.root/'patch-notes.json').read_text())
+  self.assertEqual(cached,{'version':'v0.1.1','notes':available['notes']})
+ def test_notes_fallback_does_not_block_updates(self):
+  self.release['body']='Release fallback notes'
+  with patch.object(u.urllib.request,'urlopen',side_effect=OSError('offline')):
+   self.assertEqual(u.latest_patch_notes('owner/game',self.release),'Release fallback notes')
+ def test_no_notes_is_readable(self):
+  with patch.object(u.urllib.request,'urlopen',return_value=Response(b'{"entries":[]}')):
+   self.assertIn('No patch notes',u.latest_patch_notes('owner/game',self.release))
  def test_unknown_length(self):
   _,events=self.install(length=False)
   download=[e for e in events if e['stage']=='downloading'][-1]

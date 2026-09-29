@@ -22,8 +22,7 @@ func build(world: Node3D) -> void:
  plants_material.set_shader_parameter("vegetation", true)
  terrain_material.shader = preload("res://landscape_surface.gdshader")
  terrain_material.set_shader_parameter("color_maps",load("res://assets/textures/terrain_colors.res"))
- _ridge(false)
- _ridge(true)
+ build_ridges(terrain_material)
  _forest()
  _wild_edge()
  mist_material = ShaderMaterial.new()
@@ -42,6 +41,13 @@ func build(world: Node3D) -> void:
   cloud.set_meta("origin",cloud.position)
   clouds.append(cloud)
  update_atmosphere()
+
+func build_ridges(shared_material: ShaderMaterial) -> void:
+ # Menu and garden use the very same geometry, seed and surface materials.
+ rng.seed=1891
+ terrain_material=shared_material
+ _ridge(false)
+ _ridge(true)
 
 func _ridge_height(radius: float, angle: float, far: bool) -> float:
  if far:

@@ -18,6 +18,30 @@ def read_url(url):
     with urllib.request.urlopen(urllib.request.Request(url, headers=HEADERS), timeout=60) as response:
         return response.read()
 
+def format_patch_notes(entry):
+    lines = [str(entry.get('title', 'What’s new'))]
+    for section in entry.get('sections', []):
+        lines.extend(['', str(section.get('heading', 'Changes'))])
+        lines.extend('• ' + str(item) for item in section.get('items', []))
+    return '\n'.join(lines).strip()
+
+
+def latest_patch_notes(repository, release):
+    # Match the published tag exactly; never show unfinished notes from main.
+    fallback = str(release.get('body') or 'No patch notes were supplied for this release.').strip()
+    try:
+        url = 'https://raw.githubusercontent.com/' + repository + '/main/Website/changelog.json'
+        request = urllib.request.Request(url, headers=HEADERS)
+        with urllib.request.urlopen(request, timeout=5) as response:
+            changelog = json.loads(response.read(2 * 1024 * 1024))
+        for entry in changelog.get('entries', []):
+            if entry.get('id') == release['tag_name'].removeprefix('v'):
+                return format_patch_notes(entry)[:50000]
+    except Exception:
+        pass  # Notes must never prevent installing or playing the game.
+    return fallback[:50000]
+
+
 def safe_extract(archive, destination):
     destination = Path(destination).resolve()
     with zipfile.ZipFile(archive) as package:
@@ -58,7 +82,14 @@ def install(root, repository, progress=None):
     version = release['tag_name']
     if not re.fullmatch(r'v\d+\.\d+\.\d+', version):
         raise ValueError('Unsupported release version.')
-    report('available', version=version)
+    notes = latest_patch_notes(repository, release)
+    report('available', version=version, notes=notes)
+    try:
+        cache = root / 'patch-notes.tmp.json'
+        cache.write_text(json.dumps({'version': version, 'notes': notes}), encoding='utf-8')
+        cache.replace(root / 'patch-notes.json')
+    except OSError:
+        pass
     assets = {asset['name']: asset for asset in release['assets']}
     destination = root / 'Versions' / version
     if not (destination / 'CWTCH.exe').is_file() or not (destination / 'CWTCH.pck').is_file():

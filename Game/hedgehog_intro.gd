@@ -4,6 +4,9 @@ const CAPTIONS=preload("res://arthur_hedgehog_subtitles.gd").CUES
 const VOICE=preload("res://assets/sounds/dialogue/Arthur_Hedgehogs.mp3")
 const TALK_CLIPS=["Talking_1","Talking_2"]
 const CAMERA_SECONDS:=0.85
+var welcome_pending:=false
+var dialogue_kind:="hedgehog"
+var active_captions: Array=CAPTIONS
 var garden: Node3D
 var arthur: Node3D
 var active:=false
@@ -91,11 +94,11 @@ func setup(world: Node3D) -> void:
  garden.wildlife.animal_event.connect(_animal_event)
 
 func _animal_event(kind: String, species: String, _day: int) -> void:
- if kind=="visit" and species=="hedgehog" and not completed and not active:
+ if kind=="visit" and species=="hedgehog" and not completed:
   pending=true
 
 func save_data() -> Dictionary:
- return {"completed":completed,"pending":pending or (active and not completed)}
+ return {"completed":completed,"pending":pending or (active and dialogue_kind=="hedgehog" and not completed)}
 
 func restore(data: Dictionary) -> void:
  # Existing gardens with a previously recorded visit do not replay old arrivals.
@@ -105,15 +108,26 @@ func restore(data: Dictionary) -> void:
 func _can_begin() -> bool:
  return garden.is_visible_in_tree() and not garden.guide.visible and not garden.tool_wheel.visible and not garden.field_book.visible and not garden.dev_console.opened
 
-func _begin() -> void:
- if active or completed or not is_instance_valid(arthur):return
+func request_welcome() -> void:
+ welcome_pending=true
+
+func _begin(kind: String="hedgehog") -> void:
+ if active or (kind=="hedgehog" and completed) or not is_instance_valid(arthur):return
  for clip in TALK_CLIPS:
   if not arthur.animation_player.has_animation(clip):
    push_error("Arthur is missing the talking animation: "+clip)
    pending=false
    return
+ dialogue_kind=kind
+ if kind=="welcome":
+  welcome_pending=false
+  voice.stream=load("res://assets/sounds/dialogue/Welcome.mp3")
+  active_captions=preload("res://arthur_welcome_subtitles.gd").CUES
+ else:
+  pending=false
+  voice.stream=VOICE
+  active_captions=CAPTIONS
  active=true
- pending=false
  paused=false
  phase="approach"
  phase_time=0.0
@@ -174,7 +188,7 @@ func _play_talk() -> void:
  if not played_clips.has(clip):played_clips.append(clip)
 
 func subtitle_at(seconds: float) -> String:
- for cue in CAPTIONS:
+ for cue in active_captions:
   if seconds>=float(cue.start) and seconds<float(cue.end):return cue.text
  return ""
 
@@ -183,7 +197,8 @@ func _process(delta: float) -> void:
   bubble.hide()
   pause_label.hide()
   ui.hide()
-  if pending and _can_begin():_begin()
+  if welcome_pending and _can_begin():_begin("welcome")
+  elif pending and _can_begin():_begin()
   return
  if paused:return
  phase_time+=delta
@@ -217,8 +232,9 @@ func _process(delta: float) -> void:
 
 func _begin_return() -> void:
  if not active or phase=="return":return
- completed=true
- pending=false
+ if dialogue_kind=="hedgehog":
+  completed=true
+  pending=false
  phase="return"
  phase_time=0.0
  bubble.hide()

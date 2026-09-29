@@ -70,8 +70,8 @@ func _build_landscape() -> void:
 	stage.add_child(camera)
 	camera.projection = Camera3D.PROJECTION_PERSPECTIVE
 	camera.fov = 48
-	camera.position = Vector3(17,16,110)
-	camera.look_at(Vector3(-5,31,-80))
+	camera.position = Vector3(12,16,62)
+	camera.look_at(Vector3(-5,27,-110))
 	camera.far = 300
 	camera.current = true
 	sun = DirectionalLight3D.new()
@@ -278,7 +278,7 @@ func _update_weather(delta: float) -> void:
 	lightning.light_energy = flash
 	landscape.animate(elapsed,daylight,rain_strength)
 	camera.position.x = 17+sin(elapsed*0.025)*7
-	camera.look_at(Vector3(-5,31,-80))
+	camera.look_at(Vector3(-5,27,-110))
 	sky_material.set_shader_parameter("lightning",flash)
 	ambience.update_mix(delta,rain_strength,daylight,false)
 	var minutes := int(fposmod(6+elapsed*24/Weather.FULL_CYCLE,24)*60)
@@ -318,6 +318,7 @@ func _begin_garden(fresh: bool) -> void:
 	garden.process_mode = Node.PROCESS_MODE_INHERIT
 	garden.camera.make_current()
 	garden._set_guide(false)
+	garden.hedgehog_intro.request_welcome()
 	_save_garden()
 	loading_label.text = ""
 	menu_buttons.show()
@@ -481,6 +482,7 @@ func return_from_village() -> void:
 	garden.process_mode=Node.PROCESS_MODE_INHERIT
 	garden.camera.make_current()
 	garden._set_guide(false)
+	garden.hedgehog_intro.request_welcome()
 	_save_garden()
 
 func purchase_village_item(id: String) -> String:

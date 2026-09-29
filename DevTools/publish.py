@@ -37,6 +37,12 @@ def main(version=None):
  pending.parent.mkdir(exist_ok=True);pending.write_text(version)
  release=build(version)
  run([sys.executable,ROOT/'DevTools/build_changelog.py','--release',version])
+ sys.path.insert(0,str(ROOT/'Launcher'))
+ from update import format_patch_notes
+ changelog=json.loads((ROOT/'Website/changelog.json').read_text(encoding='utf-8'))
+ entry=next(item for item in changelog['entries'] if item['id']==version)
+ notes_file=release/'release-notes.txt'
+ notes_file.write_text(format_patch_notes(entry),encoding='utf-8')
  (ROOT/'VERSION').write_text(version+'\n',encoding='ascii')
  run(['git','add','--all'])
  if run(['git','diff','--cached','--quiet'],check=False).returncode!=0:
@@ -47,7 +53,7 @@ def main(version=None):
  run(git+['push','origin','main'])
  if not run(['git','tag','--list',tag],capture=True).stdout.strip():run(['git','tag',tag])
  run(git+['push','origin',tag])
- run([GH,'release','create',tag,release/'CWTCH-Windows.zip',release/'CWTCH-Windows.zip.sha256',release/'CWTCH-Launcher.zip','--repo',repository,'--title','CWTCH '+tag,'--generate-notes','--latest'])
+ run([GH,'release','create',tag,release/'CWTCH-Windows.zip',release/'CWTCH-Windows.zip.sha256',release/'CWTCH-Launcher.zip','--repo',repository,'--title','CWTCH '+tag,'--notes-file',notes_file,'--latest'])
  pending.unlink()
  print('Published https://github.com/'+repository+'/releases/tag/'+tag,flush=True)
  site=run([sys.executable,ROOT/'DevTools/publish_site.py'],check=False)

@@ -54,3 +54,22 @@ conversations use one full-screen view. Disconnecting either active controller
 pauses and returns to a single view; resume from the pause menu. Player two’s
 garden position and equipment persist in the garden save, including older saves
 that had no second player. Use Play Development.cmd to try unpublished changes.
+
+## Valley presentation
+
+The HUD shows status rather than control reminders; controls are documented above.
+Menus use the same woodland-green panels and gold accents, and shop stock scrolls.
+Natural weather has weighted transitions and variable durations, with its future
+random sequence retained in the garden save. The village shares this weather.
+
+Entering the garden from the main menu or returning from the village plays Arthur’s
+Welcome.mp3 conversation, with timed subtitles and the existing portrait-camera
+sequence. It repeats on each entry and is independent of the one-time hedgehog
+introduction. Speech borders alternate the supplied Ui/Border-1.png and Border-2.png
+at staggered angles. The menu and garden share the same mountain generator.
+
+The launcher shows patch notes matched to the latest published release, using the
+website changelog with GitHub release notes as a fallback. A cached copy remains
+available offline. Manual publishing attaches these same changelog notes to each
+GitHub release. Players with an older launcher need the updated launcher package
+to see this panel; game updates do not replace the running launcher.
