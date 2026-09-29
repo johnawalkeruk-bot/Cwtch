@@ -73,3 +73,25 @@ website changelog with GitHub release notes as a fallback. A cached copy remains
 available offline. Manual publishing attaches these same changelog notes to each
 GitHub release. Players with an older launcher need the updated launcher package
 to see this panel; game updates do not replace the running launcher.
+
+## Daffodil wheel, clock and garden experience
+
+- Open/confirm the tool wheel with **Xbox A / PlayStation Cross**; close with
+  **B / Circle**. On keyboard use **Tab**, then mouse/click or Enter; Escape closes.
+- Choose with the left stick or D-pad. Selecting Shovel opens Dig/Pick/Pour/Thump.
+  Existing 1–4 and D-pad tool shortcuts, X / Square mode cycling and held tool use
+  remain available. B / Circle outside the wheel still puts the tool away.
+- Each split-screen player owns a separate wheel; its blur stays inside their view.
+- The analogue clock is on the left. Its 12 petals fill toward the next level;
+  each level needs 100 XP. Level and XP are shared across the garden and saved.
+- Successful hoeing earns 2 XP, grass seeding 3, watering dry ground 1, and changed
+  shovel terrain 3. Each tile/action earns XP once per in-game day. Invalid uses
+  and unchanged ground do not earn XP. Animal visits earn 25, residency 50 and
+  births 30; existing discovery records are not retroactively converted to XP.
+- Supplied button icons follow each controller’s reported identity: PlayStation
+  names select PlayStation artwork; Xbox and generic mapped pads use Xbox artwork.
+  Remapping software that presents a PlayStation pad as Xbox will show Xbox icons.
+  Keyboard/mouse input shows compact key labels instead.
+
+The in-game pause and shop menus use parchment, serif lettering and gold petal
+frames. The leather Field Guide keeps its book presentation.

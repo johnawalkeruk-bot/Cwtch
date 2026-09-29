@@ -16,8 +16,7 @@ var message_time := 0.0
 var selected_shop := -1
 var guide: Control:
 	get: return world.guide
-var tool_wheel: Control:
-	get: return world.tool_wheel
+var tool_wheel: Control
 var dev_console: CanvasLayer:
 	get: return world.dev_console
 
@@ -82,7 +81,7 @@ func clear_use() -> void:
 func blocked() -> bool:
 	if not enabled:return true
 	if village:return world.paused or world.current_shop>=0
-	return world.guide.visible or world.field_book.visible or world.dev_console.opened or world.hedgehog_intro.active
+	return world.guide.visible or world.field_book.visible or world.dev_console.opened or world.hedgehog_intro.active or (is_instance_valid(tool_wheel) and tool_wheel.visible)
 
 func cell_center(cell: Vector2i) -> Vector3:
 	return world.cell_center(cell)
@@ -96,6 +95,9 @@ func handle_input(event: InputEvent) -> void:
 	if blocked() or not event is InputEventJoypadButton or not event.pressed:return
 	if village:
 		if event.button_index==JOY_BUTTON_A and selected_shop>=0:world.enter_shop(selected_shop)
+		return
+	if event.button_index==JOY_BUTTON_A:
+		set_wheel(true)
 		return
 	var tool_map := {JOY_BUTTON_DPAD_UP:0,JOY_BUTTON_DPAD_RIGHT:1,JOY_BUTTON_DPAD_DOWN:2,JOY_BUTTON_DPAD_LEFT:3,JOY_BUTTON_B:4}
 	if tool_map.has(event.button_index):
@@ -166,3 +168,10 @@ func restore(data: Dictionary) -> void:
 	camera_pitch=clampf(float(data.get("pitch",PI/4)),deg_to_rad(-80),deg_to_rad(80))
 	if not is_finite(camera_yaw):camera_yaw=0
 	if not is_finite(camera_pitch):camera_pitch=PI/4
+
+func set_wheel(open: bool) -> void:
+	clear_use()
+	if open:
+		tool_wheel.owner_device=ControllerInput.secondary_device()
+		tool_wheel.open(floating_tool.selected)
+	else:tool_wheel.hide()

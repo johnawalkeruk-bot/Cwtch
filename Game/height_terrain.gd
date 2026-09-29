@@ -1,4 +1,5 @@
 extends Node3D
+var last_sculpt_changed := false
 
 const RESOLUTION := 12
 const WATER_LEVEL := 0.012
@@ -245,6 +246,7 @@ func can_sculpt(cell: Vector2i, radius: float) -> bool:
  return true
 
 func sculpt(cell: Vector2i, mode: int) -> bool:
+ last_sculpt_changed=false
  if not garden.contains_cell(cell) or mode<0 or mode>3:return false
  var radius:=0.28 if mode==1 else 0.85
  if not can_sculpt(cell,radius):return false
@@ -274,6 +276,7 @@ func sculpt(cell: Vector2i, mode: int) -> bool:
      # Full strength across the square; blend only beyond its boundary.
      var tile_weight:=1.0-smoothstep(0.0,0.3,outside.length())
      value=baseline if outside==Vector2.ZERO else lerpf(old,baseline,tile_weight)
+   if absf(value-old)>0.0001:last_sculpt_changed=true
    _write_height(x,z,value)
  if mode==1:seed_holes[cell]=true
  else:
@@ -290,6 +293,7 @@ func sculpt(cell: Vector2i, mode: int) -> bool:
    if mode==0:kind=garden.Terrain.DEEP_WATER if p.y < -0.45 else (garden.Terrain.WATER if p.y<0.0 else garden.Terrain.DIRT)
    elif mode in [1,2]:kind=garden.Terrain.DIRT
    elif kind in [garden.Terrain.WATER,garden.Terrain.DEEP_WATER] and p.y>=0.0:kind=garden.Terrain.DIRT
+   if garden.get_terrain(tile)!=kind:last_sculpt_changed=true
    garden.set_terrain(tile,kind)
  _rebuild_samples(rect)
  return true

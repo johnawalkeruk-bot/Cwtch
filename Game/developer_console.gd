@@ -50,6 +50,7 @@ func toggle(value: bool) -> void:
  garden.player.velocity=Vector3.ZERO
  if value:
   if garden.tool_wheel.visible:garden._set_wheel(false)
+  if is_instance_valid(garden.local_coop):garden.local_coop.second.set_wheel(false)
   garden.aiming=false
   garden.aim_dot.hide()
   Input.mouse_mode=Input.MOUSE_MODE_VISIBLE

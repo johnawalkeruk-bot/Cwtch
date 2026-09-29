@@ -8,6 +8,23 @@
       "sections": []
     },
     {
+      "id": "0.1.16",
+      "label": "v0.1.16",
+      "date": "2026-09-29",
+      "title": "Daffodils, tools and growing experience",
+      "sections": [
+        {
+          "heading": "Daffodil interface and tools",
+          "items": [
+            "Open and confirm the new tool wheel with Xbox A / PlayStation Cross; close it with B / Circle. Tab opens it on keyboard. Shovel selection leads to its four modes.",
+            "Faceted daffodil petals surround a parchment tool hub. The selected petal grows and glows; a softly blurred twilight-green backdrop stays within the player’s half of split-screen.",
+            "An analogue clock on the left shows the shared garden level. Twelve petals fill towards each new level, with 100 XP per level. Gardening, animal visits, residency and births earn saved XP; repeated tile actions are capped each day.",
+            "Contextual prompts beside the clock use the supplied Xbox or PlayStation artwork based on each controller’s reported identity. Pause and shop menus use matching parchment, serif text and gold petal frames. Existing saves start with zero XP and remain compatible."
+          ]
+        }
+      ]
+    },
+    {
       "id": "0.1.15",
       "label": "v0.1.15",
       "date": "2026-09-29",

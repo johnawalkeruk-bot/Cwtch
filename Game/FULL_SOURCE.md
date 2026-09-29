@@ -730,6 +730,29 @@ func advance(delta: float) -> void:
 
 ```
 
+## controller_icons.gd
+
+```gd
+extends RefCounted
+const BASE := "res://assets/ui/buttons/"
+const XBOX := {"accept":"XBOX_A","back":"XBOX_B","mode":"XBOX_X","use":"XBOX_RT","pause":"XBOX_Start_Alt","move":"XBOX_Left_Stick","look":"XBOX_Right_Stick","left":"XBOX_LB","right":"XBOX_RB"}
+const PS := {"accept":"ButtonIcon-PS3-Cross","back":"ButtonIcon-PS3-Circle","mode":"ButtonIcon-PS2-Square","use":"ButtonIcon-PS2-R2","pause":"ButtonIcon-PS2-Start","move":"ButtonIcon-PS2-Left_Stick","look":"ButtonIcon-PS2-Right_Stick","left":"ButtonIcon-PS2-L1","right":"ButtonIcon-PS2-R1"}
+static var cache: Dictionary = {}
+
+static func family(name: String) -> String:
+	var lower := name.to_lower()
+	for token in ["playstation","dualshock","dualsense","sony","ps3","ps4","ps5"]:
+		if token in lower:return "playstation"
+	return "xbox"
+
+static func texture(action: String, device: int) -> Texture2D:
+	var mapping: Dictionary=PS if family(Input.get_joy_name(device))=="playstation" else XBOX
+	var path: String=BASE+str(mapping.get(action,mapping.accept))+".png"
+	if not cache.has(path):cache[path]=load(path)
+	return cache[path]
+
+```
+
 ## controller_input.gd
 
 ```gd
@@ -849,8 +872,7 @@ var message_time := 0.0
 var selected_shop := -1
 var guide: Control:
 	get: return world.guide
-var tool_wheel: Control:
-	get: return world.tool_wheel
+var tool_wheel: Control
 var dev_console: CanvasLayer:
 	get: return world.dev_console
 
@@ -915,7 +937,7 @@ func clear_use() -> void:
 func blocked() -> bool:
 	if not enabled:return true
 	if village:return world.paused or world.current_shop>=0
-	return world.guide.visible or world.field_book.visible or world.dev_console.opened or world.hedgehog_intro.active
+	return world.guide.visible or world.field_book.visible or world.dev_console.opened or world.hedgehog_intro.active or (is_instance_valid(tool_wheel) and tool_wheel.visible)
 
 func cell_center(cell: Vector2i) -> Vector3:
 	return world.cell_center(cell)
@@ -929,6 +951,9 @@ func handle_input(event: InputEvent) -> void:
 	if blocked() or not event is InputEventJoypadButton or not event.pressed:return
 	if village:
 		if event.button_index==JOY_BUTTON_A and selected_shop>=0:world.enter_shop(selected_shop)
+		return
+	if event.button_index==JOY_BUTTON_A:
+		set_wheel(true)
 		return
 	var tool_map := {JOY_BUTTON_DPAD_UP:0,JOY_BUTTON_DPAD_RIGHT:1,JOY_BUTTON_DPAD_DOWN:2,JOY_BUTTON_DPAD_LEFT:3,JOY_BUTTON_B:4}
 	if tool_map.has(event.button_index):
@@ -999,6 +1024,13 @@ func restore(data: Dictionary) -> void:
 	camera_pitch=clampf(float(data.get("pitch",PI/4)),deg_to_rad(-80),deg_to_rad(80))
 	if not is_finite(camera_yaw):camera_yaw=0
 	if not is_finite(camera_pitch):camera_pitch=PI/4
+
+func set_wheel(open: bool) -> void:
+	clear_use()
+	if open:
+		tool_wheel.owner_device=ControllerInput.secondary_device()
+		tool_wheel.open(floating_tool.selected)
+	else:tool_wheel.hide()
 
 ```
 
@@ -1145,6 +1177,30 @@ static func compact_card() -> StyleBoxFlat:
 	style.content_margin_top=12
 	style.content_margin_bottom=12
 	return style
+
+static func decorate_menu(node: PanelContainer) -> void:
+	var theme:=make()
+	theme.default_font=preload("res://petal_shapes.gd").serif()
+	theme.set_color("font_color","Label",INK)
+	var paper:=panel(Color("f3e6c9"))
+	paper.border_color=INK
+	paper.set_border_width_all(3)
+	theme.set_stylebox("panel","PanelContainer",paper)
+	for type in ["Button","OptionButton"]:
+		theme.set_stylebox("normal",type,button_style(Color("dfcca2")))
+		theme.set_stylebox("hover",type,button_style(Color("f4d03f")))
+		theme.set_stylebox("pressed",type,button_style(Color("d8ab37")))
+		var focus:=StyleBoxFlat.new()
+		focus.bg_color=Color(1,0.75,0.1,0.12)
+		focus.border_color=Color("c3912b")
+		focus.set_border_width_all(2)
+		focus.set_corner_radius_all(8)
+		theme.set_stylebox("focus",type,focus)
+		for state in ["font_color","font_hover_color","font_pressed_color","font_focus_color"]:theme.set_color(state,type,INK)
+	node.theme=theme
+	for label in node.find_children("*","Label",true,false):label.add_theme_color_override("font_color",INK)
+	var petals:=preload("res://petal_frame.gd").new()
+	node.add_child(petals)
 
 ```
 
@@ -1312,6 +1368,7 @@ func toggle(value: bool) -> void:
  garden.player.velocity=Vector3.ZERO
  if value:
   if garden.tool_wheel.visible:garden._set_wheel(false)
+  if is_instance_valid(garden.local_coop):garden.local_coop.second.set_wheel(false)
   garden.aiming=false
   garden.aim_dot.hide()
   Input.mouse_mode=Input.MOUSE_MODE_VISIBLE
@@ -2074,6 +2131,8 @@ var dev_console: CanvasLayer
 var tardis: Node3D
 var animal_notices: CanvasLayer
 var wildlife: Node
+var experience := preload("res://garden_experience.gd").new()
+var clock_ui: Control
 var local_coop: Node
 var hedgehog_intro: Node3D
 var additional_visitors: Array[Node3D] = []
@@ -2179,6 +2238,7 @@ func _ready() -> void:
 	wildlife=preload("res://garden_wildlife.gd").new()
 	add_child(wildlife)
 	wildlife.setup(self)
+	wildlife.animal_event.connect(experience.wildlife)
 	animal_notices=preload("res://animal_notices.gd").new()
 	add_child(animal_notices)
 	animal_notices.setup(self)
@@ -2285,6 +2345,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if event is InputEventJoypadButton and event.pressed:
+		if event.button_index==JOY_BUTTON_A and not modal:
+			_set_wheel(true)
+			get_viewport().set_input_as_handled()
+			return
 		if event.button_index==JOY_BUTTON_B:
 			if modal:_set_guide(false)
 			else:_select_tool(Tool.NONE)
@@ -2322,6 +2386,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			_toggle_ambience()
 			return
 		if modal:return
+		if event.keycode==KEY_TAB:
+			_set_wheel(true)
+			get_viewport().set_input_as_handled()
+			return
 		if event.keycode>=KEY_1 and event.keycode<=KEY_4:
 			_select_tool(event.keycode-KEY_1)
 			get_viewport().set_input_as_handled()
@@ -2346,10 +2414,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		camera_yaw-=event.relative.x*0.004
 		camera_pitch=clampf(camera_pitch+event.relative.y*0.004,deg_to_rad(-80),deg_to_rad(80))
 
-func _set_wheel(_open: bool) -> void:
-	# Retained as a close hook for other modal interfaces; selection is direct now.
-	tool_wheel.hide()
+func _set_wheel(open: bool) -> void:
 	_clear_use()
+	if open:
+		tool_wheel.owner_device=ControllerInput.primary_device()
+		tool_wheel.open(tool)
+	else:tool_wheel.hide()
+	Input.mouse_mode=Input.MOUSE_MODE_VISIBLE if open or guide.visible else Input.MOUSE_MODE_CAPTURED
+	if is_instance_valid(player):player.velocity=Vector3.ZERO
+
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT and is_instance_valid(guide):
@@ -2447,6 +2520,7 @@ func _tool_result(cell: Vector2i, active_tool: int, mode: int=-1) -> String:
 				_clear_old_crop(cell)
 				set_terrain(cell,Terrain.DIRT)
 				result="Fresh earth, ready for a little green."
+				experience.gardening(cell,"hoe",wildlife.day(),2)
 			else: result="Use the hoe on grass or hard earth."
 		Tool.SEEDS:
 			if terrain==Terrain.DIRT:
@@ -2454,13 +2528,16 @@ func _tool_result(cell: Vector2i, active_tool: int, mode: int=-1) -> String:
 				heightfield.plant_seed(cell)
 				set_terrain(cell,Terrain.GRASS)
 				result="A fresh patch of grass."
+				experience.gardening(cell,"seeds",wildlife.day(),3)
 			else: result="Scatter grass seed onto bare earth."
 		Tool.SHOVEL:
 			var chosen: int=floating_tool.shovel_mode if mode<0 else mode
 			if heightfield.sculpt(cell,chosen):
+				if heightfield.last_sculpt_changed:experience.gardening(cell,"shovel%d"%chosen,wildlife.day(),3)
 				result=["A hollow fills with water.","A small hole, ready for grass seed.","The hollow is filled with dirt.","The ground settles level."][chosen]
 			else:result="Leave a little room around people, plants and buildings."
 		Tool.WATER:
+			if float(watered_cells.get(cell,0))<0.25:experience.gardening(cell,"water",wildlife.day(),1)
 			watered_cells[cell]=1.0
 			watered_image.set_pixel(cell.x,cell.y,Color(1,0,0))
 			watered_texture.update(watered_image)
@@ -2628,10 +2705,26 @@ func _create_garden_ui() -> void:
 		quit_button.text="Save & Quit"
 		quit_button.pressed.connect(get_tree().current_scene.save_and_quit)
 		pages.add_child(quit_button)
-	tool_wheel=Control.new()
-	root.add_child(tool_wheel)
-	tool_wheel.hide()
-	tool_wheel.mouse_filter=Control.MOUSE_FILTER_IGNORE
+	var wheel_layer:=CanvasLayer.new()
+	wheel_layer.layer=20
+	add_child(wheel_layer)
+	tool_wheel=preload("res://tool_wheel.gd").new()
+	wheel_layer.add_child(tool_wheel)
+	tool_wheel.size=get_viewport().get_visible_rect().size
+	tool_wheel.attach_clock(self,0)
+	tool_wheel.tool_selected.connect(func(index: int):
+		_select_tool(index)
+		if index==Tool.SHOVEL:tool_wheel.open_modes(floating_tool.shovel_mode)
+		else:_set_wheel(false))
+	tool_wheel.mode_selected.connect(func(index: int):
+		floating_tool.shovel_mode=index
+		_set_wheel(false)
+		_refresh_ui())
+	tool_wheel.cancelled.connect(func(): _set_wheel(false))
+	clock_ui=preload("res://petal_clock.gd").new()
+	root.add_child(clock_ui)
+	clock_ui.setup(self)
+	preload("res://cwtch_theme.gd").decorate_menu(guide)
 
 func _toggle_guide() -> void:
 	_set_guide(not guide.visible)
@@ -2641,7 +2734,9 @@ func _set_guide(open: bool) -> void:
 		hedgehog_intro.set_paused(open)
 		return
 	_clear_use()
-	if is_instance_valid(local_coop):local_coop.second.clear_use()
+	if is_instance_valid(local_coop):
+		local_coop.second.clear_use()
+		if is_instance_valid(local_coop.second.tool_wheel):local_coop.second.tool_wheel.hide()
 	if is_instance_valid(dev_console) and dev_console.opened: dev_console.toggle(false)
 	if is_instance_valid(field_book) and field_book.visible: field_book.close()
 	guide.visible=open
@@ -2770,6 +2865,43 @@ func build(garden: Node3D) -> void:
    var point: Vector3 = garden.cell_center(cell)
    if absf(point.x-position.x)<footprint.x*0.5+garden.MICRO_SIZE*0.5 and absf(point.z-position.z)<footprint.z*0.5+garden.MICRO_SIZE*0.5:
     garden.blocked_cells[cell]=true
+
+```
+
+## garden_experience.gd
+
+```gd
+extends RefCounted
+## Shared garden progression. Repeating one action on one tile cannot farm XP.
+var total := 0
+var award_day := 1
+var worked: Dictionary = {}
+
+func level() -> int:
+	return 1+total/100
+
+func progress() -> float:
+	return float(total%100)/100.0
+
+func gardening(cell: Vector2i, action: String, day: int, points: int) -> void:
+	if day!=award_day:
+		award_day=day
+		worked.clear()
+	var key := "%d,%d:%s"%[cell.x,cell.y,action]
+	if worked.has(key):return
+	worked[key]=true
+	total+=points
+
+func wildlife(kind: String, _species: String, _day: int) -> void:
+	total+=int({"visit":25,"resident":50,"birth":30}.get(kind,0))
+
+func save_data() -> Dictionary:
+	return {"total":total,"day":award_day,"worked":worked.duplicate()}
+
+func restore(data: Dictionary) -> void:
+	total=maxi(0,int(data.get("total",0)))
+	award_day=maxi(1,int(data.get("day",1)))
+	worked=data.get("worked",{}).duplicate() if data.get("worked",{}) is Dictionary else {}
 
 ```
 
@@ -3514,7 +3646,8 @@ func _begin(kind: String="hedgehog") -> void:
  paused=false
  phase="approach"
  phase_time=0.0
- garden._clear_use()
+ garden._set_wheel(false)
+ garden.local_coop.second.set_wheel(false)
  garden.player.velocity=Vector3.ZERO
  garden.cursor.clear()
  garden.aiming=false
@@ -3736,6 +3869,7 @@ func advance(delta: float) -> void:
 
 ```gd
 extends Node3D
+var last_sculpt_changed := false
 
 const RESOLUTION := 12
 const WATER_LEVEL := 0.012
@@ -3982,6 +4116,7 @@ func can_sculpt(cell: Vector2i, radius: float) -> bool:
  return true
 
 func sculpt(cell: Vector2i, mode: int) -> bool:
+ last_sculpt_changed=false
  if not garden.contains_cell(cell) or mode<0 or mode>3:return false
  var radius:=0.28 if mode==1 else 0.85
  if not can_sculpt(cell,radius):return false
@@ -4011,6 +4146,7 @@ func sculpt(cell: Vector2i, mode: int) -> bool:
      # Full strength across the square; blend only beyond its boundary.
      var tile_weight:=1.0-smoothstep(0.0,0.3,outside.length())
      value=baseline if outside==Vector2.ZERO else lerpf(old,baseline,tile_weight)
+   if absf(value-old)>0.0001:last_sculpt_changed=true
    _write_height(x,z,value)
  if mode==1:seed_holes[cell]=true
  else:
@@ -4027,6 +4163,7 @@ func sculpt(cell: Vector2i, mode: int) -> bool:
    if mode==0:kind=garden.Terrain.DEEP_WATER if p.y < -0.45 else (garden.Terrain.WATER if p.y<0.0 else garden.Terrain.DIRT)
    elif mode in [1,2]:kind=garden.Terrain.DIRT
    elif kind in [garden.Terrain.WATER,garden.Terrain.DEEP_WATER] and p.y>=0.0:kind=garden.Terrain.DIRT
+   if garden.get_terrain(tile)!=kind:last_sculpt_changed=true
    garden.set_terrain(tile,kind)
  _rebuild_samples(rect)
  return true
@@ -4377,6 +4514,7 @@ var cameras: Array[Camera3D]=[]
 var labels: Array[Label]=[]
 var notes: Array[Label]=[]
 var dots: Array[Label]=[]
+var clocks: Array[Control]=[]
 
 func setup(scene: Node3D, in_village: bool=false) -> void:
 	world=scene
@@ -4428,7 +4566,7 @@ func setup(scene: Node3D, in_village: bool=false) -> void:
 		labels.append(title)
 		var note := Label.new()
 		ui.add_child(note)
-		note.position=Vector2(24,116)
+		note.position=Vector2(24,237)
 		note.add_theme_font_size_override("font_size",14)
 		note.add_theme_color_override("font_shadow_color",Color.BLACK)
 		note.add_theme_constant_override("shadow_offset_y",2)
@@ -4439,6 +4577,27 @@ func setup(scene: Node3D, in_village: bool=false) -> void:
 		dot.text="·"
 		dot.add_theme_font_size_override("font_size",24)
 		dots.append(dot)
+		var clock:=preload("res://petal_clock.gd").new()
+		ui.add_child(clock)
+		clock.setup(world,index,village)
+		clocks.append(clock)
+	if not village:
+		var wheel_layer:=CanvasLayer.new()
+		wheel_layer.layer=21
+		world.add_child(wheel_layer)
+		second.tool_wheel=preload("res://tool_wheel.gd").new()
+		second.tool_wheel.player_slot=1
+		wheel_layer.add_child(second.tool_wheel)
+		second.tool_wheel.attach_clock(world,1)
+		second.tool_wheel.tool_selected.connect(func(index: int):
+			second.clear_use()
+			second.floating_tool.equip(index)
+			if index==3:second.tool_wheel.open_modes(second.floating_tool.shovel_mode)
+			else:second.set_wheel(false))
+		second.tool_wheel.mode_selected.connect(func(index: int):
+			second.floating_tool.shovel_mode=index
+			second.set_wheel(false))
+		second.tool_wheel.cancelled.connect(func(): second.set_wheel(false))
 	layer.hide()
 	ControllerInput.players_changed.connect(_players_changed)
 	_players_changed()
@@ -4446,7 +4605,9 @@ func setup(scene: Node3D, in_village: bool=false) -> void:
 func _players_changed() -> void:
 	split=ControllerInput.secondary_device()>=0
 	second.set_enabled(split)
-	if not village:world._clear_use()
+	if not village:
+		world._set_wheel(false)
+		second.set_wheel(false)
 	if not split:suspend_render()
 
 func suspend_render() -> void:
@@ -4461,6 +4622,12 @@ func _exit_tree() -> void:
 	suspend_render()
 
 func _process(_delta: float) -> void:
+	if not village:
+		var screen:=get_viewport().get_visible_rect().size
+		world.tool_wheel.position=Vector2.ZERO
+		world.tool_wheel.size=Vector2(screen.x*0.5,screen.y) if split else screen
+		second.tool_wheel.position=Vector2(screen.x*0.5,0)
+		second.tool_wheel.size=Vector2(screen.x*0.5,screen.y)
 	var fullscreen_scene: bool=world.current_shop>=0 if village else world.hedgehog_intro.active
 	var visible_split: bool=split and world.is_visible_in_tree() and not fullscreen_scene
 	if not visible_split:
@@ -4489,7 +4656,11 @@ func _process(_delta: float) -> void:
 				if tool.selected==3:text+=" · "+tool.MODES[tool.shovel_mode]
 			else:text+="\nThe village · %d coins"%world.host.coins
 			labels[i].text=text
-			labels[i].get_parent().visible=not second.blocked()
+			labels[i].get_parent().position=Vector2(maxf(328,views[i].size.x-265),24)
+			labels[i].custom_minimum_size=Vector2(200,0)
+			labels[i].autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
+			clocks[i].visible=not fullscreen_scene
+			labels[i].get_parent().visible=not (world.paused or world.current_shop>=0) if village else not world.guide.visible and not world.field_book.visible
 			dots[i].visible=not second.blocked()
 			dots[i].position=Vector2(views[i].size)*0.5-Vector2(4,16)
 			notes[i].size=Vector2(maxf(100,views[i].size.x-40),70)
@@ -4500,6 +4671,8 @@ func _process(_delta: float) -> void:
 			else:notes[i].text=(world.message if world.toast_timer>0 else "") if i==0 else (second.message if second.message_time>0 else "")
 	# The full-screen menus, clock, guide and animal notices remain shared overlays.
 	world.hud.get_parent().get_parent().visible=not visible_split
+	world.hud.get_parent().get_parent().position=Vector2(get_viewport().get_visible_rect().size.x-265,24)
+	world.clock_ui.visible=not visible_split and (not world.host.garden.field_book.visible if village else not world.field_book.visible)
 	world.compass_view.visible=not visible_split and (not world.paused and world.current_shop<0 if village else not world.guide.visible and not world.hedgehog_intro.active)
 	if village:world.prompt.visible=not visible_split and world.current_shop<0
 	else:
@@ -4508,6 +4681,7 @@ func _process(_delta: float) -> void:
 
 func route_input(event: InputEvent) -> bool:
 	if not event is InputEventJoypadButton and not event is InputEventJoypadMotion:return false
+	if event.device not in [ControllerInput.primary_device(),ControllerInput.secondary_device()]:return true
 	# Shared modal UI accepts either controller. Gameplay has fixed controller owners.
 	if second.blocked():return false
 	if event is InputEventJoypadButton and event.button_index==JOY_BUTTON_START:return false
@@ -5093,7 +5267,7 @@ func _save_garden() -> bool:
 	var data := {"version":1,"terrain":terrain,"crops":crops,"harvested":garden.harvested,
 		"player":[garden.player.cell.x,garden.player.cell.y],"player_position":[garden.player.position.x,garden.player.position.z],"elapsed":garden.valley_cycle.elapsed,
 		"weather_pattern":garden.valley_cycle.weather_pattern.save_data(),"weather":garden.valley_cycle.weather_index,"weather_elapsed":garden.valley_cycle.weather_elapsed,
-		"local_coop":garden.local_coop.second.save_data(),"deformation":garden.heightfield.save_deformation(),"wildlife":garden.wildlife.save_data(),"hedgehog_intro":garden.hedgehog_intro.save_data(),"wetness":garden.valley_cycle.wetness,"watered":_saved_watered(),"coins":coins,"purchases":purchases}
+		"experience":garden.experience.save_data(),"local_coop":garden.local_coop.second.save_data(),"deformation":garden.heightfield.save_deformation(),"wildlife":garden.wildlife.save_data(),"hedgehog_intro":garden.hedgehog_intro.save_data(),"wetness":garden.valley_cycle.wetness,"watered":_saved_watered(),"coins":coins,"purchases":purchases}
 	var file := FileAccess.open(SAVE_PATH,FileAccess.WRITE)
 	if not file: return false
 	file.store_string(JSON.stringify(data))
@@ -5115,6 +5289,7 @@ func _restore_garden() -> void:
 	for z in range(garden.grid_size.y):
 		for x in range(garden.grid_size.x): garden.set_terrain(Vector2i(x,z),clampi(int(terrain[z*garden.grid_size.x+x]),0,7))
 	garden.heightfield.restore_deformation(data.get("deformation",{}))
+	garden.experience.restore(data.get("experience",{}))
 	for saved in data.get("crops",[]):
 		var cell := Vector2i(int(saved.x),int(saved.z))
 		if not garden.contains_cell(cell) or garden.blocked_cells.has(cell): continue
@@ -5927,6 +6102,162 @@ func advance(delta: float) -> void:
 
 ```
 
+## petal_backdrop.gdshader
+
+```gdshader
+shader_type canvas_item;
+render_mode unshaded;
+uniform sampler2D screen_texture : hint_screen_texture, filter_linear;
+uniform vec2 region_min=vec2(0.0);
+uniform vec2 region_max=vec2(1.0);
+void fragment(){
+ vec3 blurred=vec3(0.0);
+ for(int x=-1;x<=1;x++){
+  for(int y=-1;y<=1;y++){
+   vec2 sample_uv=clamp(SCREEN_UV+vec2(float(x),float(y))*SCREEN_PIXEL_SIZE*3.0,region_min+SCREEN_PIXEL_SIZE*4.0,region_max-SCREEN_PIXEL_SIZE*4.0);
+   blurred+=texture(screen_texture,sample_uv).rgb/9.0;
+  }
+ }
+ COLOR=vec4(mix(blurred,vec3(0.025,0.09,0.075),0.64),1.0);
+}
+
+```
+
+## petal_clock.gd
+
+```gd
+extends Control
+const Petals=preload("res://petal_shapes.gd")
+const Icons=preload("res://controller_icons.gd")
+var world: Node3D
+var garden: Node3D
+var player_slot := 0
+var village := false
+var font: Font
+
+func setup(scene: Node3D, slot: int=0, in_village: bool=false) -> void:
+	world=scene
+	player_slot=slot
+	village=in_village
+	garden=world.host.garden if village else world
+	font=Petals.serif()
+	position=Vector2(20,18)
+	size=Vector2(302,192)
+	mouse_filter=Control.MOUSE_FILTER_IGNORE
+
+func _process(_delta: float) -> void:
+	if is_instance_valid(garden):queue_redraw()
+
+func prompts() -> Array:
+	if village:
+		return [["accept","Select"],["back","Back"]] if world.paused or world.current_shop>=0 else [["accept","Enter shop"],["pause","Pause"]]
+	if garden.field_book.visible:return [["left","Category"],["right","Category"],["back","Close"]]
+	if garden.guide.visible:return [["accept","Select"],["back","Back"]]
+	var wheel: Control=garden.tool_wheel if player_slot==0 else garden.local_coop.second.tool_wheel
+	if wheel.visible:return [["accept","Select"],["back","Close"],["move","Choose"]]
+	var tool: Node3D=garden.floating_tool if player_slot==0 else garden.local_coop.second.floating_tool
+	var items := [["accept","Tools"],["use","Use tool"],["back","Put away"],["pause","Pause"]]
+	if tool.selected==3:items.insert(2,["mode","Mode"])
+	return items
+
+func _text(text: String, at: Vector2, size_px: int, color: Color=Petals.INK) -> void:
+	draw_string(font,at,text,HORIZONTAL_ALIGNMENT_LEFT,-1,size_px,color)
+
+func _draw() -> void:
+	if not is_instance_valid(garden):return
+	var cycle: Node3D=garden.valley_cycle
+	var at := Vector2(76,74)
+	var progress: float=garden.experience.progress()
+	for i in 12:
+		var angle := -PI/2+float(i)*TAU/12.0
+		Petals.petal(self,at+Vector2.from_angle(angle)*44,angle,29,24,Petals.GOLD if float(i)/12.0<progress else Color("a99664"))
+	draw_circle(at+Vector2(0,3),46,Color(0,0,0,0.25))
+	draw_circle(at,46,Petals.INK)
+	draw_circle(at,42,Petals.PAPER)
+	for i in 12:
+		var direction := Vector2.from_angle(-PI/2+float(i)*TAU/12)
+		draw_line(at+direction*34,at+direction*38,Petals.INK,2,true)
+	var hours := fposmod(6.0+cycle.elapsed*24.0/cycle.FULL_CYCLE,24.0)
+	var hour_angle := hours/12.0*TAU-PI/2
+	var minute_angle := fposmod(hours,1.0)*TAU-PI/2
+	_text("AM" if hours<12 else "PM",at+Vector2(-10,25),10)
+	draw_line(at,at+Vector2.from_angle(hour_angle)*23,Petals.INK,4,true)
+	draw_line(at,at+Vector2.from_angle(minute_angle)*33,Petals.INK,2,true)
+	draw_circle(at,4,Color("b88b37"))
+	var day := int(floor((cycle.elapsed+600.0)/cycle.FULL_CYCLE))+1
+	var style:=preload("res://cwtch_theme.gd").compact_card()
+	draw_style_box(style,Rect2(12,151,134,56))
+	_text("LEVEL %d · DAY %d"%[garden.experience.level(),day],Vector2(21,174),12,Petals.PAPER)
+	_text(cycle.WEATHER_NAMES[cycle.weather_index],Vector2(21,195),14,Petals.PAPER)
+	var device: int=ControllerInput.primary_device() if player_slot==0 else ControllerInput.secondary_device()
+	var pad: bool=device>=0 and (player_slot==1 or ControllerInput.using_pad)
+	var items:=prompts()
+	draw_style_box(style,Rect2(153,12,140,items.size()*34+12))
+	for i in items.size():
+		var action: String=items[i][0]
+		var y := 19+i*34
+		if pad:draw_texture_rect(Icons.texture(action,device),Rect2(160,y,28,28),false)
+		else:
+			var key: String={"accept":"Enter" if garden.guide.visible or village or (not village and garden.tool_wheel.visible) else "Tab","back":"Esc" if garden.guide.visible or village or (not village and garden.tool_wheel.visible) else "T","mode":"X","use":"Click","pause":"Esc","move":"Mouse","left":"←","right":"→"}.get(action,"")
+			_text(key,Vector2(157,y+19),11,Petals.GOLD)
+		_text(items[i][1],Vector2(195,y+20),14,Petals.PAPER)
+
+```
+
+## petal_frame.gd
+
+```gd
+extends Control
+const Petals=preload("res://petal_shapes.gd")
+func _ready() -> void:
+	top_level=true
+	mouse_filter=Control.MOUSE_FILTER_IGNORE
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	resized.connect(queue_redraw)
+
+func _process(_delta: float) -> void:
+	global_position=get_parent().global_position
+	size=get_parent().size
+
+func _draw() -> void:
+	for axis in 2:
+		var length: float=size.x if axis==0 else size.y
+		var count:=maxi(2,int(length/28))
+		for side in 2:
+			for i in count:
+				var distance:=lerpf(18,length-18,float(i)/maxi(1,count-1))
+				var at:=Vector2(distance,0 if side==0 else size.y) if axis==0 else Vector2(0 if side==0 else size.x,distance)
+				var angle:=(-PI/2 if side==0 else PI/2) if axis==0 else (PI if side==0 else 0.0)
+				Petals.petal(self,at,angle+(-0.12 if i%2==0 else 0.12),15,19,Petals.GOLD if i%2==0 else Color("dcb54e"))
+
+```
+
+## petal_shapes.gd
+
+```gd
+extends RefCounted
+const GOLD := Color("f4d03f")
+const EARTH := Color("aa914b")
+const INK := Color("263c35")
+const PAPER := Color("f3e6c9")
+
+static func petal(canvas: CanvasItem, at: Vector2, angle: float, length: float, width: float, color: Color, glow: bool=false) -> void:
+	var axis := Vector2.from_angle(angle)
+	var side := axis.orthogonal()
+	var points := PackedVector2Array([at,at+axis*length*0.3-side*width*0.48,at+axis*length*0.73-side*width*0.42,at+axis*length,at+axis*length*0.73+side*width*0.42,at+axis*length*0.3+side*width*0.48])
+	if glow:
+		canvas.draw_circle(at+axis*length*0.55,width*0.72,Color(1,0.69,0.12,0.13))
+	canvas.draw_colored_polygon(points,color)
+	canvas.draw_colored_polygon(PackedVector2Array([points[0],points[3],points[4],points[5]]),color.lightened(0.14))
+	canvas.draw_polyline(PackedVector2Array([points[0],points[1],points[2],points[3],points[4],points[5],points[0]]),color.darkened(0.3),1.5,true)
+
+static func serif() -> Font:
+	var font := SystemFont.new()
+	font.font_names=PackedStringArray(["Georgia","Cambria","Times New Roman"])
+	return font
+
+```
+
 ## Play Aberglen.cmd
 
 ```cmd
@@ -6665,152 +6996,175 @@ extends Control
 signal tool_selected(index: int)
 signal mode_selected(index: int)
 signal cancelled
-const LABELS := ["Hoe", "Seed packet", "Watering can", "Shovel", "Put away"]
-const MODE_LABELS := ["Dig","Pick","Pour","Thump"]
-const MODE_NOTES := ["Dig a water-filled hollow", "Make a small seed hole", "Fill the ground with dirt", "Level the whole tile"]
-var mode_page := false
-const NOTES := ["Turn grass into earth", "Scatter a little green", "Give the ground a drink", "Choose how to shape the earth", "Stow your tool and wander"]
-var selected := 0
-var hovered := -1
+const Petals=preload("res://petal_shapes.gd")
+const LABELS=["Hoe","Seed packet","Watering can","Shovel","Put away"]
+const MODE_LABELS=["Dig","Pick","Pour","Thump"]
+const NOTES=["Turn grass into earth","Scatter a little green","Give the ground a drink","Shape the garden","Stow your tool and wander"]
+const MODE_NOTES=["Dig a water-filled hollow","Make a small seed hole","Fill the ground with dirt","Level the whole tile"]
+var mode_page:=false
+var selected:=0
+var hovered:=0
+var player_slot:=0
+var owner_device:=-1
+var center:=Vector2.ZERO
+var radius_scale:=1.0
 var title: Label
 var subtitle: Label
-var instruction: Label
-var center: Vector2
-var icons: Array[Texture2D] = []
+var icons: Array[Texture2D]=[]
+var sizes: Array[float]=[1.0,1.0,1.0,1.0,1.0]
+var backdrop: ColorRect
+var opening_frame:=0
 
 func _ready() -> void:
-	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	mouse_filter = Control.MOUSE_FILTER_STOP
-	for key in ["hoe","seeds","water","shovel"]:
-		icons.append(load("res://assets/tools/%s_icon.png" % key) if ResourceLoader.exists("res://assets/tools/%s_icon.png" % key) else null)
-	title = _label(24,Color("e5c17c"))
-	subtitle = _label(15,Color("d0ded0"))
-	instruction = _label(14,Color("b2c6bb"))
-	instruction.text = "MOVE MOUSE TO CHOOSE    ·    CLICK TO EQUIP    ·    TAB / ESC TO CLOSE"
-	resized.connect(_layout)
-	_layout()
-	hide()
+ mouse_filter=Control.MOUSE_FILTER_STOP
+ backdrop=ColorRect.new()
+ backdrop.mouse_filter=Control.MOUSE_FILTER_IGNORE
+ backdrop.material=ShaderMaterial.new()
+ backdrop.material.shader=preload("res://petal_backdrop.gdshader")
+ add_child(backdrop)
+ # Canvas child must draw before the parent's petals.
+ backdrop.show_behind_parent=true
+ backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+ for key in ["hoe","seeds","water","shovel"]:icons.append(load("res://assets/tools/%s_icon.png"%key))
+ title=_label(21)
+ title.add_theme_font_override("font",Petals.serif())
+ subtitle=_label(17)
+ subtitle.add_theme_color_override("font_color",Petals.PAPER)
+ resized.connect(_layout)
+ _layout()
+ hide()
 
-func _label(size: int, color: Color) -> Label:
-	var label := Label.new()
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	label.add_theme_font_size_override("font_size",size)
-	label.add_theme_color_override("font_color",color)
-	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(label)
-	return label
+func _label(font_size: int) -> Label:
+ var label:=Label.new()
+ label.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
+ label.vertical_alignment=VERTICAL_ALIGNMENT_CENTER
+ label.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
+ label.add_theme_font_size_override("font_size",font_size)
+ label.add_theme_color_override("font_color",Petals.INK)
+ label.mouse_filter=Control.MOUSE_FILTER_IGNORE
+ add_child(label)
+ return label
 
 func _layout() -> void:
-	center = size*0.5
-	title.position = center+Vector2(-180,-264)
-	title.size = Vector2(360,36)
-	subtitle.position = center+Vector2(-200,205)
-	subtitle.size = Vector2(400,28)
-	instruction.position = center+Vector2(-370,244)
-	instruction.size = Vector2(740,28)
-	queue_redraw()
+ center=size*Vector2(0.5,0.56)
+ radius_scale=minf(1.0,minf(size.x/600.0,size.y/680.0))
+ if is_instance_valid(title):
+  title.position=center-Vector2(69,45)*radius_scale
+  title.size=Vector2(138,90)*radius_scale
+  subtitle.position=center+Vector2(-200,218)*radius_scale
+  subtitle.size=Vector2(400,55)*radius_scale
+ if is_instance_valid(backdrop):
+  var screen:=get_viewport_rect().size
+  backdrop.material.set_shader_parameter("region_min",global_position/screen)
+  backdrop.material.set_shader_parameter("region_max",(global_position+size)/screen)
+ queue_redraw()
 
 func open(current: int) -> void:
-	mode_page=false
-	selected = current
-	hovered = current
-	show()
-	_refresh()
+ mode_page=false
+ selected=clampi(current,0,4)
+ hovered=selected
+ opening_frame=Engine.get_process_frames()
+ show()
+ _layout()
+ _refresh()
 
 func open_modes(current: int) -> void:
-	mode_page=true
-	selected=current
-	hovered=current
-	show()
-	_refresh()
+ mode_page=true
+ hovered=clampi(current,0,3)
+ selected=hovered
+ _refresh()
 
 func _labels() -> Array:
-	return MODE_LABELS if mode_page else LABELS
-
-func _choose() -> void:
-	var choice: int=hovered if hovered>=0 else selected
-	if mode_page:mode_selected.emit(choice)
-	else:tool_selected.emit(choice)
-
-func _cancel() -> void:
-	if mode_page:open(3)
-	else:cancelled.emit()
-
-func _sector(offset: Vector2) -> int:
-	var step: float=TAU/_labels().size()
-	return int(floor(fposmod(offset.angle()+PI/2+step/2,TAU)/step))
-
-func _gui_input(event: InputEvent) -> void:
-	if event is InputEventMouseMotion:
-		var offset: Vector2 = event.position-center
-		if offset.length()<65 or offset.length()>220:
-			hovered = -1
-		else:
-			hovered = _sector(offset)
-		_refresh()
-	if event is InputEventMouseButton and event.pressed:
-		if event.button_index==MOUSE_BUTTON_LEFT and hovered>=0:
-			_choose()
-		elif event.button_index==MOUSE_BUTTON_RIGHT:
-			_cancel()
-		accept_event()
+ return MODE_LABELS if mode_page else LABELS
 
 func _refresh() -> void:
-	instruction.text = "LEFT STICK / D-PAD  CHOOSE · A / CROSS  EQUIP · B / CIRCLE  CLOSE" if ControllerInput.using_pad else "MOVE MOUSE TO CHOOSE · CLICK TO EQUIP · TAB / ESC TO CLOSE"
-	title.text = "Shovel · choose a mode" if mode_page else "Choose your tool"
-	subtitle.text = (MODE_NOTES if mode_page else NOTES)[hovered] if hovered>=0 else "Take your time."
-	queue_redraw()
+ title.text=_labels()[hovered]
+ subtitle.text=(MODE_NOTES if mode_page else NOTES)[hovered]
+ queue_redraw()
 
-func _draw() -> void:
-	draw_rect(Rect2(Vector2.ZERO,size),Color(0.015,0.045,0.04,0.64))
-	var labels:=_labels()
-	var step: float=TAU/labels.size()
-	for i in labels.size():
-		var angle := -PI/2+i*step
-		var start := angle-step/2+0.028
-		var end := angle+step/2-0.028
-		var polygon := PackedVector2Array()
-		for j in range(41): polygon.append(center+Vector2.from_angle(lerpf(start,end,j/40.0))*198)
-		for j in range(40,-1,-1): polygon.append(center+Vector2.from_angle(lerpf(start,end,j/40.0))*72)
-		draw_colored_polygon(polygon,Color("395548") if i==hovered else Color("18352f"))
-		draw_arc(center,198,start,end,48,Color("e5c17c") if i==hovered else Color("657868"),2.0,true)
-		var icon_center := center+Vector2.from_angle(angle)*128
-		var icon_index: int=3 if mode_page else i
-		if icons.size()>icon_index and icons[icon_index]:
-			draw_texture_rect(icons[icon_index],Rect2(icon_center-Vector2(48,56),Vector2(96,96)),false)
-		var font := get_theme_default_font()
-		var text_width := font.get_string_size(labels[i],HORIZONTAL_ALIGNMENT_LEFT,-1,16).x
-		draw_string(font,icon_center+Vector2(-text_width*0.5,57),labels[i],HORIZONTAL_ALIGNMENT_LEFT,-1,16,Color("f3ead4"))
-	draw_circle(center,67,Color("102a25"))
-	draw_arc(center,67,0,TAU,64,Color("9b895f"),1.0,true)
-	var font := get_theme_default_font()
-	draw_string(font,center+Vector2(-17,6),("Y / △" if ControllerInput.using_pad else "TAB"),HORIZONTAL_ALIGNMENT_LEFT,-1,17,Color("e5c17c"))
+func _choose() -> void:
+ if mode_page:mode_selected.emit(hovered)
+ else:tool_selected.emit(hovered)
 
-func _process(_delta: float) -> void:
-	if not visible: return
-	var stick := ControllerInput.movement()
-	if stick.length()>0.35:
-		hovered=_sector(stick)
-	_refresh()
+func _sector(offset: Vector2) -> int:
+ var step:=TAU/_labels().size()
+ return int(floor(fposmod(offset.angle()+PI/2+step/2,TAU)/step))
+
+func handle_event(event: InputEvent) -> bool:
+ if not visible:return false
+ if event is InputEventJoypadButton or event is InputEventJoypadMotion:
+  if event.device!=owner_device:return false
+  if event is InputEventJoypadButton and event.pressed:
+   match event.button_index:
+    JOY_BUTTON_A:_choose()
+    JOY_BUTTON_B:cancelled.emit()
+    JOY_BUTTON_START:
+     cancelled.emit()
+     return false
+    JOY_BUTTON_DPAD_LEFT:hovered=posmod(hovered-1,_labels().size())
+    JOY_BUTTON_DPAD_RIGHT:hovered=posmod(hovered+1,_labels().size())
+    JOY_BUTTON_DPAD_UP:hovered=0
+    JOY_BUTTON_DPAD_DOWN:hovered=2
+  _refresh()
+  return true
+ if player_slot!=0:return false
+ if event is InputEventKey and event.pressed and not event.echo:
+  if event.keycode in [KEY_ESCAPE,KEY_TAB]:cancelled.emit()
+  elif event.keycode in [KEY_ENTER,KEY_SPACE]:_choose()
+  elif event.keycode in [KEY_LEFT,KEY_RIGHT]:hovered=posmod(hovered+(-1 if event.keycode==KEY_LEFT else 1),_labels().size())
+  _refresh()
+  return true
+ return false
 
 func _input(event: InputEvent) -> void:
-	if not visible: return
-	if event.is_action_pressed("ui_accept"):
-		_choose()
-	elif event.is_action_pressed("ui_cancel"):
-		_cancel()
-	elif event.is_action_pressed("ui_left"):
-		hovered=posmod(hovered-1,_labels().size())
-	elif event.is_action_pressed("ui_right"):
-		hovered=posmod(hovered+1,_labels().size())
-	elif event.is_action_pressed("ui_up"):
-		hovered=0
-	elif event.is_action_pressed("ui_down"):
-		hovered=2
-	else: return
-	_refresh()
-	get_viewport().set_input_as_handled()
+ if handle_event(event):get_viewport().set_input_as_handled()
+
+func _gui_input(event: InputEvent) -> void:
+ if player_slot!=0:return
+ if event is InputEventMouseMotion:
+  var offset: Vector2=event.position-center
+  if offset.length()>78*radius_scale and offset.length()<225*radius_scale:hovered=_sector(offset)
+  _refresh()
+ elif event is InputEventMouseButton and event.pressed:
+  if event.button_index==MOUSE_BUTTON_LEFT and (event.position-center).length()<230*radius_scale:_choose()
+  elif event.button_index==MOUSE_BUTTON_RIGHT:cancelled.emit()
+  accept_event()
+
+func _process(delta: float) -> void:
+ if not visible:return
+ var stick:=ControllerInput.movement(owner_device)
+ if stick.length()>0.4:hovered=_sector(stick)
+ for i in sizes.size():sizes[i]=lerpf(sizes[i],1.1 if i==hovered else 0.96,1.0-exp(-14.0*delta))
+ _refresh()
+
+func _draw() -> void:
+ var labels:=_labels()
+ for i in labels.size():
+  var angle: float=-PI/2+i*TAU/labels.size()
+  var axis:=Vector2.from_angle(angle)
+  var base:=center+axis*76*radius_scale
+  var color:=Petals.GOLD if i==hovered else Petals.EARTH
+  Petals.petal(self,base,angle,133*radius_scale*sizes[i],125*radius_scale*sizes[i],color,i==hovered)
+  var at:=center+axis*141*radius_scale
+  var icon_index:=3 if mode_page else i
+  if icon_index<icons.size():
+   var extent:=Vector2.ONE*70*radius_scale*sizes[i]
+   draw_texture_rect(icons[icon_index],Rect2(at-extent*0.5,extent),false)
+  else:
+   draw_circle(at,16*radius_scale,Petals.PAPER)
+   draw_line(at-Vector2(9,0)*radius_scale,at+Vector2(9,0)*radius_scale,Petals.INK,3,true)
+  if mode_page:
+   var font:=get_theme_default_font()
+   var width:=font.get_string_size(labels[i],HORIZONTAL_ALIGNMENT_LEFT,-1,16).x
+   draw_string(font,at+Vector2(-width/2,47),labels[i],HORIZONTAL_ALIGNMENT_LEFT,-1,16,Petals.INK)
+ draw_circle(center,79*radius_scale,Petals.INK)
+ draw_circle(center,75*radius_scale,Petals.PAPER)
+ draw_arc(center,69*radius_scale,0,TAU,64,Color("c5b286"),1.0,true)
+
+func attach_clock(world: Node3D, slot: int) -> void:
+ var clock:=preload("res://petal_clock.gd").new()
+ add_child(clock)
+ clock.setup(world,slot)
 
 ```
 
@@ -6913,6 +7267,7 @@ func setup(world: Node3D) -> void:
 	panel.add_theme_stylebox_override("panel", preload("res://cwtch_theme.gd").compact_card())
 	clock_label = garden._label("", 16, Color("eedeb9"))
 	panel.add_child(clock_label)
+	panel.hide()
 	lightning = DirectionalLight3D.new()
 	lightning.name = "DistantLightning"
 	lightning.rotation_degrees = Vector3(-55, -30, 0)
@@ -7342,6 +7697,7 @@ var background_meadow: Node3D
 var moon: DirectionalLight3D
 var lightning: DirectionalLight3D
 var rain: CPUParticles3D
+var clock_ui: Control
 var clock_label: Label
 var sun: DirectionalLight3D
 var outdoor_environment: Environment
@@ -7445,6 +7801,7 @@ func activate(owner_menu: Node3D) -> void:
  local_coop=preload("res://local_coop.gd").new()
  add_child(local_coop)
  local_coop.setup(self,true)
+ clock_ui.setup(self,0,true)
 
 func _solid(parent: Node3D, dimensions: Vector3, at: Vector3, shop: int=-1) -> void:
  var body:=StaticBody3D.new()
@@ -7574,6 +7931,9 @@ func _build_ui() -> void:
  clock_panel.offset_top=24
  clock_panel.add_theme_stylebox_override("panel",preload("res://cwtch_theme.gd").compact_card())
  clock_label=_label(clock_panel,"",16)
+ clock_panel.hide()
+ clock_ui=preload("res://petal_clock.gd").new()
+ root.add_child(clock_ui)
  prompt=_label(root,"",21)
  prompt.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
  prompt.offset_left=-270; prompt.offset_right=270
@@ -7629,6 +7989,8 @@ func _build_ui() -> void:
  _button(pause_stack,"Save & Quit",func(): host.save_and_quit())
  pause_panel.hide()
  pause_shade.hide()
+ preload("res://cwtch_theme.gd").decorate_menu(pause_panel)
+ preload("res://cwtch_theme.gd").decorate_menu(shop_panel)
 
 func _input_mode() -> void:
  if current_shop>=0: ControllerInput.focus_first.call_deferred(shop_panel)

@@ -51,6 +51,7 @@ func setup(world: Node3D) -> void:
 	panel.add_theme_stylebox_override("panel", preload("res://cwtch_theme.gd").compact_card())
 	clock_label = garden._label("", 16, Color("eedeb9"))
 	panel.add_child(clock_label)
+	panel.hide()
 	lightning = DirectionalLight3D.new()
 	lightning.name = "DistantLightning"
 	lightning.rotation_degrees = Vector3(-55, -30, 0)

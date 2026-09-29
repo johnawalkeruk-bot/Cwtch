@@ -11,6 +11,7 @@ var cameras: Array[Camera3D]=[]
 var labels: Array[Label]=[]
 var notes: Array[Label]=[]
 var dots: Array[Label]=[]
+var clocks: Array[Control]=[]
 
 func setup(scene: Node3D, in_village: bool=false) -> void:
 	world=scene
@@ -62,7 +63,7 @@ func setup(scene: Node3D, in_village: bool=false) -> void:
 		labels.append(title)
 		var note := Label.new()
 		ui.add_child(note)
-		note.position=Vector2(24,116)
+		note.position=Vector2(24,237)
 		note.add_theme_font_size_override("font_size",14)
 		note.add_theme_color_override("font_shadow_color",Color.BLACK)
 		note.add_theme_constant_override("shadow_offset_y",2)
@@ -73,6 +74,27 @@ func setup(scene: Node3D, in_village: bool=false) -> void:
 		dot.text="·"
 		dot.add_theme_font_size_override("font_size",24)
 		dots.append(dot)
+		var clock:=preload("res://petal_clock.gd").new()
+		ui.add_child(clock)
+		clock.setup(world,index,village)
+		clocks.append(clock)
+	if not village:
+		var wheel_layer:=CanvasLayer.new()
+		wheel_layer.layer=21
+		world.add_child(wheel_layer)
+		second.tool_wheel=preload("res://tool_wheel.gd").new()
+		second.tool_wheel.player_slot=1
+		wheel_layer.add_child(second.tool_wheel)
+		second.tool_wheel.attach_clock(world,1)
+		second.tool_wheel.tool_selected.connect(func(index: int):
+			second.clear_use()
+			second.floating_tool.equip(index)
+			if index==3:second.tool_wheel.open_modes(second.floating_tool.shovel_mode)
+			else:second.set_wheel(false))
+		second.tool_wheel.mode_selected.connect(func(index: int):
+			second.floating_tool.shovel_mode=index
+			second.set_wheel(false))
+		second.tool_wheel.cancelled.connect(func(): second.set_wheel(false))
 	layer.hide()
 	ControllerInput.players_changed.connect(_players_changed)
 	_players_changed()
@@ -80,7 +102,9 @@ func setup(scene: Node3D, in_village: bool=false) -> void:
 func _players_changed() -> void:
 	split=ControllerInput.secondary_device()>=0
 	second.set_enabled(split)
-	if not village:world._clear_use()
+	if not village:
+		world._set_wheel(false)
+		second.set_wheel(false)
 	if not split:suspend_render()
 
 func suspend_render() -> void:
@@ -95,6 +119,12 @@ func _exit_tree() -> void:
 	suspend_render()
 
 func _process(_delta: float) -> void:
+	if not village:
+		var screen:=get_viewport().get_visible_rect().size
+		world.tool_wheel.position=Vector2.ZERO
+		world.tool_wheel.size=Vector2(screen.x*0.5,screen.y) if split else screen
+		second.tool_wheel.position=Vector2(screen.x*0.5,0)
+		second.tool_wheel.size=Vector2(screen.x*0.5,screen.y)
 	var fullscreen_scene: bool=world.current_shop>=0 if village else world.hedgehog_intro.active
 	var visible_split: bool=split and world.is_visible_in_tree() and not fullscreen_scene
 	if not visible_split:
@@ -123,7 +153,11 @@ func _process(_delta: float) -> void:
 				if tool.selected==3:text+=" · "+tool.MODES[tool.shovel_mode]
 			else:text+="\nThe village · %d coins"%world.host.coins
 			labels[i].text=text
-			labels[i].get_parent().visible=not second.blocked()
+			labels[i].get_parent().position=Vector2(maxf(328,views[i].size.x-265),24)
+			labels[i].custom_minimum_size=Vector2(200,0)
+			labels[i].autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
+			clocks[i].visible=not fullscreen_scene
+			labels[i].get_parent().visible=not (world.paused or world.current_shop>=0) if village else not world.guide.visible and not world.field_book.visible
 			dots[i].visible=not second.blocked()
 			dots[i].position=Vector2(views[i].size)*0.5-Vector2(4,16)
 			notes[i].size=Vector2(maxf(100,views[i].size.x-40),70)
@@ -134,6 +168,8 @@ func _process(_delta: float) -> void:
 			else:notes[i].text=(world.message if world.toast_timer>0 else "") if i==0 else (second.message if second.message_time>0 else "")
 	# The full-screen menus, clock, guide and animal notices remain shared overlays.
 	world.hud.get_parent().get_parent().visible=not visible_split
+	world.hud.get_parent().get_parent().position=Vector2(get_viewport().get_visible_rect().size.x-265,24)
+	world.clock_ui.visible=not visible_split and (not world.host.garden.field_book.visible if village else not world.field_book.visible)
 	world.compass_view.visible=not visible_split and (not world.paused and world.current_shop<0 if village else not world.guide.visible and not world.hedgehog_intro.active)
 	if village:world.prompt.visible=not visible_split and world.current_shop<0
 	else:
@@ -142,6 +178,7 @@ func _process(_delta: float) -> void:
 
 func route_input(event: InputEvent) -> bool:
 	if not event is InputEventJoypadButton and not event is InputEventJoypadMotion:return false
+	if event.device not in [ControllerInput.primary_device(),ControllerInput.secondary_device()]:return true
 	# Shared modal UI accepts either controller. Gameplay has fixed controller owners.
 	if second.blocked():return false
 	if event is InputEventJoypadButton and event.button_index==JOY_BUTTON_START:return false

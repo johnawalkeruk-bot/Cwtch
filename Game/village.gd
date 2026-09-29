@@ -9,6 +9,7 @@ var background_meadow: Node3D
 var moon: DirectionalLight3D
 var lightning: DirectionalLight3D
 var rain: CPUParticles3D
+var clock_ui: Control
 var clock_label: Label
 var sun: DirectionalLight3D
 var outdoor_environment: Environment
@@ -112,6 +113,7 @@ func activate(owner_menu: Node3D) -> void:
  local_coop=preload("res://local_coop.gd").new()
  add_child(local_coop)
  local_coop.setup(self,true)
+ clock_ui.setup(self,0,true)
 
 func _solid(parent: Node3D, dimensions: Vector3, at: Vector3, shop: int=-1) -> void:
  var body:=StaticBody3D.new()
@@ -241,6 +243,9 @@ func _build_ui() -> void:
  clock_panel.offset_top=24
  clock_panel.add_theme_stylebox_override("panel",preload("res://cwtch_theme.gd").compact_card())
  clock_label=_label(clock_panel,"",16)
+ clock_panel.hide()
+ clock_ui=preload("res://petal_clock.gd").new()
+ root.add_child(clock_ui)
  prompt=_label(root,"",21)
  prompt.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
  prompt.offset_left=-270; prompt.offset_right=270
@@ -296,6 +301,8 @@ func _build_ui() -> void:
  _button(pause_stack,"Save & Quit",func(): host.save_and_quit())
  pause_panel.hide()
  pause_shade.hide()
+ preload("res://cwtch_theme.gd").decorate_menu(pause_panel)
+ preload("res://cwtch_theme.gd").decorate_menu(shop_panel)
 
 func _input_mode() -> void:
  if current_shop>=0: ControllerInput.focus_first.call_deferred(shop_panel)

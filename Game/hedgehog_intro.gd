@@ -131,7 +131,8 @@ func _begin(kind: String="hedgehog") -> void:
  paused=false
  phase="approach"
  phase_time=0.0
- garden._clear_use()
+ garden._set_wheel(false)
+ garden.local_coop.second.set_wheel(false)
  garden.player.velocity=Vector3.ZERO
  garden.cursor.clear()
  garden.aiming=false

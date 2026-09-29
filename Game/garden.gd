@@ -28,6 +28,8 @@ var dev_console: CanvasLayer
 var tardis: Node3D
 var animal_notices: CanvasLayer
 var wildlife: Node
+var experience := preload("res://garden_experience.gd").new()
+var clock_ui: Control
 var local_coop: Node
 var hedgehog_intro: Node3D
 var additional_visitors: Array[Node3D] = []
@@ -133,6 +135,7 @@ func _ready() -> void:
 	wildlife=preload("res://garden_wildlife.gd").new()
 	add_child(wildlife)
 	wildlife.setup(self)
+	wildlife.animal_event.connect(experience.wildlife)
 	animal_notices=preload("res://animal_notices.gd").new()
 	add_child(animal_notices)
 	animal_notices.setup(self)
@@ -239,6 +242,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 	if event is InputEventJoypadButton and event.pressed:
+		if event.button_index==JOY_BUTTON_A and not modal:
+			_set_wheel(true)
+			get_viewport().set_input_as_handled()
+			return
 		if event.button_index==JOY_BUTTON_B:
 			if modal:_set_guide(false)
 			else:_select_tool(Tool.NONE)
@@ -276,6 +283,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			_toggle_ambience()
 			return
 		if modal:return
+		if event.keycode==KEY_TAB:
+			_set_wheel(true)
+			get_viewport().set_input_as_handled()
+			return
 		if event.keycode>=KEY_1 and event.keycode<=KEY_4:
 			_select_tool(event.keycode-KEY_1)
 			get_viewport().set_input_as_handled()
@@ -300,10 +311,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		camera_yaw-=event.relative.x*0.004
 		camera_pitch=clampf(camera_pitch+event.relative.y*0.004,deg_to_rad(-80),deg_to_rad(80))
 
-func _set_wheel(_open: bool) -> void:
-	# Retained as a close hook for other modal interfaces; selection is direct now.
-	tool_wheel.hide()
+func _set_wheel(open: bool) -> void:
 	_clear_use()
+	if open:
+		tool_wheel.owner_device=ControllerInput.primary_device()
+		tool_wheel.open(tool)
+	else:tool_wheel.hide()
+	Input.mouse_mode=Input.MOUSE_MODE_VISIBLE if open or guide.visible else Input.MOUSE_MODE_CAPTURED
+	if is_instance_valid(player):player.velocity=Vector3.ZERO
+
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT and is_instance_valid(guide):
@@ -401,6 +417,7 @@ func _tool_result(cell: Vector2i, active_tool: int, mode: int=-1) -> String:
 				_clear_old_crop(cell)
 				set_terrain(cell,Terrain.DIRT)
 				result="Fresh earth, ready for a little green."
+				experience.gardening(cell,"hoe",wildlife.day(),2)
 			else: result="Use the hoe on grass or hard earth."
 		Tool.SEEDS:
 			if terrain==Terrain.DIRT:
@@ -408,13 +425,16 @@ func _tool_result(cell: Vector2i, active_tool: int, mode: int=-1) -> String:
 				heightfield.plant_seed(cell)
 				set_terrain(cell,Terrain.GRASS)
 				result="A fresh patch of grass."
+				experience.gardening(cell,"seeds",wildlife.day(),3)
 			else: result="Scatter grass seed onto bare earth."
 		Tool.SHOVEL:
 			var chosen: int=floating_tool.shovel_mode if mode<0 else mode
 			if heightfield.sculpt(cell,chosen):
+				if heightfield.last_sculpt_changed:experience.gardening(cell,"shovel%d"%chosen,wildlife.day(),3)
 				result=["A hollow fills with water.","A small hole, ready for grass seed.","The hollow is filled with dirt.","The ground settles level."][chosen]
 			else:result="Leave a little room around people, plants and buildings."
 		Tool.WATER:
+			if float(watered_cells.get(cell,0))<0.25:experience.gardening(cell,"water",wildlife.day(),1)
 			watered_cells[cell]=1.0
 			watered_image.set_pixel(cell.x,cell.y,Color(1,0,0))
 			watered_texture.update(watered_image)
@@ -582,10 +602,26 @@ func _create_garden_ui() -> void:
 		quit_button.text="Save & Quit"
 		quit_button.pressed.connect(get_tree().current_scene.save_and_quit)
 		pages.add_child(quit_button)
-	tool_wheel=Control.new()
-	root.add_child(tool_wheel)
-	tool_wheel.hide()
-	tool_wheel.mouse_filter=Control.MOUSE_FILTER_IGNORE
+	var wheel_layer:=CanvasLayer.new()
+	wheel_layer.layer=20
+	add_child(wheel_layer)
+	tool_wheel=preload("res://tool_wheel.gd").new()
+	wheel_layer.add_child(tool_wheel)
+	tool_wheel.size=get_viewport().get_visible_rect().size
+	tool_wheel.attach_clock(self,0)
+	tool_wheel.tool_selected.connect(func(index: int):
+		_select_tool(index)
+		if index==Tool.SHOVEL:tool_wheel.open_modes(floating_tool.shovel_mode)
+		else:_set_wheel(false))
+	tool_wheel.mode_selected.connect(func(index: int):
+		floating_tool.shovel_mode=index
+		_set_wheel(false)
+		_refresh_ui())
+	tool_wheel.cancelled.connect(func(): _set_wheel(false))
+	clock_ui=preload("res://petal_clock.gd").new()
+	root.add_child(clock_ui)
+	clock_ui.setup(self)
+	preload("res://cwtch_theme.gd").decorate_menu(guide)
 
 func _toggle_guide() -> void:
 	_set_guide(not guide.visible)
@@ -595,7 +631,9 @@ func _set_guide(open: bool) -> void:
 		hedgehog_intro.set_paused(open)
 		return
 	_clear_use()
-	if is_instance_valid(local_coop):local_coop.second.clear_use()
+	if is_instance_valid(local_coop):
+		local_coop.second.clear_use()
+		if is_instance_valid(local_coop.second.tool_wheel):local_coop.second.tool_wheel.hide()
 	if is_instance_valid(dev_console) and dev_console.opened: dev_console.toggle(false)
 	if is_instance_valid(field_book) and field_book.visible: field_book.close()
 	guide.visible=open

@@ -59,3 +59,27 @@ static func compact_card() -> StyleBoxFlat:
 	style.content_margin_top=12
 	style.content_margin_bottom=12
 	return style
+
+static func decorate_menu(node: PanelContainer) -> void:
+	var theme:=make()
+	theme.default_font=preload("res://petal_shapes.gd").serif()
+	theme.set_color("font_color","Label",INK)
+	var paper:=panel(Color("f3e6c9"))
+	paper.border_color=INK
+	paper.set_border_width_all(3)
+	theme.set_stylebox("panel","PanelContainer",paper)
+	for type in ["Button","OptionButton"]:
+		theme.set_stylebox("normal",type,button_style(Color("dfcca2")))
+		theme.set_stylebox("hover",type,button_style(Color("f4d03f")))
+		theme.set_stylebox("pressed",type,button_style(Color("d8ab37")))
+		var focus:=StyleBoxFlat.new()
+		focus.bg_color=Color(1,0.75,0.1,0.12)
+		focus.border_color=Color("c3912b")
+		focus.set_border_width_all(2)
+		focus.set_corner_radius_all(8)
+		theme.set_stylebox("focus",type,focus)
+		for state in ["font_color","font_hover_color","font_pressed_color","font_focus_color"]:theme.set_color(state,type,INK)
+	node.theme=theme
+	for label in node.find_children("*","Label",true,false):label.add_theme_color_override("font_color",INK)
+	var petals:=preload("res://petal_frame.gd").new()
+	node.add_child(petals)
