@@ -7,6 +7,9 @@ var entry_retry:=0.0
 var gait:=0.0
 var rest_time:=0.0
 var body: Node3D
+var flight_time:=0.0
+var flight_wait:=12.0
+const FLIGHT_SECONDS:=4.0
 
 func _create_visual() -> void:
  collision_radius=0.10
@@ -14,14 +17,15 @@ func _create_visual() -> void:
  move_speed=0.42
  visual=Node3D.new()
  add_child(visual)
- body=load("res://assets/animals/Robin/robin.glb").instantiate()
- var bounds: AABB=preload("res://floating_tool.gd").bounds(body)
- var factor:=0.22/maxf(bounds.size.y,0.001)
- body.scale*=factor
- body.position=-Vector3(bounds.get_center().x,bounds.position.y,bounds.get_center().z)*factor
+ body=load("res://assets/animals/Robin/robin_animated.glb").instantiate()
  visual.add_child(body)
- animation_player=AnimationPlayer.new()
- add_child(animation_player)
+ animation_player=body.find_child("AnimationPlayer",true,false) as AnimationPlayer
+ assert(animation_player!=null,"The Blender robin export must contain its animation player")
+ for clip in ["Idle","Hopping","Flying"]:
+  assert(animation_player.has_animation(clip),"Missing robin animation: "+clip)
+  animation_player.get_animation(clip).loop_mode=Animation.LOOP_LINEAR
+ animation_player.play("Idle")
+ flight_wait=rng.randf_range(9.0,17.0)
  set_meta("animal_id","robin")
  set_meta("inspection_text","A robin is exploring the water's edge.")
 
@@ -69,7 +73,9 @@ func _choose_destination() -> void:
  destination=garden.cell_center(next_cell)
 
 func advance(delta: float) -> void:
- if garden.guide.visible or garden.tool_wheel.visible:return
+ if garden.guide.visible or garden.tool_wheel.visible:
+  animation_player.speed_scale=0.0
+  return
  gait+=delta
  if rest_time>0.0:
   rest_time=maxf(0.0,rest_time-delta)
@@ -78,10 +84,24 @@ func advance(delta: float) -> void:
   super.advance(delta)
  else:
   _advance_outside(delta)
- # The source is unrigged: move its parent pivot, retaining the textured mesh.
- var pivot: Node3D=body.get_parent()
- pivot.position.y=absf(sin(gait*9.0))*0.045*motion_ratio
- pivot.rotation.x=sin(gait*5.0)*0.035 if rest_time<=0.0 else maxf(0.0,sin(gait*7.0))*0.20
+ _animate_robin(delta)
+
+func _animate_robin(delta: float) -> void:
+ flight_wait=maxf(0.0,flight_wait-delta)
+ if flight_time<=0.0 and flight_wait<=0.0 and motion_ratio>0.3 and rest_time<=0.0:
+  flight_time=FLIGHT_SECONDS
+  flight_wait=rng.randf_range(12.0,24.0)
+ if flight_time>0.0:
+  flight_time=maxf(0.0,flight_time-delta)
+  # Short low flights follow the existing safe patrol route. No visit is awarded
+  # until the same 1% water requirement and garden entry checks have passed.
+  var up:=smoothstep(0.0,0.7,FLIGHT_SECONDS-flight_time)
+  var down:=smoothstep(0.0,0.7,flight_time)
+  body.get_parent().position.y=0.55*up*down
+ else:body.get_parent().position.y=0.0
+ var clip: String="Flying" if flight_time>0.0 else ("Hopping" if motion_ratio>0.05 and rest_time<=0.0 else "Idle")
+ if animation_player.current_animation!=clip:animation_player.play(clip,0.18)
+ animation_player.speed_scale=1.0 if clip!="Hopping" else clampf(motion_ratio,0.65,1.0)
 
 func _advance_outside(delta: float) -> void:
  entry_retry=maxf(0.0,entry_retry-delta)
