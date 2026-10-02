@@ -86,6 +86,11 @@ func _choose_destination() -> void:
 		_play("Start_Walk")
 
 func advance(delta: float) -> void:
+	if has_meta("arrival_waiting"):
+		_play("Happy_Idle")
+		animation_player.speed_scale=1.0
+		animation_player.advance(delta)
+		return
 	if garden.guide.visible: return
 	animation_player.speed_scale = 1.0
 	if idle_remaining > 0.0:

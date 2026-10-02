@@ -133,9 +133,32 @@ The permanent path runs from the northern mountain scenery to the garden boundar
 Its height samples the actual meadow and ridge triangles. The walk uses the lower
 34 metres; the upper stretch remains background scenery. Garden movement still
 stays within the playable plot. Clock, weather and ambience continue during the
-arrival. The simple animal and bird meshes are placeholders, not visitor/resident
-animals, and do not change wildlife records or XP. The bird and crossing creature
+arrival. The arrival uses the supplied rabbit and bull models and the animated robin.
+These are scenery, not visitor/resident animals, and do not change wildlife records or XP. The bird and crossing creature
 animate during the arrival; this is not a new background wildlife AI system.
 
-Tune timing, positions and placeholder shapes in Game/northern_arrival.gd. No
+Tune timing, positions and scenery models in Game/northern_arrival.gd. No
 save migration is needed. Player positions are saved at the northern garden entry.
+
+
+### Arrival cast and corner rocks
+
+The rabbit crosses with a simple whole-body hop; the robin uses its Blender Flying
+clip; the two distant bulls breathe subtly. Rabbit and bull source rigs contain no
+animation clips. Four textured rocks sit outside the plot corners with seeded yaw
+and small tilt variations, stable across reloads. Arthur waits by the north entry
+for the new-garden walk and welcome, then resumes normal wandering. Skipping the
+walk still preserves his greeting. Source FBX and texture files remain untouched;
+DevTools/import_arrival_models.py regenerates the game GLBs through Blender.
+
+### Authored robin animation
+
+Art/Robin/Robin_Animated.blend contains the editable 11-bone rig with a packed
+texture. DevTools/animate_robin.py rebuilds Idle, Hopping and Flying from the
+original FBX. Both REF_MOTION videos informed the poses; these are hand-authored
+reference-inspired loops, not motion capture. The game switches clips with movement
+and short low flights, preserving the 1% water entry rule and save data.
+
+The high-density rock is reduced to approximately 12,000 faces for the game copy;
+its full-detail FBX remains in Decor/Rock. The latest blog post was explicitly
+revised on 2 October 2026, with unreleased changes labelled as a development follow-up.

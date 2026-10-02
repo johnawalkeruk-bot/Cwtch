@@ -8,6 +8,60 @@
       "sections": []
     },
     {
+      "id": "0.1.20",
+      "label": "v0.1.20",
+      "date": "2026-10-02",
+      "title": "Familiar faces at the garden gate",
+      "sections": [
+        {
+          "heading": "Arrival scenery",
+          "items": [
+            "Replaced the crossing placeholder with the supplied rabbit, the flying placeholder with the animated robin, and the distant animals with the supplied bull model.",
+            "Added a textured rock outside each garden corner, with varied rotations that stay consistent when reloading.",
+            "Arthur now waits beside the northern entrance for your first arrival and returns to wandering after his welcome.",
+            "Reduced the rock’s game mesh detail while preserving its original source model and texture."
+          ]
+        },
+        {
+          "heading": "Studio notes",
+          "items": [
+            "Updated the latest blog post with the previous Blender robin animation work and a dated development follow-up covering these arrival improvements."
+          ]
+        }
+      ],
+      "blog": {
+        "intro": "The temporary rabbit has handed in its notice. A proper rabbit has taken the role, the robin has brought its newly animated wings, and the bulls have agreed to stand in the distance looking as though they own the place. Arthur, meanwhile, has finally checked the arrival time.",
+        "why": [
+          "The first arrival established the route and camera timing. Replacing its stand-ins with the supplied models makes those little look-around moments belong to the valley. The flying robin reuses the Blender animation made from the two motion references.",
+          "Four rocks give the garden corners a little visual definition without bringing back the perimeter wall. Their varied angles are repeatable, so loading a saved garden does not cause a geological reshuffle.",
+          "Arthur now waits beside the northern entrance until his welcome finishes. Being greeted is rather more welcoming when the greeter has not wandered off halfway through your approach."
+        ],
+        "issues": [
+          "The rabbit and bull sources contain rigs but no animation clips. The rabbit currently uses a simple whole-body hop; the bulls have subtle breathing movement. Their full skeletal gait animations are still future work.",
+          "These arrival animals are scenery, not purchased livestock or new visitor discoveries. The robin’s separate wildlife visit still needs 1% water.",
+          "A missing texture connection on the rock was corrected during import. The original source models and textures remain intact."
+        ],
+        "screenshots": [
+          {
+            "path": "assets/blog/arrival-cast-rabbit.png",
+            "caption": "Development build: the supplied rabbit crosses the northern gravel path."
+          },
+          {
+            "path": "assets/blog/arrival-cast-bulls.png",
+            "caption": "Development build: the supplied bulls replace the distant stand-in animals."
+          },
+          {
+            "path": "assets/blog/arrival-cast-rock.png",
+            "caption": "Development build: a textured rock marks an outside corner of the garden."
+          },
+          {
+            "path": "assets/blog/arrival-cast-arthur.png",
+            "caption": "Development build: Arthur welcomes you from the northern entrance."
+          }
+        ]
+      }
+    },
+    {
       "id": "0.1.19",
       "label": "v0.1.19",
       "date": "2026-09-29",

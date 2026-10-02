@@ -1295,6 +1295,11 @@ func _choose_destination() -> void:
 		_play("Start_Walk")
 
 func advance(delta: float) -> void:
+	if has_meta("arrival_waiting"):
+		_play("Happy_Idle")
+		animation_player.speed_scale=1.0
+		animation_player.advance(delta)
+		return
 	if garden.guide.visible: return
 	animation_player.speed_scale = 1.0
 	if idle_remaining > 0.0:
@@ -3772,6 +3777,8 @@ func _input(event: InputEvent) -> void:
  get_viewport().set_input_as_handled()
 
 func _finish() -> void:
+ if dialogue_kind=="welcome" and arthur.has_meta("arrival_waiting"):
+  arthur.remove_meta("arrival_waiting")
  voice.stop()
  voice.stream_paused=false
  bubble.hide()
@@ -6054,7 +6061,8 @@ var hidden: Array = []
 var return_transform := Transform3D.IDENTITY
 var crossing: Node3D
 var bird: Node3D
-var wings: Array[Node3D] = []
+var bird_animation: AnimationPlayer
+var corner_rocks: Array[Node3D] = []
 var animals: Array[Node3D] = []
 var tree_focus := Vector3.ZERO
 var finish_from := Transform3D.IDENTITY
@@ -6142,48 +6150,33 @@ func _build_road() -> void:
  mesh.material_override=mat
  add_child(mesh)
 
-func _ball(parent: Node3D,at: Vector3,scale: Vector3,color: Color) -> MeshInstance3D:
- var part:=MeshInstance3D.new()
- var shape:=SphereMesh.new()
- shape.radius=0.5
- shape.height=1.0
- shape.radial_segments=10
- shape.rings=5
- part.mesh=shape
- var mat:=StandardMaterial3D.new()
- mat.albedo_color=color
- mat.roughness=0.95
- part.material_override=mat
- part.position=at
- part.scale=scale
- parent.add_child(part)
- return part
-
-func _animal(label: String,at: Vector3,color: Color) -> Node3D:
- var animal:=Node3D.new()
- animal.name=label
- add_child(animal)
- animal.position=at
- _ball(animal,Vector3(0,0.45,0),Vector3(1.0,0.65,0.5),color)
- _ball(animal,Vector3(0.5,0.65,0),Vector3(0.4,0.42,0.35),color)
- for x in [-0.3,0.3]:
-  for z in [-0.17,0.17]:_ball(animal,Vector3(x,0.18,z),Vector3(0.13,0.42,0.13),Color("574b3c"))
- for z in [-0.12,0.12]:_ball(animal,Vector3(0.49,0.91,z),Vector3(0.12,0.28,0.10),color)
- return animal
+func _model(path: String,label: String,at: Vector3,height: float) -> Node3D:
+ var pivot:=Node3D.new()
+ pivot.name=label
+ add_child(pivot)
+ pivot.position=at
+ var model: Node3D=load(path).instantiate()
+ var bounds: AABB=preload("res://floating_tool.gd").bounds(model)
+ var factor:=height/maxf(bounds.size.y,0.001)
+ model.scale*=factor
+ model.position=-Vector3(bounds.get_center().x,bounds.position.y,bounds.get_center().z)*factor
+ pivot.add_child(model)
+ return pivot
 
 func _build_vignettes() -> void:
- crossing=_animal("CrossingCreaturePlaceholder",point(-40,-4),Color("9a7953"))
+ crossing=_model("res://assets/arrival/rabbit.glb","ArrivalRabbit",point(-40,-4),0.48)
+ crossing.rotation.y=PI/2
  bird=Node3D.new()
- bird.name="FlyingBirdPlaceholder"
+ bird.name="ArrivalRobin"
  add_child(bird)
- _ball(bird,Vector3.ZERO,Vector3(0.35,0.22,0.65),Color("594f42"))
- for side in [-1,1]:
-  var wing:=Node3D.new()
-  bird.add_child(wing)
-  wing.position.x=side*0.1
-  _ball(wing,Vector3(side*0.36,0,0),Vector3(0.85,0.045,0.28),Color("786958"))
-  wings.append(wing)
- bird.position=point(-28,-8)+Vector3.UP*5
+ var robin: Node3D=load("res://assets/animals/Robin/robin_animated.glb").instantiate()
+ bird.add_child(robin)
+ bird.rotation.y=PI/2
+ bird_animation=robin.find_child("AnimationPlayer",true,false) as AnimationPlayer
+ bird_animation.get_animation("Flying").loop_mode=Animation.LOOP_LINEAR
+ bird_animation.play("Flying")
+ bird.hide()
+ bird.position=point(-28,-8)+Vector3.UP*4.5
  var tree:=Node3D.new()
  tree.name="ArrivalLookTree"
  add_child(tree)
@@ -6192,12 +6185,38 @@ func _build_vignettes() -> void:
  preload("res://imported_trees.gd").plant(tree,placements,"birch")
  tree_focus=tree.position+Vector3.UP*2.4
  for i in 2:
-  var animal:=_animal("DistantAnimalPlaceholder%d"%i,point(-15,-9-i*2),Color("c3b69a"))
-  animal.scale=Vector3.ONE*1.3
+  var animal:=_model("res://assets/arrival/bull.glb","ArrivalBull%d"%i,point(-15,-9-i*3),1.4-i*0.12)
+  animal.rotation.y=0.7+i*0.8
   animals.append(animal)
+ var random:=RandomNumberGenerator.new()
+ random.seed=71891 # Stable placements when the garden is loaded again.
+ var half: Vector2=-garden.grid_min
+ for x in [-1.0,1.0]:
+  for z in [-1.0,1.0]:
+   var at:=Vector3(x*(half.x+1.65),0,z*(half.y+1.65))
+   at.y=garden.background_meadow.height_at(Vector2(at.x,at.z))-0.06
+   var rock:=_model("res://assets/arrival/rock.glb","CornerRock%d"%corner_rocks.size(),at,random.randf_range(0.7,1.0))
+   rock.rotation=Vector3(random.randf_range(-0.07,0.07),random.randf_range(-PI,PI),random.randf_range(-0.07,0.07))
+   corner_rocks.append(rock)
+
+func _wait_for_arrival() -> void:
+ var arthur: Node3D=garden.get_node("Arthur")
+ arthur.cell=garden.local_to_cell(Vector3(2.0,0,-9.6))
+ arthur.next_cell=arthur.cell
+ arthur.position=garden.cell_center(arthur.cell)
+ arthur.destination=arthur.position
+ arthur.velocity=Vector3.ZERO
+ arthur.travel_speed=0.0
+ arthur.walking=false
+ arthur.visual.rotation.y=PI
+ arthur.set_meta("arrival_waiting",true)
+ arthur._play("Happy_Idle")
+ arthur.animation_player.advance(0.0)
 
 func start() -> void:
  if active:return
+ _wait_for_arrival()
+ bird.show()
  garden._set_guide(false)
  garden._clear_use()
  garden.local_coop.second.clear_use()
@@ -6242,12 +6261,11 @@ func _process(delta: float) -> void:
  var z:=lerpf(-46.0,-12.0,t)
  var crossing_x:=lerpf(-4.0,4.0,smoothstep(3.0,11.0,elapsed))
  crossing.position=point(-40,crossing_x)
- crossing.position.y+=absf(sin(elapsed*6))*0.025
- for i in range(2,6):
-  crossing.get_child(i).rotation.z=sin(elapsed*6+float(i%2)*PI)*0.3 if elapsed>3 and elapsed<11 else 0.0
- bird.position=point(-28,lerpf(-9.0,10.0,smoothstep(10,18,elapsed)))+Vector3.UP*4.5
- for i in 2:wings[i].rotation.z=sin(elapsed*9)*(0.55 if i==0 else -0.55)
- for i in animals.size():animals[i].rotation.z=sin(elapsed*1.3+i)*0.035
+ var hopping: bool=elapsed>3.0 and elapsed<11.0
+ crossing.position.y+=absf(sin(elapsed*8.0))*0.10 if hopping else 0.0
+ crossing.rotation.z=sin(elapsed*8.0)*0.055 if hopping else 0.0
+ bird.position=point(-28,lerpf(-9.0,10.0,smoothstep(10,18,elapsed)))+Vector3.UP*3.1
+ for i in animals.size():animals[i].scale=Vector3(1.0,1.0+sin(elapsed*1.3+i)*0.003,1.0)
  if elapsed<=WALK_SECONDS:
   var at:=point(z)+Vector3.UP*1.55
   var bounce:=sin(elapsed*TAU*1.65)*0.027
@@ -6274,6 +6292,7 @@ func _input(event: InputEvent) -> void:
 func finish() -> void:
  if not active:return
  active=false
+ bird.hide()
  set_process(false)
  set_process_input(false)
  for entry in suspended:
@@ -8722,6 +8741,9 @@ var entry_retry:=0.0
 var gait:=0.0
 var rest_time:=0.0
 var body: Node3D
+var flight_time:=0.0
+var flight_wait:=12.0
+const FLIGHT_SECONDS:=4.0
 
 func _create_visual() -> void:
  collision_radius=0.10
@@ -8729,14 +8751,15 @@ func _create_visual() -> void:
  move_speed=0.42
  visual=Node3D.new()
  add_child(visual)
- body=load("res://assets/animals/Robin/robin.glb").instantiate()
- var bounds: AABB=preload("res://floating_tool.gd").bounds(body)
- var factor:=0.22/maxf(bounds.size.y,0.001)
- body.scale*=factor
- body.position=-Vector3(bounds.get_center().x,bounds.position.y,bounds.get_center().z)*factor
+ body=load("res://assets/animals/Robin/robin_animated.glb").instantiate()
  visual.add_child(body)
- animation_player=AnimationPlayer.new()
- add_child(animation_player)
+ animation_player=body.find_child("AnimationPlayer",true,false) as AnimationPlayer
+ assert(animation_player!=null,"The Blender robin export must contain its animation player")
+ for clip in ["Idle","Hopping","Flying"]:
+  assert(animation_player.has_animation(clip),"Missing robin animation: "+clip)
+  animation_player.get_animation(clip).loop_mode=Animation.LOOP_LINEAR
+ animation_player.play("Idle")
+ flight_wait=rng.randf_range(9.0,17.0)
  set_meta("animal_id","robin")
  set_meta("inspection_text","A robin is exploring the water's edge.")
 
@@ -8784,7 +8807,9 @@ func _choose_destination() -> void:
  destination=garden.cell_center(next_cell)
 
 func advance(delta: float) -> void:
- if garden.guide.visible or garden.tool_wheel.visible:return
+ if garden.guide.visible or garden.tool_wheel.visible:
+  animation_player.speed_scale=0.0
+  return
  gait+=delta
  if rest_time>0.0:
   rest_time=maxf(0.0,rest_time-delta)
@@ -8793,10 +8818,24 @@ func advance(delta: float) -> void:
   super.advance(delta)
  else:
   _advance_outside(delta)
- # The source is unrigged: move its parent pivot, retaining the textured mesh.
- var pivot: Node3D=body.get_parent()
- pivot.position.y=absf(sin(gait*9.0))*0.045*motion_ratio
- pivot.rotation.x=sin(gait*5.0)*0.035 if rest_time<=0.0 else maxf(0.0,sin(gait*7.0))*0.20
+ _animate_robin(delta)
+
+func _animate_robin(delta: float) -> void:
+ flight_wait=maxf(0.0,flight_wait-delta)
+ if flight_time<=0.0 and flight_wait<=0.0 and motion_ratio>0.3 and rest_time<=0.0:
+  flight_time=FLIGHT_SECONDS
+  flight_wait=rng.randf_range(12.0,24.0)
+ if flight_time>0.0:
+  flight_time=maxf(0.0,flight_time-delta)
+  # Short low flights follow the existing safe patrol route. No visit is awarded
+  # until the same 1% water requirement and garden entry checks have passed.
+  var up:=smoothstep(0.0,0.7,FLIGHT_SECONDS-flight_time)
+  var down:=smoothstep(0.0,0.7,flight_time)
+  body.get_parent().position.y=0.55*up*down
+ else:body.get_parent().position.y=0.0
+ var clip: String="Flying" if flight_time>0.0 else ("Hopping" if motion_ratio>0.05 and rest_time<=0.0 else "Idle")
+ if animation_player.current_animation!=clip:animation_player.play(clip,0.18)
+ animation_player.speed_scale=1.0 if clip!="Hopping" else clampf(motion_ratio,0.65,1.0)
 
 func _advance_outside(delta: float) -> void:
  entry_retry=maxf(0.0,entry_retry-delta)

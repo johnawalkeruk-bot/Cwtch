@@ -254,6 +254,8 @@ func _input(event: InputEvent) -> void:
  get_viewport().set_input_as_handled()
 
 func _finish() -> void:
+ if dialogue_kind=="welcome" and arthur.has_meta("arrival_waiting"):
+  arthur.remove_meta("arrival_waiting")
  voice.stop()
  voice.stream_paused=false
  bubble.hide()

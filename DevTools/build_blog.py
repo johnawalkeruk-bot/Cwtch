@@ -25,6 +25,8 @@ def page(title, body, prefix=''):
 def article(post, website, preview=False):
     stamp = 'Development preview · not released' if preview else 'v' + post['version'] + ' · ' + post['date']
     body = '<a href="../blog.html">← All studio notes</a><article><header class="blog-heading"><p class="eyebrow">NOTES FROM THE STUDIO</p><h1>'+escape(post['title'])+'</h1><p class="blog-byline">By '+AUTHOR+' · '+escape(stamp)+'</p></header>'
+    if post.get('updated'):
+        body += '<p class="change-note">Updated '+escape(post['updated'])+' · See the dated development follow-up below.</p>'
     body += '<p class="blog-lede">'+escape(post['intro'])+'</p><h2>Why we changed it</h2>'
     body += ''.join('<p>'+escape(p)+'</p>' for p in post['why'])
     body += '<h2>What changed</h2>'
