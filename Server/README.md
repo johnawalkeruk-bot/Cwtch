@@ -53,3 +53,8 @@ Comparisons include coins, XP/level, population, discovered/resident species and
 Local regression checks: `DevTools/tests/check_social.mjs` runs both migrations in isolated PGlite PostgreSQL and verifies registration, uniqueness, existing accounts, privacy and request/accept/remove. Its optional test runtime is `.local/pglite/package` (npm `@electric-sql/pglite`, tested at 0.5.8); never ship it. `DevTools/tests/check_club_social.cjs` tests mocked accounts in isolated Edge and takes screenshots. No live user is created.
 
 References: https://supabase.com/docs/guides/auth/managing-user-data and https://supabase.com/docs/guides/database/functions . Helpers have empty search paths and qualified table names.
+
+
+### Website account loading fix
+
+The sign-in form is separate from registration. Existing players use their email and password; new accounts additionally choose a username. `club-start.js` reports module-loading failures and keeps submit buttons disabled until initialization succeeds. Authentication and dashboard errors are handled separately. The publisher includes local ES-module dependencies through `site_dependencies.py`, preventing the missing `garden-metrics.js` deployment that disabled login in v0.1.25. Run `DevTools/test_site_dependencies.py` alongside the browser account tests when editing the publication process. No Supabase migration is required for this fix.

@@ -1,6 +1,8 @@
 """Publish only Website/ to CWTCH's GitHub Pages branch using GitHub CLI."""
 import base64,json,os,subprocess,sys
 from pathlib import Path
+sys.path.insert(0,str(Path(__file__).resolve().parent))
+from site_dependencies import include_modules
 ROOT=Path(__file__).resolve().parents[1]
 GH=ROOT/'DevTools/gh/bin/gh.exe'
 settings=ROOT/'.local/devsettings.json'
@@ -18,13 +20,14 @@ def api(endpoint,method='GET',body=None,allow_missing=False):
  return json.loads(result.stdout) if result.stdout.strip() else None
 subprocess.run([sys.executable,str(ROOT/'DevTools/build_changelog.py')],check=True)
 subprocess.run([sys.executable,str(ROOT/'DevTools/build_blog.py')],check=True)
-reference=api(REPO+'/git/ref/heads/gh-pages',allow_missing=True)
 entries=[]
-names=['club.html','club.css','club.js','cloud-config.js','index.html','changelog.html','blog.html','style.css','release.js','.nojekyll','favicon.ico','assets/wgs.png','assets/logo.png','assets/garden.png']
+names=['club.html','club.css','club-start.js','club.js','cloud-config.js','index.html','changelog.html','blog.html','style.css','release.js','.nojekyll','favicon.ico','assets/wgs.png','assets/logo.png','assets/garden.png']
 names += [p.relative_to(ROOT/'Website').as_posix() for p in sorted((ROOT/'Website/blog').glob('*.html')) if p.name != 'preview.html']
 # Include the current preview only while it is linked from the blog index.
 if 'blog/preview.html' in (ROOT/'Website/blog.html').read_text(encoding='utf-8'):names.append('blog/preview.html')
 names += [p.relative_to(ROOT/'Website').as_posix() for p in sorted((ROOT/'Website/assets/blog').glob('*')) if p.suffix.lower() in {'.png','.jpg','.webp'}]
+names=include_modules(ROOT/'Website',names)
+reference=api(REPO+'/git/ref/heads/gh-pages',allow_missing=True)
 for name in names:
  file=ROOT/'Website'/name
  blob=api(REPO+'/git/blobs','POST',{'content':base64.b64encode(file.read_bytes()).decode(),'encoding':'base64'})
