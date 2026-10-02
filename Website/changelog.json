@@ -8,6 +8,32 @@
       "sections": []
     },
     {
+      "id": "0.1.27",
+      "label": "v0.1.27",
+      "date": "2026-10-02",
+      "title": "A louder pause and a left-turning rabbit",
+      "sections": [
+        {
+          "heading": "Small valley adjustments",
+          "items": [
+            "Raised Pause and Look by 6 dB so the pause-menu music is easier to hear.",
+            "Rotated the arrival rabbit 90 degrees to the left."
+          ]
+        }
+      ],
+      "blog": {
+        "intro": "The pause music has found its voice, and the rabbit has received a very specific direction: left. Not a grand expedition, just ninety degrees.",
+        "why": [
+          "Pause and Look was too quiet, so its level is now 6 dB higher in both garden and village pauses.",
+          "The arrival rabbit needed its model facing turned another quarter-turn to the left."
+        ],
+        "issues": [
+          "These are volume and model-orientation adjustments; existing saves remain compatible."
+        ],
+        "screenshots": []
+      }
+    },
+    {
       "id": "0.1.26",
       "label": "v0.1.26",
       "date": "2026-10-02",

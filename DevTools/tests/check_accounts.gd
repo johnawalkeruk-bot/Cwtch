@@ -11,7 +11,7 @@ func run():
  var g=menu.garden
  assert(g.tool==4 and g.floating_tool.selected==4)
  assert(g.local_coop.second.floating_tool.selected==4)
- assert(is_equal_approx(g.northern_arrival.crossing.rotation.y,-PI/2))
+ assert(is_equal_approx(g.northern_arrival.crossing.rotation.y,0.0))
  assert(menu._save_garden())
  var snapshot=JSON.parse_string(FileAccess.get_file_as_string(menu.SAVE_PATH))
  assert(preload('res://cloud_save_validator.gd').valid(snapshot))

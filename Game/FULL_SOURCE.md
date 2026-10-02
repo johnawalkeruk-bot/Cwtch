@@ -6968,7 +6968,7 @@ func _model(path: String,label: String,at: Vector3,height: float) -> Node3D:
 
 func _build_vignettes() -> void:
  crossing=_model("res://assets/arrival/rabbit.glb","ArrivalRabbit",point(-40,-4),0.48)
- crossing.rotation.y=-PI/2
+ crossing.rotation.y=0.0 # Turned 90 degrees left from the previous facing.
  bird=Node3D.new()
  bird.name="ArrivalRobin"
  add_child(bird)
@@ -8753,7 +8753,7 @@ func setup(menu: Node) -> void:
  rng.randomize()
  pause_player=AudioStreamPlayer.new()
  pause_player.stream=load(PATH+"pause_and_look.mp3")
- pause_player.volume_db=-23
+ pause_player.volume_db=-17
  add_child(pause_player)
  pause_player.finished.connect(func():
   if is_paused():pause_player.play())
@@ -8789,7 +8789,7 @@ func _process(delta: float) -> void:
  var pause_now:=is_paused()
  if pause_now and not pause_player.playing:pause_player.play()
  elif not pause_now and pause_player.playing:pause_player.stop()
- if is_instance_valid(host.garden):pause_player.volume_db=-80 if host.garden.ambience_muted else -23
+ if is_instance_valid(host.garden):pause_player.volume_db=-80 if host.garden.ambience_muted else -17
  var enabled: bool=not pause_now and is_instance_valid(host.garden) and not host.menu_active and not host.loading
  if not enabled:
   if not suspended:
