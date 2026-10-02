@@ -934,7 +934,11 @@ func sync(data: Dictionary, explicit: bool=false) -> void:
   busy=false
   changed.emit()
   return
- var result := await _request("/rest/v1/rpc/cwtch_put_save",HTTPClient.METHOD_POST,{"expected_revision":revision,"garden":data},true)
+ # JSON.parse_string represents numbers as floats. Keep the wire version an
+ # integer: the deployed RPC compares the extracted version text with '1'.
+ var upload := data.duplicate(true)
+ upload["version"]=int(upload.get("version",0))
+ var result := await _request("/rest/v1/rpc/cwtch_put_save",HTTPClient.METHOD_POST,{"expected_revision":revision,"garden":upload},true)
  if result.ok:
   revision=int(result.data.revision)
   connected=true
@@ -2617,6 +2621,7 @@ const ValleyAmbience = preload("res://valley_ambience.gd")
 const ValleyCycle = preload("res://valley_cycle.gd")
 const BackgroundMeadow = preload("res://background_meadow.gd")
 const ValleyLandscape = preload("res://valley_landscape.gd")
+var loading_complete := false
 var northern_arrival: Node3D
 var valley_landscape: Node3D
 const CyclingNPC = preload("res://cycling_npc.gd")
@@ -2682,6 +2687,7 @@ var tool_buttons: Array[Button] = []
 
 func _ready() -> void:
 	super._ready()
+	await _loading_step("PREPARING THE SOIL")
 	status.hide()
 	_create_garden_ui()
 	ControllerInput.mode_changed.connect(_controller_prompts)
@@ -2697,6 +2703,7 @@ func _ready() -> void:
 	add_child(floating_tool)
 	floating_tool.setup(self)
 	floating_tool.effect_applied.connect(_apply_tool)
+	await _loading_step("UNPACKING THE TOOLS")
 	ambience = ValleyAmbience.new()
 	add_child(ambience)
 	visitor = WanderingNPC.new()
@@ -2711,9 +2718,11 @@ func _ready() -> void:
 	background_meadow = BackgroundMeadow.new()
 	add_child(background_meadow)
 	background_meadow.build(self)
+	await _loading_step("GROWING THE MEADOW")
 	valley_landscape = ValleyLandscape.new()
 	add_child(valley_landscape)
 	valley_landscape.build(self)
+	await _loading_step("RAISING THE MOUNTAINS")
 	for entry in [["Arthur", "npcs/arthur", 0.999512, Vector2i(2, 3)], ["Meera", "npcs/meera", 0.999512, Vector2i(5, 5)]]:
 		var npc := CyclingNPC.new()
 		npc.name = entry[0]
@@ -2725,6 +2734,7 @@ func _ready() -> void:
 		npc.setup(self)
 		SelectionTarget.attach(npc, entry[0], Vector3(0.65, 1.5, 0.65))
 		additional_visitors.append(npc)
+		await _loading_step("WELCOMING THE NEIGHBOURS")
 	var angus := preload("res://angus_npc.gd").new()
 	angus.name="Angus"
 	angus.cell=Vector2i(7,2)
@@ -2732,16 +2742,19 @@ func _ready() -> void:
 	angus.setup(self)
 	SelectionTarget.attach(angus,"Angus McDoogal",Vector3(0.8,1.5,0.8))
 	additional_visitors.append(angus)
+	await _loading_step("CALLING THE WILDLIFE")
 	wildlife=preload("res://garden_wildlife.gd").new()
 	add_child(wildlife)
 	wildlife.setup(self)
 	wildlife.animal_event.connect(experience.wildlife)
+	await _loading_step("SETTLING THE GARDEN")
 	animal_notices=preload("res://animal_notices.gd").new()
 	add_child(animal_notices)
 	animal_notices.setup(self)
 	var meadow_grass := preload("res://meadow_grass.gd").new()
 	add_child(meadow_grass)
 	meadow_grass.build(self)
+	await _loading_step("ADDING THE LITTLE DETAILS")
 	var model_weather := preload("res://model_weather.gd").new()
 	add_child(model_weather)
 	model_weather.setup(self)
@@ -2768,6 +2781,7 @@ func _ready() -> void:
 	add_child(northern_arrival)
 	northern_arrival.setup(self)
 	_refresh_ui()
+	loading_complete=true
 
 func _create_chunks() -> void:
 	heightfield = HeightTerrain.new()
@@ -3282,6 +3296,12 @@ func _controller_prompts() -> void:
 func _tool_controls() -> String:
 	return ""
 
+func _loading_step(caption: String) -> void:
+	if not has_meta("loading_screen"):return
+	var screen: Node=get_meta("loading_screen")
+	screen.report(caption)
+	await get_tree().process_frame
+
 ```
 
 ## garden_compass.gd
@@ -3401,6 +3421,125 @@ func restore(data: Dictionary) -> void:
 	total=maxi(0,int(data.get("total",0)))
 	award_day=maxi(1,int(data.get("day",1)))
 	worked=data.get("worked",{}).duplicate() if data.get("worked",{}) is Dictionary else {}
+
+```
+
+## garden_loading.gd
+
+```gd
+extends CanvasLayer
+## A procedural six-petal animation inspired by Art/Loading/petal_reference.mp4.
+## Completion is driven by garden readiness, never by an audio/video duration.
+class Petals extends Control:
+ var elapsed := 0.0
+ var reveal := -1.0
+ var caption := "OPENING YOUR GARDEN"
+ var fragments: Array[Dictionary]=[]
+ var border: Texture2D=preload("res://assets/ui/Border-1.png")
+ func _process(delta: float) -> void:
+  elapsed+=delta
+  if reveal>=0:reveal+=delta
+  queue_redraw()
+ func scatter() -> void:
+  reveal=0
+  fragments.clear()
+  var rng:=RandomNumberGenerator.new();rng.seed=91831
+  for y in 6:
+   for x in 10:
+    var start:=Vector2((x+0.5)*size.x/10,(y+0.5)*size.y/6)
+    var direction: Vector2=(start-size*0.5).normalized().rotated(rng.randf_range(-0.8,0.8))
+    fragments.append({"start":start,"velocity":direction*rng.randf_range(420,850),"angle":rng.randf_range(-PI,PI),"spin":rng.randf_range(-3,3),"size":rng.randf_range(110,230)})
+ func petal_points() -> PackedVector2Array:
+  var points:=PackedVector2Array()
+  var root:=Vector2(0,-20);var tip:=Vector2(0,-207)
+  for side in [1,-1]:
+   var a: Vector2=root if side==1 else tip
+   var b: Vector2=tip if side==1 else root
+   var control:=Vector2(86*side,-126)
+   for i in 25:
+    var t:=float(i)/24
+    points.append((1-t)*(1-t)*a+2*(1-t)*t*control+t*t*b)
+  return points
+ func _draw() -> void:
+  var fade:=1.0 if reveal<0 else 1.0-smoothstep(0,0.45,reveal)
+  draw_rect(Rect2(Vector2.ZERO,size),Color(0.022,0.042,0.047,fade))
+  var center:=size*0.5-Vector2(0,25)
+  var scale_factor:=minf(size.x/1280,size.y/720)
+  if fade>0:
+   for i in 34:
+    var point:=Vector2(fposmod(i*173.7,size.x),fposmod(i*97.1-elapsed*3,size.y))
+    draw_circle(point,1.2,Color(0.3,0.6,0.66,fade*(0.045+0.025*sin(elapsed+i))))
+   var points:=petal_points()
+   for i in 6:
+    var cycle:=fposmod(elapsed*1.5-i,6.0)
+    var light:=exp(-cycle*0.85)*(0.85+0.15*sin(elapsed*2.5))
+    var angle:=i*TAU/6
+    for halo in range(7,0,-1):
+     draw_set_transform(center,angle,Vector2.ONE*scale_factor*(1+halo*0.018))
+     draw_colored_polygon(points,Color(0.1,0.65,1,light*0.025*fade))
+    draw_set_transform(center,angle,Vector2.ONE*scale_factor)
+    var color:=Color("202e33").lerp(Color("32d4f5"),light)
+    color.a=fade
+    draw_colored_polygon(points,color)
+    var outline:=points.duplicate();outline.append(points[0])
+    draw_polyline(outline,Color(0.40,0.65,0.73,(0.24+light*0.6)*fade),2,true)
+   draw_set_transform(Vector2.ZERO)
+   var font:=ThemeDB.fallback_font
+   var text_size:=font.get_string_size(caption,HORIZONTAL_ALIGNMENT_LEFT,-1,18)
+   draw_string(font,Vector2((size.x-text_size.x)/2,center.y+270*scale_factor),caption,HORIZONTAL_ALIGNMENT_LEFT,-1,18,Color(0.77,0.86,0.85,fade))
+  if reveal>=0:
+   var t:=reveal
+   for piece in fragments:
+    var position: Vector2=piece.start+piece.velocity*t+Vector2(0,180*t*t)
+    var width: float=piece.size*(1+0.35*t)
+    draw_set_transform(position,piece.angle+piece.spin*t)
+    draw_texture_rect(border,Rect2(Vector2.ONE*(-width/2),Vector2.ONE*width),false,Color(1,1,1,1-smoothstep(0.25,0.95,t)))
+   draw_set_transform(Vector2.ZERO)
+
+var art: Petals
+var music: AudioStreamPlayer
+var fading: Tween
+var active := false
+func _ready() -> void:
+ layer=240
+ art=Petals.new()
+ add_child(art)
+ art.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+ art.mouse_filter=Control.MOUSE_FILTER_STOP
+ music=AudioStreamPlayer.new()
+ music.stream=preload("res://audio/loading/i_will_wait.mp3")
+ music.volume_db=-12
+ add_child(music)
+ music.finished.connect(func():
+  if active and art.reveal<0:music.play())
+ hide()
+func begin() -> void:
+ if fading and fading.is_running():fading.kill()
+ active=true
+ art.elapsed=0;art.reveal=-1;art.fragments.clear()
+ art.caption="OPENING YOUR GARDEN"
+ music.volume_db=-12
+ music.play()
+ show()
+func report(message: String) -> void:
+ art.caption=message.to_upper()
+func finish() -> void:
+ art.scatter()
+ fading=create_tween()
+ fading.tween_property(music,"volume_db",-60.0,0.22)
+ fading.tween_callback(music.stop)
+ await get_tree().create_timer(1.0).timeout
+ active=false
+ music.stop()
+ hide()
+func abort() -> void:
+ active=false
+ if fading and fading.is_running():fading.kill()
+ music.stop()
+ hide()
+func _input(event: InputEvent) -> void:
+ if active and (event is InputEventKey or event is InputEventMouseButton or event is InputEventMouseMotion or event is InputEventJoypadButton or event is InputEventJoypadMotion):
+  get_viewport().set_input_as_handled()
 
 ```
 
@@ -5457,6 +5596,9 @@ var cloud: Node
 var account_panel: PanelContainer
 var autosave_age := 0.0
 var quitting := false
+var loading := false
+var garden_loader: CanvasLayer
+var valley_music: Node
 
 func _ready() -> void:
 	get_tree().root.theme = preload("res://cwtch_theme.gd").make()
@@ -5468,10 +5610,15 @@ func _ready() -> void:
 	cloud=preload("res://cloud_account.gd").new()
 	add_child(cloud)
 	_build_ui()
+	garden_loader=preload("res://garden_loading.gd").new()
+	add_child(garden_loader)
 	ControllerInput.mode_changed.connect(_focus_menu)
 	ambience = Ambience.new()
 	ambience.stream_level = 0.22
 	add_child(ambience)
+	valley_music=preload("res://valley_music.gd").new()
+	add_child(valley_music)
+	valley_music.setup(self)
 	_load_options()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_update_weather(0.0)
@@ -5661,6 +5808,7 @@ func _build_ui() -> void:
 	options.hide()
 
 func _process(delta: float) -> void:
+	if loading:return
 	autosave_age+=delta
 	if autosave_age>=60.0 and is_instance_valid(garden):
 		autosave_age=0.0
@@ -5728,6 +5876,11 @@ func _request_new() -> void:
 		_begin_garden(true)
 
 func _begin_garden(fresh: bool) -> void:
+	if loading:return
+	loading=true
+	if ControllerKeyboard.opened:ControllerKeyboard.finish(false)
+	garden_loader.begin()
+	ambience.update_mix(0,0,0,true)
 	if fresh:
 		coins=500
 		purchases.clear()
@@ -5739,8 +5892,23 @@ func _begin_garden(fresh: bool) -> void:
 		remove_child(garden)
 		garden.free()
 	if not is_instance_valid(garden):
-		garden = load("res://main.tscn").instantiate()
+		var error := ResourceLoader.load_threaded_request("res://main.tscn")
+		if error!=OK:
+			_loading_failed()
+			return
+		while ResourceLoader.load_threaded_get_status("res://main.tscn")==ResourceLoader.THREAD_LOAD_IN_PROGRESS:
+			await get_tree().process_frame
+		if ResourceLoader.load_threaded_get_status("res://main.tscn")!=ResourceLoader.THREAD_LOAD_LOADED:
+			_loading_failed()
+			return
+		var scene: PackedScene=ResourceLoader.load_threaded_get("res://main.tscn")
+		garden = scene.instantiate()
+		garden.process_mode=Node.PROCESS_MODE_DISABLED
+		garden.set_meta("loading_screen",garden_loader)
 		add_child(garden)
+		while not garden.loading_complete:
+			await get_tree().process_frame
+		garden.remove_meta("loading_screen")
 		for child in garden.get_children():
 			if child is WorldEnvironment: garden.camera.environment = child.environment
 		if not fresh: _restore_garden()
@@ -5752,10 +5920,21 @@ func _begin_garden(fresh: bool) -> void:
 	garden.show()
 	for layer in garden.find_children("*","CanvasLayer",true,false):
 		if layer!=garden.hedgehog_intro.ui:layer.show()
-	garden.process_mode = Node.PROCESS_MODE_INHERIT
+	garden.process_mode = Node.PROCESS_MODE_DISABLED
 	garden.camera.make_current()
 	garden._set_guide(false)
-	if fresh: garden.northern_arrival.start()
+	garden.local_coop.suspend_render()
+	preload("res://diorama_camera.gd").follow(garden.camera,garden.player.position,garden.camera_yaw,garden.camera_pitch)
+	# Prepare the first walking view, but keep its clock frozen behind the reveal.
+	if fresh:
+		garden.northern_arrival.start()
+		garden.northern_arrival.set_process(false)
+	# Reveal a ready, stationary garden before starting its arrival/dialogue.
+	await get_tree().process_frame
+	await garden_loader.finish()
+	loading=false
+	garden.process_mode=Node.PROCESS_MODE_INHERIT
+	if fresh: garden.northern_arrival.set_process(true)
 	else: garden.hedgehog_intro.request_welcome()
 	_save_garden()
 	loading_label.text = ""
@@ -5880,6 +6059,7 @@ func _notification(what: int) -> void:
 		save_and_quit()
 
 func _focus_menu() -> void:
+	if loading:return
 	if ControllerKeyboard.opened:return
 	if menu_active:
 		ControllerInput.focus_first.call_deferred(account_panel if account_panel.visible else (options if options.visible else menu_buttons))
@@ -5903,6 +6083,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 func save_and_quit() -> void:
+	if loading:
+		garden_loader.abort()
+		get_tree().quit()
+		return
 	if quitting:return
 	if not _save_garden():
 		if is_instance_valid(garden):
@@ -5986,6 +6170,8 @@ func use_cloud_garden(data: Variant) -> void:
 	if not success or DirAccess.rename_absolute(ProjectSettings.globalize_path(SAVE_PATH+".tmp"),ProjectSettings.globalize_path(SAVE_PATH))!=OK:
 		cloud.status="Could not replace local save.";cloud.changed.emit();return
 	if is_instance_valid(garden):garden.free();garden=null
+	valley_music.silence()
+	valley_music.band=""
 	cloud.connected=true
 	cloud.status="Cloud garden ready. Choose ENTER GARDEN. Previous local save backed up."
 	cloud.changed.emit()
@@ -5997,6 +6183,13 @@ func _cloud_summary() -> Dictionary:
 			if actor==garden.wildlife.robin and not garden.wildlife.records.has("robin"):continue
 			population+=1
 	return {"animals":population,"day":garden.wildlife.day(),"level":garden.experience.level()}
+
+func _loading_failed() -> void:
+	garden_loader.abort()
+	loading=false
+	menu_buttons.show()
+	loading_label.text="COULD NOT OPEN THE GARDEN. PLEASE TRY AGAIN."
+	_focus_menu()
 
 ```
 
@@ -7016,7 +7209,7 @@ func _text(text: String, at: Vector2, size_px: int, color: Color=Petals.INK) -> 
 	draw_string(font,at,text,HORIZONTAL_ALIGNMENT_LEFT,-1,size_px,color)
 
 func _draw() -> void:
-	if not is_instance_valid(garden):return
+	if not is_instance_valid(garden) or not is_instance_valid(garden.valley_cycle):return
 	var cycle: Node3D=garden.valley_cycle
 	var at := Vector2(76,74)
 	var progress: float=garden.experience.progress()
@@ -8484,6 +8677,125 @@ func update_atmosphere() -> void:
   cloud.position=origin+Vector3(sin(cycle.elapsed*0.002+origin.z)*9.0,0,cos(cycle.elapsed*0.0015+origin.x)*5.0)
   cloud.rotation.y=atan2(garden.camera.global_position.x-cloud.global_position.x,garden.camera.global_position.z-cloud.global_position.z)
 
+
+```
+
+## valley_music.gd
+
+```gd
+extends Node
+## One shared soundtrack for garden and village; follows the simulation clock.
+const PATH := "res://audio/music/"
+const WELCOME := PATH+"morning_in_the_vale.mp3"
+const TRACKS := {
+ "morning":["morning_in_the_vale","beautiful_day"],
+ "afternoon":["afternoon_stroll","afternoon_in_the_garden","beautiful_day"],
+ "evening":["twilight_pastoral"],
+ "night":["twilight_pastoral"]
+}
+var host: Node
+var channels: Array[AudioStreamPlayer]=[]
+var active := 0
+var band := ""
+var current_track := ""
+var bags: Dictionary={}
+var fade: Tween
+var next_track := false
+var rng:=RandomNumberGenerator.new()
+var suspended := true
+var mix := 0.0
+var gains := [0.0,0.0]
+
+func setup(menu: Node) -> void:
+ host=menu
+ rng.randomize()
+ for index in 2:
+  var player:=AudioStreamPlayer.new()
+  player.volume_db=-80
+  add_child(player)
+  channels.append(player)
+  player.finished.connect(func():
+   if index==active:next_track=true)
+
+static func period(hours: float) -> String:
+ if hours>=6 and hours<12:return "morning"
+ if hours>=12 and hours<18:return "afternoon"
+ if hours>=18 and hours<21:return "evening"
+ return "night"
+
+func choose(group: String) -> String:
+ var pool: Array=TRACKS[group]
+ if not bags.has(group) or bags[group].is_empty():
+  var bag: Array=pool.duplicate()
+  # Fisher-Yates makes every eligible track play once before refilling.
+  for i in range(bag.size()-1,0,-1):
+   var j:=rng.randi_range(0,i)
+   var temp=bag[i];bag[i]=bag[j];bag[j]=temp
+  if bag.size()>1 and bag.back()==current_track:
+   var temp=bag[0];bag[0]=bag[-1];bag[-1]=temp
+  bags[group]=bag
+ return str(bags[group].pop_back())
+
+func _process(delta: float) -> void:
+ if not is_instance_valid(host):return
+ var enabled: bool=is_instance_valid(host.garden) and not host.menu_active and not host.loading
+ if not enabled:
+  if not suspended:
+   for channel in channels:channel.stream_paused=true
+   suspended=true
+  return
+ var garden: Node=host.garden
+ if not garden.loading_complete:return
+ if suspended:
+  for channel in channels:channel.stream_paused=false
+  suspended=false
+ var hours:=fposmod(6.0+float(garden.valley_cycle.elapsed)*24.0/float(garden.valley_cycle.FULL_CYCLE),24.0)
+ var desired := "arrival" if garden.northern_arrival.active else period(hours)
+ if desired!=band:
+  band=desired
+  if band=="arrival":
+   if ResourceLoader.exists(WELCOME):play_track("morning_in_the_vale")
+   else:silence()
+  else:play_track(choose(band))
+ elif next_track:
+  next_track=false
+  if band!="arrival":play_track(choose(band))
+ var target := 0.0 if garden.hedgehog_intro.active else 1.0
+ if garden.ambience_muted:target=0
+ mix=move_toward(mix,target,delta*1.7)
+ var db := -27.0 if band=="night" else (-19.0 if band=="arrival" else -24.0)
+ for i in 2:
+  channels[i].volume_db=db+linear_to_db(maxf(float(gains[i])*mix,0.0001))
+
+func play_track(track: String) -> void:
+ var incoming:=1-active
+ var outgoing:=active
+ if fade and fade.is_running():fade.kill()
+ channels[incoming].stop()
+ channels[incoming].stream=load(PATH+track+".mp3")
+ channels[incoming].stream_paused=false
+ channels[incoming].play()
+ gains[incoming]=0.0
+ active=incoming
+ current_track=track
+ next_track=false
+ fade=create_tween().set_parallel(true)
+ fade.tween_method(func(value: float):gains[incoming]=value,0.0,1.0,2.0)
+ fade.tween_method(func(value: float):gains[outgoing]=value,float(gains[outgoing]),0.0,1.2)
+ fade.chain().tween_callback(channels[outgoing].stop)
+
+func silence() -> void:
+ if fade and fade.is_running():fade.kill()
+ for channel in channels:channel.stop()
+ gains=[0.0,0.0]
+ current_track=""
+ next_track=false
+
+func _exit_tree() -> void:
+ if fade:fade.kill()
+ fade=null
+ for channel in channels:
+  if is_instance_valid(channel):channel.stop()
 
 ```
 

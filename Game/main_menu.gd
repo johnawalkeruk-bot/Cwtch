@@ -44,6 +44,7 @@ var autosave_age := 0.0
 var quitting := false
 var loading := false
 var garden_loader: CanvasLayer
+var valley_music: Node
 
 func _ready() -> void:
 	get_tree().root.theme = preload("res://cwtch_theme.gd").make()
@@ -61,6 +62,9 @@ func _ready() -> void:
 	ambience = Ambience.new()
 	ambience.stream_level = 0.22
 	add_child(ambience)
+	valley_music=preload("res://valley_music.gd").new()
+	add_child(valley_music)
+	valley_music.setup(self)
 	_load_options()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	_update_weather(0.0)
@@ -365,12 +369,18 @@ func _begin_garden(fresh: bool) -> void:
 	garden.process_mode = Node.PROCESS_MODE_DISABLED
 	garden.camera.make_current()
 	garden._set_guide(false)
+	garden.local_coop.suspend_render()
+	preload("res://diorama_camera.gd").follow(garden.camera,garden.player.position,garden.camera_yaw,garden.camera_pitch)
+	# Prepare the first walking view, but keep its clock frozen behind the reveal.
+	if fresh:
+		garden.northern_arrival.start()
+		garden.northern_arrival.set_process(false)
 	# Reveal a ready, stationary garden before starting its arrival/dialogue.
 	await get_tree().process_frame
 	await garden_loader.finish()
 	loading=false
 	garden.process_mode=Node.PROCESS_MODE_INHERIT
-	if fresh: garden.northern_arrival.start()
+	if fresh: garden.northern_arrival.set_process(true)
 	else: garden.hedgehog_intro.request_welcome()
 	_save_garden()
 	loading_label.text = ""
@@ -606,6 +616,8 @@ func use_cloud_garden(data: Variant) -> void:
 	if not success or DirAccess.rename_absolute(ProjectSettings.globalize_path(SAVE_PATH+".tmp"),ProjectSettings.globalize_path(SAVE_PATH))!=OK:
 		cloud.status="Could not replace local save.";cloud.changed.emit();return
 	if is_instance_valid(garden):garden.free();garden=null
+	valley_music.silence()
+	valley_music.band=""
 	cloud.connected=true
 	cloud.status="Cloud garden ready. Choose ENTER GARDEN. Previous local save backed up."
 	cloud.changed.emit()

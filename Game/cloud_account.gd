@@ -110,7 +110,11 @@ func sync(data: Dictionary, explicit: bool=false) -> void:
   busy=false
   changed.emit()
   return
- var result := await _request("/rest/v1/rpc/cwtch_put_save",HTTPClient.METHOD_POST,{"expected_revision":revision,"garden":data},true)
+ # JSON.parse_string represents numbers as floats. Keep the wire version an
+ # integer: the deployed RPC compares the extracted version text with '1'.
+ var upload := data.duplicate(true)
+ upload["version"]=int(upload.get("version",0))
+ var result := await _request("/rest/v1/rpc/cwtch_put_save",HTTPClient.METHOD_POST,{"expected_revision":revision,"garden":upload},true)
  if result.ok:
   revision=int(result.data.revision)
   connected=true

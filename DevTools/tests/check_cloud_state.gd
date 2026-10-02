@@ -15,7 +15,10 @@ func run():
  a.sync({'version':1})
  assert(a.calls.is_empty(),'First sync needs a choice')
  a.replies=[{'ok':true,'data':{'revision':1,'updated_at':'test'}}]
- await a.sync({'version':1},true)
+ var parsed=JSON.parse_string('{"version":1}')
+ await a.sync(parsed,true)
+ assert(typeof(a.calls[-1].body.garden.version)==TYPE_INT,'Upload normalizes parsed version')
+ assert(JSON.stringify(a.calls[-1].body).contains('"version":1}'),'Server must receive version 1, not 1.0')
  assert(a.connected and a.revision==1 and a.remote.revision==1)
  a.replies=[{'ok':false,'code':409,'error':'Cloud garden changed'}]
  await a.sync({'version':1})

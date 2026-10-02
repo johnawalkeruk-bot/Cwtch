@@ -36,7 +36,7 @@ func _text(text: String, at: Vector2, size_px: int, color: Color=Petals.INK) -> 
 	draw_string(font,at,text,HORIZONTAL_ALIGNMENT_LEFT,-1,size_px,color)
 
 func _draw() -> void:
-	if not is_instance_valid(garden):return
+	if not is_instance_valid(garden) or not is_instance_valid(garden.valley_cycle):return
 	var cycle: Node3D=garden.valley_cycle
 	var at := Vector2(76,74)
 	var progress: float=garden.experience.progress()

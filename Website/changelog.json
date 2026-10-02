@@ -1,35 +1,91 @@
 {
   "entries": [
     {
-      "id": "0.1.23",
-      "label": "v0.1.23",
-      "date": "2026-10-02",
-      "title": "In development",
-      "sections": [
-        {
-          "heading": "Updates",
-          "items": [
-            "Not much to say about this one"
-          ]
-        }
-      ],
-      "blog": {
-        "intro": "Not much to say about this one",
-        "why": [
-          "Not much to say about this one"
-        ],
-        "issues": [
-          "Not much to say about this one"
-        ],
-        "screenshots": []
-      }
-    },
-    {
       "id": "unreleased",
       "label": "Next update",
       "date": null,
       "title": "In development",
       "sections": []
+    },
+    {
+      "id": "0.1.24",
+      "label": "v0.1.24",
+      "date": "2026-10-02",
+      "title": "A soundtrack for the valley, and a save that travels",
+      "sections": [
+        {
+          "heading": "Cloud saves and loading",
+          "items": [
+            "Fixed local saves being uploaded with a decimal-format version number that the existing cloud server rejected.",
+            "Kept the clock from drawing before the day/night cycle is ready during garden loading.",
+            "The loading reveal now uses a prepared camera, avoiding a brief incorrect split-screen view before the arrival walk."
+          ]
+        },
+        {
+          "heading": "Music through the day",
+          "items": [
+            "Morning in the Vale accompanies the first walk into the garden.",
+            "Morning and afternoon each have a pool of suitable tracks; shuffle bags play every eligible track before refilling and avoid an immediate repeat when possible.",
+            "Twilight Pastoral accompanies evening and night, with a lower night-time volume.",
+            "Music stays soft, fades between time periods, ducks during Arthur’s dialogue and pauses on the main menu or while loading. Garden and village share one soundtrack."
+          ]
+        },
+        {
+          "heading": "Studio journal",
+          "items": [
+            "Replaced the v0.1.23 placeholder post with its loading-screen story and corrected v0.1.19’s outdated unreleased follow-up wording."
+          ]
+        }
+      ],
+      "blog": {
+        "intro": "The cloud save was wearing a decimal point where its identity badge should have been. That is now corrected. Meanwhile, the valley has acquired a soundtrack: morning optimism, afternoon wandering and twilight politely asking everyone to lower their voices.",
+        "why": [
+          "The server accepted save format 1, but reading a local JSON file turned it into 1.0 on the next upload. Both describe the same version, yet the existing server compared their text. The client now sends the expected integer without changing anyone’s garden.",
+          "The new tracks are selected using the garden clock. Morning in the Vale also accompanies the arrival walk; the afternoon tracks share a shuffled pool with Beautiful Day, and Twilight Pastoral keeps evening and night gentle.",
+          "A shared soundtrack follows the garden into the village. It fades down for Arthur, pauses during loading, and avoids playing the same track twice in succession when another suitable one is available.",
+          "The v0.1.23 post no longer claims there was nothing to report while a shower of daffodils was clearly happening. The v0.1.19 follow-up now acknowledges that its scenery changes shipped in v0.1.20."
+        ],
+        "issues": [
+          "The upload regression was reproduced locally and its outgoing request format is now tested. A successful retry on the player’s authenticated live account has not yet been verified.",
+          "Music scheduling, shuffling and dialogue ducking are tested in code. Twilight Pastoral currently serves both evening and night because no separate night track was supplied."
+        ],
+        "screenshots": [
+          {
+            "path": "assets/blog/loading-arrival-reveal.png",
+            "caption": "Development build: daffodils reveal the prepared arrival camera before the walk begins."
+          }
+        ]
+      }
+    },
+    {
+      "id": "0.1.23",
+      "label": "v0.1.23",
+      "date": "2026-10-02",
+      "title": "A few petals while the valley wakes",
+      "sections": [
+        {
+          "heading": "Loading the garden",
+          "items": [
+            "Added a dark six-petal loading animation inspired by the supplied video, with short messages describing garden preparation.",
+            "I Will Wait plays while the garden loads and fades out as soon as it is ready; the game does not wait for the track to finish.",
+            "Copies of the supplied Border-1 daffodil artwork scatter across the screen to reveal the garden.",
+            "Moved scene-resource loading into a background request and added preparation checkpoints before the arrival walk or Arthur’s welcome begins."
+          ]
+        }
+      ],
+      "blog": {
+        "intro": "The valley now has something to do while it finds its boots. Six blue petals light up in the dark, I Will Wait keeps them company, and a small blizzard of daffodils announces that your garden is ready. The song title is a suggestion, not a demand.",
+        "why": [
+          "Loading is part of the first impression. The supplied video gave us a clear starting point: a quiet dark background and six petals waking in blue, recreated as a procedural animation that can keep looping for as long as preparation takes.",
+          "Music should make waiting pleasant without becoming the reason you are still waiting. Readiness triggers a brief fade and flower scatter, regardless of where the song has reached.",
+          "The first-arrival walk and welcome dialogue begin after the reveal, so their opening moments are not hidden behind a loading screen."
+        ],
+        "issues": [
+          "The animation is inspired by the video rather than playing the video file itself. Each individual preparation step still runs on the game thread and can briefly hold a frame.",
+          "A clock redraw could run before its day/night cycle existed during staged setup. A guard for this is included in the following development update."
+        ],
+        "screenshots": []
+      }
     },
     {
       "id": "0.1.22",
@@ -192,19 +248,37 @@
             "The arrival leads into Arthur’s welcome. Escape, B / Circle or Start skips the walk; existing gardens receive the path without replaying the arrival.",
             "Time, weather and ambience continue throughout the shared arrival, with normal single-player or split-screen play restored afterwards. The scenery placeholders do not count as wildlife visits."
           ]
+        },
+        {
+          "heading": "Previous follow-up: the robin learns its moves",
+          "items": [
+            "Created an editable Blender rig and reference-inspired idle, hopping and flight animations, preserving the source FBX and texture.",
+            "Connected the clips to garden movement and short low flights, while retaining the 1% water visit requirement and existing saved discoveries."
+          ]
+        },
+        {
+          "heading": "Later scenery follow-up — released in v0.1.20",
+          "items": [
+            "Replaced the crossing placeholder with the supplied rabbit, the flying placeholder with the animated robin, and the distant animals with the supplied bull model.",
+            "Added a textured rock outside each garden corner, with varied rotations that stay consistent when reloading.",
+            "Arthur now waits beside the northern entrance for your first arrival and returns to wandering after his welcome."
+          ]
         }
       ],
       "blog": {
-        "intro": "Previously, arriving in the garden involved the traditional Welsh practice of appearing out of thin air. We have now installed a path. The rabbit-shaped object using it has declined to pay council tax.",
+        "intro": "The first walk into the valley gave a new garden a proper arrival: gravel underfoot, a little camera bob and several excellent excuses to look around. This article also records the later robin animation and scenery follow-up, which was released in v0.1.20.",
         "why": [
           "A new garden should feel like somewhere you have travelled to. The gravel approach connects the northern mountain scenery to the plot, while a short walk gives the valley a chance to introduce itself before Arthur does.",
           "The camera follows the actual hillside surface, with a small walking bob and eased turns. Four staged moments give the journey a little life: something crosses your path, a bird passes, a birch catches your eye, and two animals stand further away.",
-          "Early captures showed grass growing through the new gravel. Admirable botanical enthusiasm, but rather poor path maintenance. We cleared the route and moved nearby tree placements back so the approach reads more clearly."
+          "Early captures showed grass growing through the new gravel. Admirable botanical enthusiasm, but rather poor path maintenance. We cleared the route and moved nearby tree placements back so the approach reads more clearly.",
+          "The robin follow-up gave the previously unrigged bird an 11-bone Blender rig with idle, hopping and flight clips, inspired by the supplied motion videos. Its wings can now do the work instead of relying on a whole-model bounce. No tiny pilot licence was required.",
+          "Later follow-up, released in v0.1.20: the real rabbit, animated robin and bulls replace the arrival stand-ins; varied corner rocks define the plot, and Arthur waits at the entrance. These scene changes were subsequently released in v0.1.20."
         ],
         "issues": [
-          "The creatures and bird are deliberately simple placeholders. Their motion is staged for the arrival; they are not new collectible animals, residents or Field Guide discoveries. The birch uses the existing tree model.",
-          "The walk follows the lower approach. The upper mountain path is background scenery, and normal player movement remains inside the garden boundary.",
-          "Automated checks cover completion, skipping, existing-garden loading, continued clock updates and split-screen restoration. Physical controller testing is still needed."
+          "The original arrival used deliberately simple stand-ins. The development follow-up replaces their appearances, while keeping them separate from collectible or resident wildlife.",
+          "The first robin skin-weight pass pulled some head vertices with a wing. Those weights were corrected before export. The motion is authored from reference, not automatically captured from the videos.",
+          "The rabbit and bull files have rigs but no clips: the crossing rabbit currently hops as a whole model and the bulls use gentle breathing motion. Full skeletal gait work is still pending.",
+          "The upper mountain route remains scenery. Arrival completion, skipping, Arthur’s waiting state, corner placement and split-screen handover have automated coverage; physical controller testing remains outstanding."
         ],
         "screenshots": [
           {
@@ -218,6 +292,26 @@
           {
             "path": "assets/blog/northern-arrival-animals.png",
             "caption": "Two distant scenery animals provide the last look-around moment before entering the garden."
+          },
+          {
+            "path": "assets/blog/robin-authored-flight.png",
+            "caption": "Previous robin animation work: the Blender-authored flight pose in the game."
+          },
+          {
+            "path": "assets/blog/arrival-cast-rabbit.png",
+            "caption": "Development build: the supplied rabbit crosses the northern gravel path."
+          },
+          {
+            "path": "assets/blog/arrival-cast-bulls.png",
+            "caption": "Development build: the supplied bulls replace the distant stand-in animals."
+          },
+          {
+            "path": "assets/blog/arrival-cast-rock.png",
+            "caption": "Development build: a textured rock marks an outside corner of the garden."
+          },
+          {
+            "path": "assets/blog/arrival-cast-arthur.png",
+            "caption": "Development build: Arthur welcomes you from the northern entrance."
           }
         ]
       }
