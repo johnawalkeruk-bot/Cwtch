@@ -147,6 +147,14 @@ func _build_ui() -> void:
 	interface.add_child(root)
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var studio := TextureRect.new()
+	studio.texture=preload("res://assets/branding/wgs.png")
+	studio.expand_mode=TextureRect.EXPAND_IGNORE_SIZE
+	studio.stretch_mode=TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	studio.mouse_filter=Control.MOUSE_FILTER_IGNORE
+	root.add_child(studio)
+	studio.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+	studio.offset_left=-155;studio.offset_right=-15;studio.offset_top=-150;studio.offset_bottom=-10
 	heading = VBoxContainer.new()
 	root.add_child(heading)
 	heading.set_anchors_and_offsets_preset(Control.PRESET_CENTER_TOP)
@@ -457,6 +465,7 @@ func _notification(what: int) -> void:
 		save_and_quit()
 
 func _focus_menu() -> void:
+	if ControllerKeyboard.opened:return
 	if menu_active:
 		ControllerInput.focus_first.call_deferred(account_panel if account_panel.visible else (options if options.visible else menu_buttons))
 

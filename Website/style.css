@@ -6,3 +6,17 @@
 
 /* Studio stories */
 .blog{max-width:960px;padding-top:60px;padding-bottom:76px}.blog-heading{display:block;border:0;padding:30px 0 12px}.blog-heading h1{font-size:clamp(36px,6vw,60px);line-height:1.12}.blog-byline{font-size:13px;color:var(--muted)}.blog-lede{font:23px/1.6 Georgia,serif}.blog article>h2{font-size:32px;margin-top:42px}.blog article>h3{font-size:23px;margin-top:26px}.blog li{margin-bottom:10px}.blog-photo{margin:36px 0}.blog-photo img{width:100%;height:auto;display:block;border-radius:8px}.blog-photo figcaption{font-size:13px;color:var(--muted);padding-top:10px}.blog-card{padding:32px 0;border-top:1px solid var(--line)}.blog-card h2{font-size:32px}.blog-preview{padding:26px;border-left:3px solid var(--gold);background:#ede9dc;margin-bottom:40px}.blog-preview h2{font-size:30px}@media(max-width:600px){.blog{padding-top:30px}.blog-lede{font-size:20px}}
+
+/* Shared Valley Club visual language. */
+:root{--paper:#f3eee2;--green:#22392f;--muted:#647062;--gold:#ffca72;--line:#d9d3c2}
+body>header.wrap{width:100%;max-width:none;padding:26px max(6%,calc((100% - 1240px)/2));background:#152d25;color:#eed39b;border:0;gap:26px}
+body>header nav{flex-wrap:wrap;gap:25px;font-size:14px;font-weight:400}
+body>header nav a:hover,body>header nav [aria-current]{color:#ffca72}
+body>header .wordmark{font-size:30px}body>header .wordmark span{font-size:9px;letter-spacing:2px;margin-top:7px}
+.hero.wrap{width:100%;max-width:none;padding:75px max(6%,calc((100% - 1240px)/2));background:linear-gradient(90deg,#10291fee,#10291f75),url('assets/garden.png') center 48%/cover;color:#f7ead0;grid-template-columns:1.3fr 1fr;gap:80px;min-height:550px}
+.hero h1{font-size:clamp(46px,5vw,70px);line-height:1.08;letter-spacing:-1px}.hero h1 em{color:#ffca72}.hero p.lede{color:#e0e6d7}.hero .small{color:#c5d0bf}.hero .button{background:#ffca72;color:#203b2f}.hero .dot{background:#ffca72}
+.club-invitation{padding:34px;border:1px solid #b9c4a64a;border-radius:12px;background:#17362cdd;box-shadow:0 16px 45px #07180f30}.club-invitation h2{font-size:35px;letter-spacing:-.5px}.club-invitation p:not(.eyebrow){font-size:14px;line-height:1.8}.club-invitation .eyebrow{color:#ffca72}.club-invitation .button{background:#f3e7ce;font-size:13px;width:100%}
+.valley{border:0;padding-top:64px}.features{gap:22px}.features article{padding:28px;background:#fffaf0;border:1px solid var(--line);border-radius:12px}.number{color:#8a713c}.button{border-radius:6px}.download-section{background:#18352b}.download{gap:65px}.logo-panel{max-width:360px}.changelog-teaser{gap:40px}.change-card{background:#fffaf0}.blog-preview{background:#e9e0ca;border-radius:0 10px 10px 0}
+.studio-signature{display:flex;align-items:center;gap:4px;text-decoration:none;font:16px Georgia,serif}.studio-signature img{width:130px;height:130px;object-fit:contain}.studio-signature small{font:11px system-ui;color:#647062}footer.wrap{padding-top:10px;padding-bottom:10px}
+@media(max-width:850px){.hero.wrap{gap:30px;padding:50px 6%;grid-template-columns:1fr 1fr}.features article{padding:21px}.club-invitation{padding:24px}body>header.wrap{flex-wrap:wrap}.hero h1{font-size:49px}}
+@media(max-width:600px){.hero.wrap{grid-template-columns:1fr;gap:25px;padding:45px 6%}.hero h1{font-size:48px}.features{gap:18px}.club-invitation h2{font-size:30px}body>header nav{gap:16px;font-size:12px}.studio-signature img{width:105px;height:105px}}

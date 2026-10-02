@@ -29,7 +29,7 @@ class BlogTests(unittest.TestCase):
   data['entries'][1]['title']='Changed afterwards';save()
   build_blog.build(site,'9.8.7')
   self.assertEqual(original,(site/'blog/posts.json').read_bytes())
-  self.assertEqual(posts[0]['author'],'Waldas Gamer Studios')
+  self.assertEqual(posts[0]['author'],'Waldas Game Studios')
   html=(site/'blog/v9.8.7.html').read_text(encoding='utf-8')
   self.assertIn('Tea &lt; rain',html)
   self.assertIn('../assets/blog/proof.png',html)

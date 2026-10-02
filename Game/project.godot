@@ -19,6 +19,7 @@ config/features=PackedStringArray("4.6")
 [autoload]
 
 ControllerInput="*res://controller_input.gd"
+ControllerKeyboard="*res://controller_keyboard.gd"
 
 [display]
 

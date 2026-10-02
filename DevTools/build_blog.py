@@ -5,7 +5,7 @@ import re
 from html import escape
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
-AUTHOR = 'Waldas Gamer Studios'
+AUTHOR = 'Waldas Game Studios'
 
 
 def make_post(entry):
@@ -19,7 +19,7 @@ def make_post(entry):
 
 
 def page(title, body, prefix=''):
-    return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{escape(title)} — CWTCH</title><meta name="description" content="Development stories from Waldas Gamer Studios: what changed in CWTCH, why, and what still needs tending."><link rel="icon" href="{prefix}favicon.ico"><link rel="stylesheet" href="{prefix}style.css"></head><body><a class="skip" href="#main">Skip to content</a><header class="wrap"><a class="wordmark" href="{prefix}index.html">CWTCH<span>YOUR SLICE OF THE VALLEY.</span></a><nav aria-label="Main navigation"><a href="{prefix}index.html#valley">The Valley</a><a href="{prefix}blog.html" aria-current="page">Blog</a><a href="{prefix}changelog.html">Changelog</a><a href="{prefix}index.html#download">Download</a><a href="{prefix}club.html">Your valley</a></nav></header><main id="main" class="blog wrap">{body}</main><footer class="wrap"><a class="wordmark" href="{prefix}index.html">CWTCH</a><p>Waldas Gamer Studios · Made for the quieter moments.</p><a href="{prefix}blog.html">Notes from the studio</a></footer></body></html>'''
+    return f'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{escape(title)} — CWTCH</title><meta name="description" content="Development stories from Waldas Game Studios: what changed in CWTCH, why, and what still needs tending."><link rel="icon" href="{prefix}favicon.ico"><link rel="stylesheet" href="{prefix}style.css"></head><body><a class="skip" href="#main">Skip to content</a><header class="wrap"><a class="wordmark" href="{prefix}index.html">CWTCH<span>YOUR SLICE OF THE VALLEY.</span></a><nav aria-label="Main navigation"><a href="{prefix}index.html#valley">The Valley</a><a href="{prefix}blog.html" aria-current="page">Blog</a><a href="{prefix}changelog.html">Changelog</a><a href="{prefix}index.html#download">Download</a><a href="{prefix}club.html">Your valley</a></nav></header><main id="main" class="blog wrap">{body}</main><footer class="wrap"><a class="studio-signature" href="{prefix}index.html"><img src="{prefix}assets/wgs.png" alt="Waldas Game Studios logo" width="160" height="160"><span>Waldas Game Studios</span></a><p>Waldas Game Studios · Made for the quieter moments.</p><a href="{prefix}blog.html">Notes from the studio</a></footer></body></html>'''
 
 
 def article(post, website, preview=False):
@@ -59,7 +59,7 @@ def build(website, release=None):
             article(post,website)  # Validate before recording the immutable snapshot.
             posts.insert(0,post)
             archive.write_text(json.dumps(posts,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
-    body = '<div class="change-intro"><p class="eyebrow">WALDAS GAMER STUDIOS</p><h1>Notes from<br><em>the valley.</em></h1><p class="lede">Small improvements, honest mishaps, and occasional hedgehog-related paperwork. The stories behind each new release.</p></div>'
+    body = '<div class="change-intro"><p class="eyebrow">WALDAS GAME STUDIOS</p><h1>Notes from<br><em>the valley.</em></h1><p class="lede">Small improvements, honest mishaps, and occasional hedgehog-related paperwork. The stories behind each new release.</p></div>'
     pending = next((e for e in data['entries'] if e['id']=='unreleased' and e['sections']),None)
     if pending:
         post = make_post(pending)

@@ -8,6 +8,52 @@
       "sections": []
     },
     {
+      "id": "0.1.22",
+      "label": "v0.1.22",
+      "date": "2026-10-02",
+      "title": "One valley, one studio, fewer keyboards",
+      "sections": [
+        {
+          "heading": "Website and studio identity",
+          "items": [
+            "Matched the main website, blog and changelog to the Valley Club palette, typography and cards, with a direct club invitation on the homepage.",
+            "Corrected the studio name to Waldas Game Studios across website credits and blog bylines.",
+            "Added the supplied WGS logo to website footers and the game main menu."
+          ]
+        },
+        {
+          "heading": "Controller text entry",
+          "items": [
+            "Added an on-screen keyboard for editable text fields when using a controller, including account email/password and developer-console input.",
+            "Use the D-pad or left stick to move, A / Cross to select, B / Circle to cancel, X / Square to delete, Y / Triangle to change case, and Start / Options to finish.",
+            "Includes symbols, spaces, password masking and physical keyboard support. Cancel leaves the original field unchanged and closes without retaining its draft."
+          ]
+        }
+      ],
+      "blog": {
+        "intro": "The website and the Valley Club have finally agreed on the curtains. Forest green, parchment and a little gold won the vote. Waldas Game Studios also has its correct name on the door, and a controller can now write an email address without demanding a second piece of furniture.",
+        "why": [
+          "The homepage should feel like the same place as your private garden dashboard. Shared colours, cards and studio branding connect the download page, journal and club without changing what each page is there to do.",
+          "The supplied WGS artwork now signs the website and main menu. The studio-name correction also applies to earlier blog bylines; the historical release stories themselves are unchanged.",
+          "Signing in from a sofa needs proper text entry. The on-screen keyboard has controller navigation, symbols, case switching and explicit Done and Cancel actions. Password drafts remain masked and are cleared when the keyboard closes."
+        ],
+        "issues": [
+          "Controller events were tested programmatically in Godot, including typing, deletion, cancellation, focus return and password masking. Physical Xbox and PlayStation hardware have not been tested in this update.",
+          "Desktop and mobile layouts passed local browser checks. These changes are not published until the next manual release."
+        ],
+        "screenshots": [
+          {
+            "path": "assets/blog/studio-website-refresh.png",
+            "caption": "Local development preview: the homepage adopts the Valley Club visual style."
+          },
+          {
+            "path": "assets/blog/controller-keyboard.png",
+            "caption": "Development build: controller text entry on the account screen."
+          }
+        ]
+      }
+    },
+    {
       "id": "0.1.21",
       "label": "v0.1.21",
       "date": "2026-10-02",
@@ -212,7 +258,7 @@
         {
           "heading": "Notes from the studio",
           "items": [
-            "Added a website blog by Waldas Gamer Studios, with release stories, reasons for changes, recorded issues and development screenshots.",
+            "Added a website blog by Waldas Game Studios, with release stories, reasons for changes, recorded issues and development screenshots.",
             "Manual publishing now creates one blog post per new release and includes it in the website update."
           ]
         }

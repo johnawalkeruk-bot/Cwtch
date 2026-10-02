@@ -53,7 +53,7 @@ def render(data):
 <header class="wrap"><a class="wordmark" href="./">CWTCH<span>YOUR SLICE OF THE VALLEY.</span></a><nav aria-label="Main navigation"><a href="./#valley">The Valley</a><a href="blog.html">Blog</a><a href="changelog.html" aria-current="page">Changelog</a><a href="./#download">Download</a><a href="club.html">Your valley</a></nav></header>
 <main id="main" class="changelog wrap"><div class="change-intro"><p class="eyebrow">NOTES FROM THE VALLEY</p><h1>A little more<br><em>with every update.</em></h1><p class="lede">New arrivals, small improvements, and the work that makes the valley feel like home.</p><p>Newest changes first. Open an earlier milestone to explore its notes. Early development is grouped into the first release; later changes supersede older behaviour.</p><a href="./#download">Get the latest published game →</a></div>
 <div class="change-list">'''+''.join(cards)+'''</div></main>
-<footer class="wrap"><a class="wordmark" href="./">CWTCH</a><p>Made for the quieter moments.</p><a href="./#download">Download the launcher</a></footer></body></html>
+<footer class="wrap"><a class="studio-signature" href="./"><img src="assets/wgs.png" alt="Waldas Game Studios logo" width="160" height="160"><span>Waldas Game Studios</span></a><p>Made for the quieter moments.</p><a href="./#download">Download the launcher</a></footer></body></html>
 '''
 
 def main():
