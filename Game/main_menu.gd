@@ -38,6 +38,10 @@ var loading_label: Label
 var new_dialog: ConfirmationDialog
 var rng := RandomNumberGenerator.new()
 var weather_override := -1
+var cloud: Node
+var account_panel: PanelContainer
+var autosave_age := 0.0
+var quitting := false
 
 func _ready() -> void:
 	get_tree().root.theme = preload("res://cwtch_theme.gd").make()
@@ -46,6 +50,8 @@ func _ready() -> void:
 	stage = Node3D.new()
 	add_child(stage)
 	_build_landscape()
+	cloud=preload("res://cloud_account.gd").new()
+	add_child(cloud)
 	_build_ui()
 	ControllerInput.mode_changed.connect(_focus_menu)
 	ambience = Ambience.new()
@@ -168,12 +174,16 @@ func _build_ui() -> void:
 	menu_buttons.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
 	menu_buttons.offset_left = -180
 	menu_buttons.offset_right = 180
-	menu_buttons.offset_top = -285
+	menu_buttons.offset_top = -330
 	menu_buttons.offset_bottom = -24
 	_button("enter garden",func(): _begin_garden(false),menu_buttons)
 	_button("new garden",_request_new,menu_buttons)
 	_button("options",func(): options.show(); menu_buttons.hide(); heading.hide(); ControllerInput.focus_first.call_deferred(options),menu_buttons)
+	_button("ACCOUNT & CLOUD",_open_account,menu_buttons)
 	_button("QUIT GAME",save_and_quit,menu_buttons)
+	account_panel=preload("res://account_panel.gd").new()
+	root.add_child(account_panel)
+	account_panel.setup(self,cloud)
 	weather_label = _label("",14,Color("e5c17c"))
 	root.add_child(weather_label)
 	weather_label.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
@@ -228,6 +238,10 @@ func _build_ui() -> void:
 	options.hide()
 
 func _process(delta: float) -> void:
+	autosave_age+=delta
+	if autosave_age>=60.0 and is_instance_valid(garden):
+		autosave_age=0.0
+		_save_garden()
 	if not menu_active:
 		return
 	elapsed += delta
@@ -355,11 +369,17 @@ func _save_garden() -> bool:
 		"player":[garden.player.cell.x,garden.player.cell.y],"player_position":[garden.player.position.x,garden.player.position.z],"elapsed":garden.valley_cycle.elapsed,
 		"weather_pattern":garden.valley_cycle.weather_pattern.save_data(),"weather":garden.valley_cycle.weather_index,"weather_elapsed":garden.valley_cycle.weather_elapsed,
 		"experience":garden.experience.save_data(),"local_coop":garden.local_coop.second.save_data(),"deformation":garden.heightfield.save_deformation(),"wildlife":garden.wildlife.save_data(),"hedgehog_intro":garden.hedgehog_intro.save_data(),"wetness":garden.valley_cycle.wetness,"watered":_saved_watered(),"coins":coins,"purchases":purchases}
-	var file := FileAccess.open(SAVE_PATH,FileAccess.WRITE)
+	data["summary"]=_cloud_summary()
+	var file := FileAccess.open(SAVE_PATH+".tmp",FileAccess.WRITE)
 	if not file: return false
 	file.store_string(JSON.stringify(data))
 	file.flush()
-	return file.get_error()==OK
+	var success := file.get_error()==OK
+	file.close()
+	if not success:return false
+	if DirAccess.rename_absolute(ProjectSettings.globalize_path(SAVE_PATH+".tmp"),ProjectSettings.globalize_path(SAVE_PATH))!=OK:return false
+	cloud.sync(data)
+	return true
 
 func _saved_watered() -> Array:
 	var values := []
@@ -438,7 +458,7 @@ func _notification(what: int) -> void:
 
 func _focus_menu() -> void:
 	if menu_active:
-		ControllerInput.focus_first.call_deferred(options if options.visible else menu_buttons)
+		ControllerInput.focus_first.call_deferred(account_panel if account_panel.visible else (options if options.visible else menu_buttons))
 
 func _close_options() -> void:
 	options.hide()
@@ -447,17 +467,29 @@ func _close_options() -> void:
 	_focus_menu()
 
 func _unhandled_input(event: InputEvent) -> void:
+	if menu_active and event.is_action_pressed("ui_cancel") and account_panel.visible and not cloud.busy:
+		account_panel.hide()
+		menu_buttons.show()
+		heading.show()
+		_focus_menu()
+		get_viewport().set_input_as_handled()
+		return
 	if menu_active and event.is_action_pressed("ui_cancel") and options.visible:
 		_close_options()
 		get_viewport().set_input_as_handled()
 
 func save_and_quit() -> void:
+	if quitting:return
 	if not _save_garden():
 		if is_instance_valid(garden):
 			garden.message="Could not save your garden. Please try again."
 			garden._refresh_ui()
 		else: loading_label.text="COULD NOT SAVE. PLEASE TRY AGAIN."
 		return
+	quitting=true
+	var deadline := Time.get_ticks_msec()+18000
+	while cloud.busy and Time.get_ticks_msec()<deadline:
+		await get_tree().process_frame
 	get_tree().quit()
 
 func open_village() -> void:
@@ -504,3 +536,40 @@ func purchase_village_item(id: String) -> String:
 	preload("res://village_stock.gd").deliver(garden,record)
 	_save_garden()
 	return "%s delivered to your garden.\n%d coins remaining."%[item.name,coins]
+
+func _open_account() -> void:
+	menu_buttons.hide()
+	heading.hide()
+	account_panel.show()
+	account_panel.refresh()
+	ControllerInput.focus_first.call_deferred(account_panel)
+func use_cloud_garden(data: Variant) -> void:
+	if not preload("res://cloud_save_validator.gd").valid(data):
+		cloud.status="Cloud save is incompatible or damaged. Local garden unchanged."
+		cloud.changed.emit()
+		return
+	if FileAccess.file_exists(SAVE_PATH):
+		var backup := SAVE_PATH+".before-cloud-"+str(Time.get_ticks_usec())+".json"
+		if DirAccess.copy_absolute(ProjectSettings.globalize_path(SAVE_PATH),ProjectSettings.globalize_path(backup))!=OK:
+			cloud.status="Could not make a backup. Local garden unchanged."
+			cloud.changed.emit()
+			return
+	var file := FileAccess.open(SAVE_PATH+".tmp",FileAccess.WRITE)
+	if not file:cloud.status="Could not write cloud garden.";cloud.changed.emit();return
+	file.store_string(JSON.stringify(data));file.flush()
+	var success := file.get_error()==OK
+	file.close()
+	if not success or DirAccess.rename_absolute(ProjectSettings.globalize_path(SAVE_PATH+".tmp"),ProjectSettings.globalize_path(SAVE_PATH))!=OK:
+		cloud.status="Could not replace local save.";cloud.changed.emit();return
+	if is_instance_valid(garden):garden.free();garden=null
+	cloud.connected=true
+	cloud.status="Cloud garden ready. Choose ENTER GARDEN. Previous local save backed up."
+	cloud.changed.emit()
+func _cloud_summary() -> Dictionary:
+	var population := 0
+	for actor in garden.get_children():
+		if actor is Node3D and actor.visible and actor.has_meta("animal_id"):
+			if actor==garden.wildlife.hedgehog and actor.visit_state!="inside":continue
+			if actor==garden.wildlife.robin and not garden.wildlife.records.has("robin"):continue
+			population+=1
+	return {"animals":population,"day":garden.wildlife.day(),"level":garden.experience.level()}

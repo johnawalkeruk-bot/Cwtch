@@ -44,7 +44,7 @@ var camera_pitch := PI / 4.0
 var aiming := false
 var aim_dot: Label
 
-var tool: int = Tool.HOE
+var tool: int = Tool.NONE
 var tool_wheel: Control
 var floating_tool: Node3D
 var watered_cells: Dictionary = {}

@@ -9,7 +9,7 @@ var pivot: Node3D
 var models: Array[Node3D]=[]
 var particles: CPUParticles3D
 var audio: AudioStreamPlayer3D
-var selected := 0
+var selected := 4
 var shovel_mode := 0
 var stroke_mode := 0
 var stroke_duration := 1.0
@@ -80,7 +80,7 @@ func setup(world: Node3D) -> void:
  audio.unit_size=3.0
  audio.max_distance=20.0
  add_child(audio)
- equip(0)
+ equip(selected)
 
 func cancel_use() -> void:
  busy=false

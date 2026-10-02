@@ -162,7 +162,7 @@ func restore(data: Dictionary) -> void:
 	place_near_player_one()
 	var point=data.get("position",[])
 	if point is Array and point.size()==2:player.restore_position(Vector3(float(point[0]),0,float(point[1])))
-	floating_tool.equip(clampi(int(data.get("tool",0)),0,4))
+	floating_tool.equip(4)
 	floating_tool.shovel_mode=clampi(int(data.get("mode",0)),0,3)
 	camera_yaw=float(data.get("yaw",0))
 	camera_pitch=clampf(float(data.get("pitch",PI/4)),deg_to_rad(-80),deg_to_rad(80))

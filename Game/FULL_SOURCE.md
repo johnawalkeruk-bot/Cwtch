@@ -1,5 +1,94 @@
 # CWTCH — full game source
 
+## account_panel.gd
+
+```gd
+extends PanelContainer
+var host: Node
+var account: Node
+var address: LineEdit
+var password: LineEdit
+var notice: Label
+var actions: Array[Button]=[]
+var upload: Button
+var download: Button
+var review: Button
+var signout: Button
+var confirmation: ConfirmationDialog
+var pending := ""
+func setup(owner_node: Node, client: Node) -> void:
+ host=owner_node
+ account=client
+ set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+ offset_left=-300;offset_right=300;offset_top=-290;offset_bottom=290
+ add_theme_stylebox_override("panel",preload("res://cwtch_theme.gd").panel(Color("182e28")))
+ var box := VBoxContainer.new()
+ box.add_theme_constant_override("separation",10)
+ add_child(box)
+ var title := Label.new()
+ title.text="YOUR VALLEY ACCOUNT"
+ title.add_theme_font_size_override("font_size",25)
+ box.add_child(title)
+ address=LineEdit.new();address.placeholder_text="Email address";box.add_child(address)
+ password=LineEdit.new();password.placeholder_text="Password";password.secret=true;box.add_child(password)
+ button(box,"SIGN IN",func(): authenticate(false))
+ button(box,"REGISTER",func(): authenticate(true))
+ button(box,"RESET PASSWORD",func(): account.reset_password(address.text))
+ notice=Label.new();notice.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART;notice.custom_minimum_size.y=75;box.add_child(notice)
+ upload=button(box,"USE THIS COMPUTER'S GARDEN",func(): ask("upload"))
+ download=button(box,"USE CLOUD GARDEN",func(): ask("download"))
+ review=button(box,"REVIEW CLOUD / RETRY",func(): account.inspect())
+ signout=button(box,"SIGN OUT",func(): account.logout())
+ button(box,"BACK",func():
+  hide();host.menu_buttons.show();host.heading.show();host._focus_menu())
+ confirmation=ConfirmationDialog.new()
+ add_child(confirmation)
+ confirmation.confirmed.connect(confirm)
+ account.changed.connect(refresh)
+ refresh()
+ hide()
+func button(box: Node, caption: String, action: Callable) -> Button:
+ var item := Button.new();item.text=caption;item.custom_minimum_size.y=34
+ item.pressed.connect(action);box.add_child(item);actions.append(item)
+ return item
+func authenticate(register: bool) -> void:
+ if not address.text.contains("@") or password.text.length()<8:
+  account.status="Enter your email and a password of at least eight characters."
+  refresh()
+  return
+ var secret := password.text
+ password.clear()
+ account.authenticate(address.text,secret,register)
+func refresh() -> void:
+ notice.text=account.status
+ if not account.email.is_empty():notice.text=account.email+"\n"+notice.text
+ if not account.remote.is_empty():
+  var payload: Dictionary=account.remote.get("payload",{})
+  notice.text+="\nCloud: %d coins · saved %s"%[int(payload.get("coins",0)),str(account.remote.get("updated_at","")).left(16)]
+ for action in actions:action.disabled=account.busy
+ var signed: bool=not account.token.is_empty()
+ address.visible=not signed
+ password.visible=not signed
+ for i in 3:actions[i].visible=not signed
+ upload.visible=signed;download.visible=signed;review.visible=signed;signout.visible=signed
+ upload.disabled=account.busy or account.revision<0 or not FileAccess.file_exists(host.SAVE_PATH)
+ download.disabled=account.busy or account.remote.is_empty()
+func ask(choice: String) -> void:
+ pending=choice
+ confirmation.dialog_text="Replace the cloud garden with this computer's garden?" if choice=="upload" else "Replace this computer's garden with the cloud garden? A local backup will be kept."
+ confirmation.popup_centered()
+func confirm() -> void:
+ if account.busy:return
+ if pending=="upload":
+  account.connected=false
+  if not host._save_garden():account.status="Local save failed. Nothing uploaded.";refresh();return
+  var data: Variant=JSON.parse_string(FileAccess.get_file_as_string(host.SAVE_PATH))
+  if not preload("res://cloud_save_validator.gd").valid(data):account.status="This save cannot be synced safely.";refresh();return
+  account.sync(data,true)
+ else:host.use_cloud_garden(account.remote.get("payload",{}))
+
+```
+
 ## angus_npc.gd
 
 ```gd
@@ -730,6 +819,237 @@ func advance(delta: float) -> void:
 
 ```
 
+## cloud_account.gd
+
+```gd
+extends Node
+## Tokens live in memory only. First sync is always an explicit local/cloud choice.
+signal changed
+const Config = preload("res://cloud_config.gd")
+var token := ""
+var refresh_token := ""
+var email := ""
+var expires := 0.0
+var revision := -1
+var connected := false
+var busy := false
+var status := "Play offline, or sign in to keep a garden in the cloud."
+var remote: Dictionary = {}
+var queued: Dictionary = {}
+
+func _request(path: String, method: int, body: Dictionary={}, authorized: bool=false) -> Dictionary:
+ var http := HTTPRequest.new()
+ http.timeout=15
+ http.body_size_limit=4000000
+ add_child(http)
+ var headers := PackedStringArray(["apikey: "+Config.KEY,"Content-Type: application/json"])
+ if authorized:headers.append("Authorization: Bearer "+token)
+ var err := http.request(Config.URL+path,headers,method,JSON.stringify(body) if method!=HTTPClient.METHOD_GET else "")
+ if err!=OK:
+  http.queue_free()
+  return {"ok":false,"error":"Could not connect. Your local garden is safe."}
+ var reply: Array=await http.request_completed
+ http.queue_free()
+ var parsed: Variant=JSON.parse_string(reply[3].get_string_from_utf8())
+ var code: int=reply[1]
+ if reply[0]!=HTTPRequest.RESULT_SUCCESS:return {"ok":false,"error":"Connection interrupted. Your local garden is safe."}
+ if code<200 or code>=300:
+  var message := "Cloud service unavailable (%d)."%code
+  if parsed is Dictionary:message=str(parsed.get("msg",parsed.get("message",parsed.get("error_description",message))))
+  return {"ok":false,"error":message,"code":code}
+ return {"ok":true,"data":parsed}
+
+func _session(data: Dictionary) -> void:
+ token=str(data.get("access_token",""))
+ refresh_token=str(data.get("refresh_token",""))
+ expires=Time.get_unix_time_from_system()+float(data.get("expires_in",3600))-60
+ email=str(data.get("user",{}).get("email",""))
+
+func _refresh() -> bool:
+ if token.is_empty():return false
+ if Time.get_unix_time_from_system()<expires:return true
+ var result := await _request("/auth/v1/token?grant_type=refresh_token",HTTPClient.METHOD_POST,{"refresh_token":refresh_token})
+ if result.ok:
+  _session(result.data)
+  return true
+ status="Session expired. Sign in again. Your local save is safe."
+ connected=false
+ return false
+
+func authenticate(address: String, password: String, register: bool) -> void:
+ if busy:return
+ busy=true
+ token=""
+ refresh_token=""
+ email=""
+ connected=false
+ queued={}
+ status="Creating account…" if register else "Signing in…"
+ changed.emit()
+ var endpoint := "/auth/v1/signup?redirect_to="+Config.RETURN_URL.uri_encode() if register else "/auth/v1/token?grant_type=password"
+ var result := await _request(endpoint,HTTPClient.METHOD_POST,{"email":address.strip_edges(),"password":password})
+ connected=false
+ revision=-1
+ remote={}
+ if not result.ok:status=result.error
+ elif result.data is Dictionary and result.data.has("access_token"):
+  _session(result.data)
+  await _inspect()
+ else:status="Check your email to confirm your account, then sign in."
+ busy=false
+ changed.emit()
+
+func _inspect() -> void:
+ revision=-1
+ remote={}
+ if not await _refresh():return
+ var result := await _request("/rest/v1/cwtch_saves?select=payload,revision,updated_at",HTTPClient.METHOD_GET,{},true)
+ if not result.ok:status=result.error;return
+ remote={}
+ revision=0
+ if result.data is Array and not result.data.is_empty():
+  remote=result.data[0]
+  revision=int(remote.revision)
+ status="Choose which garden to keep. Cloud revision: %d."%revision if revision>0 else "No cloud garden yet. Upload your local garden to begin syncing."
+
+func inspect() -> void:
+ if busy:return
+ busy=true
+ connected=false
+ queued={}
+ await _inspect()
+ busy=false
+ changed.emit()
+
+func sync(data: Dictionary, explicit: bool=false) -> void:
+ if token.is_empty() or (not connected and not explicit):return
+ if busy:
+  if connected:queued=data.duplicate(true)
+  return
+ if revision<0:return
+ busy=true
+ status="Syncing garden…"
+ changed.emit()
+ if not await _refresh():
+  busy=false
+  changed.emit()
+  return
+ var result := await _request("/rest/v1/rpc/cwtch_put_save",HTTPClient.METHOD_POST,{"expected_revision":revision,"garden":data},true)
+ if result.ok:
+  revision=int(result.data.revision)
+  connected=true
+  remote={"payload":data.duplicate(true),"revision":revision,"updated_at":result.data.get("updated_at","")}
+  status="Garden synced · revision %d"%revision
+ else:
+  status=result.error+" Local save kept. Review cloud to retry."
+  connected=false
+  queued={}
+ busy=false
+ changed.emit()
+ if connected and not queued.is_empty():
+  var next := queued
+  queued={}
+  sync(next)
+
+func logout() -> void:
+ if busy:return
+ busy=true
+ changed.emit()
+ if not token.is_empty():await _request("/auth/v1/logout?scope=local",HTTPClient.METHOD_POST,{},true)
+ token=""
+ refresh_token=""
+ email=""
+ remote={}
+ queued={}
+ revision=-1
+ connected=false
+ busy=false
+ status="Signed out. Your garden remains on this computer."
+ changed.emit()
+
+func reset_password(address: String) -> void:
+ if busy:return
+ busy=true
+ changed.emit()
+ var result := await _request("/auth/v1/recover?redirect_to="+Config.RETURN_URL.uri_encode(),HTTPClient.METHOD_POST,{"email":address.strip_edges()})
+ status="If that account exists, check your email for a reset link." if result.ok else result.error
+ busy=false
+ changed.emit()
+
+```
+
+## cloud_config.gd
+
+```gd
+extends RefCounted
+# Public client settings only. Never put a secret/service-role key here.
+const URL := "https://ruyertoyvplpmzqflwdy.supabase.co"
+const KEY := "sb_publishable_lz0U-NlA_v5tNIxHCJUobg_yNoUw65c"
+const RETURN_URL := "https://johnawalkeruk-bot.github.io/Cwtch/club.html"
+
+```
+
+## cloud_save_validator.gd
+
+```gd
+extends RefCounted
+## Reject malformed network data before the existing local restore routines see it.
+static func valid(data: Variant) -> bool:
+ if not data is Dictionary or data.get("version") != 1:return false
+ if not data.get("terrain") is Array or data.terrain.size()!=1296:return false
+ for tile in data.terrain:
+  if not number(tile) or tile!=int(tile) or tile<0 or tile>7:return false
+ if not pair(data.get("player")):return false
+ var schema := {
+  "version":0,"terrain":[0],"player":[0],"player_position":[0],
+  "coins":0,"elapsed":0,"harvested":0,"weather":0,"weather_elapsed":0,"wetness":0,
+  "crops":[{"x":0,"z":0,"age":0,"watered":false}],"watered":[[0]],
+  "purchases":[{"id":"","x":0,"z":0}],
+  "experience":{"total":0,"day":0,"worked":{}},
+  "weather_pattern":{"index":0,"duration":0,"rng":""},
+  "local_coop":{"position":[0],"tool":0,"mode":0,"yaw":0,"pitch":0},
+  "deformation":{"profile_version":0,"samples":[0],"heights":[[0]],"seed_holes":[[0]]},
+  "wildlife":{"records":{},"life_events":[{"kind":"","species":"","individual_id":"","day":0}],"wild_hedgehog_enabled":false,"patrol_corner":0,"robin_patrol_corner":0,"hedgehog_position":[0],"robin_position":[0]},
+  "hedgehog_intro":{},"summary":{}
+ }
+ if not shape(data,schema):return false
+ for crop in data.get("crops",[]):
+  if not crop.has_all(["x","z","age","watered"]):return false
+ for wet in data.get("watered",[]):
+  if wet.size()!=3:return false
+ for record in data.get("purchases",[]):
+  if not record.has_all(["id","x","z"]):return false
+ var wildlife: Dictionary=data.get("wildlife",{})
+ for entry in wildlife.get("records",{}).values():
+  if not entry is Dictionary or not number(entry.get("visit_day",0)) or not number(entry.get("resident_day",0)):return false
+ for point in [data.get("player_position",[0,0]),data.get("local_coop",{}).get("position",[0,0]),wildlife.get("hedgehog_position",[0,0]),wildlife.get("robin_position",[0,0])]:
+  if not pair(point):return false
+ return true
+
+static func number(value: Variant) -> bool:
+ return (value is int or value is float) and is_finite(float(value)) and absf(float(value))<1e12
+
+static func pair(value: Variant) -> bool:
+ return value is Array and value.size()==2 and number(value[0]) and number(value[1])
+
+static func shape(value: Variant, model: Variant, depth: int=0) -> bool:
+ if depth>12:return false
+ if model is Dictionary:
+  if not value is Dictionary:return false
+  for key in model:
+   if value.has(key) and not shape(value[key],model[key],depth+1):return false
+  return true
+ if model is Array:
+  if not value is Array or value.size()>50000:return false
+  for item in value:
+   if not shape(item,model[0],depth+1):return false
+  return true
+ if model is String:return value is String and value.length()<1024
+ if model is bool:return value is bool
+ return number(value)
+
+```
+
 ## controller_icons.gd
 
 ```gd
@@ -1018,7 +1338,7 @@ func restore(data: Dictionary) -> void:
 	place_near_player_one()
 	var point=data.get("position",[])
 	if point is Array and point.size()==2:player.restore_position(Vector3(float(point[0]),0,float(point[1])))
-	floating_tool.equip(clampi(int(data.get("tool",0)),0,4))
+	floating_tool.equip(4)
 	floating_tool.shovel_mode=clampi(int(data.get("mode",0)),0,3)
 	camera_yaw=float(data.get("yaw",0))
 	camera_pitch=clampf(float(data.get("pitch",PI/4)),deg_to_rad(-80),deg_to_rad(80))
@@ -1931,7 +2251,7 @@ var pivot: Node3D
 var models: Array[Node3D]=[]
 var particles: CPUParticles3D
 var audio: AudioStreamPlayer3D
-var selected := 0
+var selected := 4
 var shovel_mode := 0
 var stroke_mode := 0
 var stroke_duration := 1.0
@@ -2002,7 +2322,7 @@ func setup(world: Node3D) -> void:
  audio.unit_size=3.0
  audio.max_distance=20.0
  add_child(audio)
- equip(0)
+ equip(selected)
 
 func cancel_use() -> void:
  busy=false
@@ -2152,7 +2472,7 @@ var camera_pitch := PI / 4.0
 var aiming := false
 var aim_dot: Label
 
-var tool: int = Tool.HOE
+var tool: int = Tool.NONE
 var tool_wheel: Control
 var floating_tool: Node3D
 var watered_cells: Dictionary = {}
@@ -4962,6 +5282,10 @@ var loading_label: Label
 var new_dialog: ConfirmationDialog
 var rng := RandomNumberGenerator.new()
 var weather_override := -1
+var cloud: Node
+var account_panel: PanelContainer
+var autosave_age := 0.0
+var quitting := false
 
 func _ready() -> void:
 	get_tree().root.theme = preload("res://cwtch_theme.gd").make()
@@ -4970,6 +5294,8 @@ func _ready() -> void:
 	stage = Node3D.new()
 	add_child(stage)
 	_build_landscape()
+	cloud=preload("res://cloud_account.gd").new()
+	add_child(cloud)
 	_build_ui()
 	ControllerInput.mode_changed.connect(_focus_menu)
 	ambience = Ambience.new()
@@ -5092,12 +5418,16 @@ func _build_ui() -> void:
 	menu_buttons.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
 	menu_buttons.offset_left = -180
 	menu_buttons.offset_right = 180
-	menu_buttons.offset_top = -285
+	menu_buttons.offset_top = -330
 	menu_buttons.offset_bottom = -24
 	_button("enter garden",func(): _begin_garden(false),menu_buttons)
 	_button("new garden",_request_new,menu_buttons)
 	_button("options",func(): options.show(); menu_buttons.hide(); heading.hide(); ControllerInput.focus_first.call_deferred(options),menu_buttons)
+	_button("ACCOUNT & CLOUD",_open_account,menu_buttons)
 	_button("QUIT GAME",save_and_quit,menu_buttons)
+	account_panel=preload("res://account_panel.gd").new()
+	root.add_child(account_panel)
+	account_panel.setup(self,cloud)
 	weather_label = _label("",14,Color("e5c17c"))
 	root.add_child(weather_label)
 	weather_label.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT)
@@ -5152,6 +5482,10 @@ func _build_ui() -> void:
 	options.hide()
 
 func _process(delta: float) -> void:
+	autosave_age+=delta
+	if autosave_age>=60.0 and is_instance_valid(garden):
+		autosave_age=0.0
+		_save_garden()
 	if not menu_active:
 		return
 	elapsed += delta
@@ -5279,11 +5613,17 @@ func _save_garden() -> bool:
 		"player":[garden.player.cell.x,garden.player.cell.y],"player_position":[garden.player.position.x,garden.player.position.z],"elapsed":garden.valley_cycle.elapsed,
 		"weather_pattern":garden.valley_cycle.weather_pattern.save_data(),"weather":garden.valley_cycle.weather_index,"weather_elapsed":garden.valley_cycle.weather_elapsed,
 		"experience":garden.experience.save_data(),"local_coop":garden.local_coop.second.save_data(),"deformation":garden.heightfield.save_deformation(),"wildlife":garden.wildlife.save_data(),"hedgehog_intro":garden.hedgehog_intro.save_data(),"wetness":garden.valley_cycle.wetness,"watered":_saved_watered(),"coins":coins,"purchases":purchases}
-	var file := FileAccess.open(SAVE_PATH,FileAccess.WRITE)
+	data["summary"]=_cloud_summary()
+	var file := FileAccess.open(SAVE_PATH+".tmp",FileAccess.WRITE)
 	if not file: return false
 	file.store_string(JSON.stringify(data))
 	file.flush()
-	return file.get_error()==OK
+	var success := file.get_error()==OK
+	file.close()
+	if not success:return false
+	if DirAccess.rename_absolute(ProjectSettings.globalize_path(SAVE_PATH+".tmp"),ProjectSettings.globalize_path(SAVE_PATH))!=OK:return false
+	cloud.sync(data)
+	return true
 
 func _saved_watered() -> Array:
 	var values := []
@@ -5362,7 +5702,7 @@ func _notification(what: int) -> void:
 
 func _focus_menu() -> void:
 	if menu_active:
-		ControllerInput.focus_first.call_deferred(options if options.visible else menu_buttons)
+		ControllerInput.focus_first.call_deferred(account_panel if account_panel.visible else (options if options.visible else menu_buttons))
 
 func _close_options() -> void:
 	options.hide()
@@ -5371,17 +5711,29 @@ func _close_options() -> void:
 	_focus_menu()
 
 func _unhandled_input(event: InputEvent) -> void:
+	if menu_active and event.is_action_pressed("ui_cancel") and account_panel.visible and not cloud.busy:
+		account_panel.hide()
+		menu_buttons.show()
+		heading.show()
+		_focus_menu()
+		get_viewport().set_input_as_handled()
+		return
 	if menu_active and event.is_action_pressed("ui_cancel") and options.visible:
 		_close_options()
 		get_viewport().set_input_as_handled()
 
 func save_and_quit() -> void:
+	if quitting:return
 	if not _save_garden():
 		if is_instance_valid(garden):
 			garden.message="Could not save your garden. Please try again."
 			garden._refresh_ui()
 		else: loading_label.text="COULD NOT SAVE. PLEASE TRY AGAIN."
 		return
+	quitting=true
+	var deadline := Time.get_ticks_msec()+18000
+	while cloud.busy and Time.get_ticks_msec()<deadline:
+		await get_tree().process_frame
 	get_tree().quit()
 
 func open_village() -> void:
@@ -5428,6 +5780,43 @@ func purchase_village_item(id: String) -> String:
 	preload("res://village_stock.gd").deliver(garden,record)
 	_save_garden()
 	return "%s delivered to your garden.\n%d coins remaining."%[item.name,coins]
+
+func _open_account() -> void:
+	menu_buttons.hide()
+	heading.hide()
+	account_panel.show()
+	account_panel.refresh()
+	ControllerInput.focus_first.call_deferred(account_panel)
+func use_cloud_garden(data: Variant) -> void:
+	if not preload("res://cloud_save_validator.gd").valid(data):
+		cloud.status="Cloud save is incompatible or damaged. Local garden unchanged."
+		cloud.changed.emit()
+		return
+	if FileAccess.file_exists(SAVE_PATH):
+		var backup := SAVE_PATH+".before-cloud-"+str(Time.get_ticks_usec())+".json"
+		if DirAccess.copy_absolute(ProjectSettings.globalize_path(SAVE_PATH),ProjectSettings.globalize_path(backup))!=OK:
+			cloud.status="Could not make a backup. Local garden unchanged."
+			cloud.changed.emit()
+			return
+	var file := FileAccess.open(SAVE_PATH+".tmp",FileAccess.WRITE)
+	if not file:cloud.status="Could not write cloud garden.";cloud.changed.emit();return
+	file.store_string(JSON.stringify(data));file.flush()
+	var success := file.get_error()==OK
+	file.close()
+	if not success or DirAccess.rename_absolute(ProjectSettings.globalize_path(SAVE_PATH+".tmp"),ProjectSettings.globalize_path(SAVE_PATH))!=OK:
+		cloud.status="Could not replace local save.";cloud.changed.emit();return
+	if is_instance_valid(garden):garden.free();garden=null
+	cloud.connected=true
+	cloud.status="Cloud garden ready. Choose ENTER GARDEN. Previous local save backed up."
+	cloud.changed.emit()
+func _cloud_summary() -> Dictionary:
+	var population := 0
+	for actor in garden.get_children():
+		if actor is Node3D and actor.visible and actor.has_meta("animal_id"):
+			if actor==garden.wildlife.hedgehog and actor.visit_state!="inside":continue
+			if actor==garden.wildlife.robin and not garden.wildlife.records.has("robin"):continue
+			population+=1
+	return {"animals":population,"day":garden.wildlife.day(),"level":garden.experience.level()}
 
 ```
 
@@ -6165,7 +6554,7 @@ func _model(path: String,label: String,at: Vector3,height: float) -> Node3D:
 
 func _build_vignettes() -> void:
  crossing=_model("res://assets/arrival/rabbit.glb","ArrivalRabbit",point(-40,-4),0.48)
- crossing.rotation.y=PI/2
+ crossing.rotation.y=-PI/2
  bird=Node3D.new()
  bird.name="ArrivalRobin"
  add_child(bird)

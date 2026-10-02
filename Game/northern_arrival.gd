@@ -117,7 +117,7 @@ func _model(path: String,label: String,at: Vector3,height: float) -> Node3D:
 
 func _build_vignettes() -> void:
  crossing=_model("res://assets/arrival/rabbit.glb","ArrivalRabbit",point(-40,-4),0.48)
- crossing.rotation.y=PI/2
+ crossing.rotation.y=-PI/2
  bird=Node3D.new()
  bird.name="ArrivalRobin"
  add_child(bird)

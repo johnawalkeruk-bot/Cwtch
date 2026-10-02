@@ -1,5 +1,50 @@
 [
   {
+    "version": "0.1.21",
+    "date": "2026-10-02",
+    "title": "A home for your garden, wherever you play",
+    "author": "Waldas Gamer Studios",
+    "sections": [
+      {
+        "heading": "Garden fixes",
+        "items": [
+          "Both players begin with no tool equipped.",
+          "Turned the arrival rabbit to face its direction of travel."
+        ]
+      },
+      {
+        "heading": "Accounts and cloud-save integration",
+        "items": [
+          "Added an Account & Cloud screen with email registration, sign-in, password-reset requests and sign-out.",
+          "Added explicit local/cloud garden selection, automatic syncing after local saves, revision-conflict protection and local backups before cloud downloads. Offline play remains available.",
+          "Added a private Your Valley website dashboard showing uploaded coins, animal population, XP, land coverage and wildlife visit/residency dates.",
+          "Supabase database setup is installed and signed-out access is denied. Redirect URLs are configured; public account launch still needs email delivery, live authenticated acceptance checks and manual publication."
+        ]
+      }
+    ],
+    "intro": "The rabbit has stopped attempting a moonwalk, and your spirit now arrives without immediately brandishing a hoe. Meanwhile, the valley is getting cloud saves. These clouds have considerably better filing cabinets than the ones Arthur complains about.",
+    "why": [
+      "Starting with empty hands gives the first arrival room to breathe. The rabbit correction makes its little crossing read as an actual journey rather than a disagreement with physics.",
+      "The new account screen and private Valley Club dashboard let one garden follow its owner across devices. Coins, wildlife and progress belong together; nobody should need a spreadsheet to remember which hedgehog moved in.",
+      "Choosing a local or cloud garden is deliberate, and older uploads cannot silently overwrite newer ones. A backup stays on the computer before a cloud download replaces its local save."
+    ],
+    "issues": [
+      "The development integration is ready for account testing, but the website and game have not been published. Redirect URLs are configured; a working confirmation and recovery email sender is still required before public registration.",
+      "Live checks confirmed that signed-out access is denied. Game save/restore and mocked account/dashboard tests passed; two-account authenticated database and real email delivery tests remain pending.",
+      "Sign-in is session-only for now. The dashboard shows the last uploaded snapshot, and cloud conflicts pause syncing until the player chooses how to resolve them."
+    ],
+    "screenshots": [
+      {
+        "path": "assets/blog/valley-account-game.png",
+        "caption": "Development build: the new Account & Cloud screen."
+      },
+      {
+        "path": "assets/blog/valley-club-signin.png",
+        "caption": "Local website preview: the private Valley Club sign-in page, before any garden is uploaded."
+      }
+    ]
+  },
+  {
     "version": "0.1.20",
     "date": "2026-10-02",
     "title": "Familiar faces at the garden gate",
