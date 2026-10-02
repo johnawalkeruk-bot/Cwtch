@@ -13,7 +13,7 @@ async function request(path,body,method='POST',auth=false){
  return data;
 }
 async function run(action){if(busy)return;setBusy(true);try{await action();}catch(e){status(e.message||'Could not connect. Please try again.');}finally{setBusy(false);}}
-function enter(data){session={...data,expiry:Date.now()+(data.expires_in||3600)*1000-60000};$('login').hidden=true;$('recovery').hidden=true;$('session').hidden=false;$('identity').textContent=profile?.username||data.user?.email||'Signed in';$('account-title').textContent='Back in the valley.';}
+function enter(data){session={...data,expiry:Date.now()+(data.expires_in||3600)*1000-60000};$('login').hidden=true;$('registration').hidden=true;$('auth-switch').hidden=true;$('recovery').hidden=true;$('session').hidden=false;$('identity').textContent=profile?.username||data.user?.email||'Signed in';$('account-title').textContent='Back in the valley.';}
 async function fresh(){if(Date.now()<session.expiry)return;enter(await request('/auth/v1/token?grant_type=refresh_token',{refresh_token:session.refresh_token}));}
 function render(row){
  ownGarden=row;
@@ -31,13 +31,37 @@ function render(row){
  if(!$('visitors').children.length){const li=document.createElement('li');li.textContent='No visitors recorded yet. Every garden starts somewhere.';$('visitors').append(li);}
  status('Your private garden snapshot is up to date.');
 }
-async function load(){await fresh();render((await request('/rest/v1/cwtch_saves?select=payload,revision,updated_at',{},'GET',true))[0]);await loadProfile();}
-$('login').addEventListener('submit',event=>{event.preventDefault();const password=$('password').value;$('password').value='';run(async()=>{enter(await request('/auth/v1/token?grant_type=password',{email:$('email').value.trim(),password}));await load();});});
-$('register').onclick=()=>{if(!$('login').reportValidity())return;const password=$('password').value;$('password').value='';run(async()=>{const username=$('username').value.trim();if(!/^[A-Za-z0-9_]{3,20}$/.test(username))throw new Error('Choose a username with 3–20 letters, numbers or underscores.');if(!await request('/rest/v1/rpc/cwtch_username_available',{candidate:username}))throw new Error('That username is taken. Try another.');const data=await request('/auth/v1/signup?redirect_to='+encodeURIComponent(config.redirect),{email:$('email').value.trim(),password,data:{username}});if(data.access_token){enter(data);await load();}else status('Check your email to confirm your account, then sign in.');});};
+async function load(){
+ await fresh();const failures=[];
+ try{render((await request('/rest/v1/cwtch_saves?select=payload,revision,updated_at',{},'GET',true))[0]);}
+ catch(e){failures.push('Garden: '+e.message);}
+ try{await loadProfile();}catch(e){failures.push('Profile: '+e.message);}
+ if(failures.length)status('You are signed in. Some details could not load. '+failures.join(' ')+' Use Refresh garden to retry.');
+}
+$('login').addEventListener('submit',event=>{event.preventDefault();const password=$('password').value;$('password').value='';run(async()=>{status('Signing in…');enter(await request('/auth/v1/token?grant_type=password',{email:$('email').value.trim(),password}));await load();});});
+function showAuth(register=false){
+ $('login').hidden=register;$('registration').hidden=!register;$('auth-switch').hidden=false;
+ $('show-login').setAttribute('aria-pressed',String(!register));$('show-register').setAttribute('aria-pressed',String(register));
+ $('account-title').textContent=register?'Make yourself at home.':'Welcome back.';
+ $('password').value='';$('register-password').value='';
+ status(register?'Choose a unique username to join the Valley Club.':'Sign in with the email and password you use in the game.');
+ (register?$('username'):$('email')).focus();
+}
+$('show-login').onclick=()=>showAuth(false);$('show-register').onclick=()=>showAuth(true);
+$('registration').addEventListener('submit',event=>{event.preventDefault();const password=$('register-password').value;$('register-password').value='';run(async()=>{
+ status('Creating your account…');
+ const username=$('username').value.trim(),email=$('register-email').value.trim();
+ if(!/^[A-Za-z0-9_]{3,20}$/.test(username))throw new Error('Choose a username with 3–20 letters, numbers or underscores.');
+ if(!await request('/rest/v1/rpc/cwtch_username_available',{candidate:username}))throw new Error('That username is taken. Try another.');
+ const data=await request('/auth/v1/signup?redirect_to='+encodeURIComponent(config.redirect),{email,password,data:{username}});
+ if(data.access_token){enter(data);await load();}else{$('email').value=email;showAuth(false);status('Check your email to confirm your account, then sign in here.');}
+});});
 $('reset').onclick=()=>{if(!$('email').reportValidity())return;run(async()=>{await request('/auth/v1/recover?redirect_to='+encodeURIComponent(config.redirect),{email:$('email').value.trim()});status('If that account exists, a password reset email is on its way.');});};
 $('refresh').onclick=()=>run(load);
-$('logout').onclick=()=>run(async()=>{try{await request('/auth/v1/logout?scope=local',{},'POST',true);}finally{session=null;profile=null;ownGarden=null;$('social').hidden=true;$('comparison').hidden=true;$('search-results').replaceChildren();$('friends').replaceChildren();$('portrait').hidden=true;$('session').hidden=true;$('login').hidden=false;$('dashboard').hidden=true;$('empty').hidden=false;$('stamp').textContent='Signed out';$('account-title').textContent='Welcome home.';status('Signed out on this page.');}});
+$('logout').onclick=()=>run(async()=>{try{await request('/auth/v1/logout?scope=local',{},'POST',true);}finally{session=null;profile=null;ownGarden=null;$('social').hidden=true;$('comparison').hidden=true;$('search-results').replaceChildren();$('friends').replaceChildren();$('portrait').hidden=true;$('session').hidden=true;showAuth(false);$('dashboard').hidden=true;$('empty').hidden=false;$('stamp').textContent='Signed out';$('account-title').textContent='Welcome home.';status('Signed out on this page.');}});
 $('recovery').addEventListener('submit',event=>{event.preventDefault();const password=$('new-password').value;$('new-password').value='';run(async()=>{await request('/auth/v1/user',{password},'PUT',true);$('recovery').hidden=true;$('session').hidden=false;status('Password updated. You can now sign in to CWTCH.');});});
+setBusy(false);
+status('Sign in with the email and password you use in the game.');
 const hash=new URLSearchParams(location.hash.slice(1));
 if(location.hash)history.replaceState(null,'',location.pathname+location.search);
 if(hash.get('access_token')){
