@@ -29,6 +29,16 @@ func run():
  a.replies=[{'ok':false,'code':400,'error':'Invalid login'}]
  await a.authenticate('fixture@example.invalid','not-a-real-password',false)
  assert(a.token.is_empty() and a.email.is_empty())
+ a.replies=[{'ok':true,'data':false}]
+ await a.authenticate('fixture@example.invalid','not-a-real-password',true,'Taken')
+ assert(a.token.is_empty() and not a.busy and a.status.contains('available'))
+ a.replies=[{'ok':true,'data':true},{'ok':true,'data':{}}]
+ await a.authenticate('fixture@example.invalid','not-a-real-password',true,'Gardener')
+ assert(a.calls[-1].body.data.username=='Gardener','Registration sends username')
+ a.token='fake';a.expires=Time.get_unix_time_from_system()+600
+ a.replies=[{'ok':true,'data':{'username':'Gardener','avatar_svg':'<svg/>'}}]
+ await a.claim_username('Gardener')
+ assert(a.profile.username=='Gardener' and not a.busy)
  a.queue_free()
  print('CLOUD_STATE_PASS: first-sync choice, revisions, conflict pause, failed review, account switch')
  await process_frame

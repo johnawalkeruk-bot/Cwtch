@@ -1,5 +1,57 @@
 [
   {
+    "version": "0.1.25",
+    "date": "2026-10-02",
+    "title": "Good neighbours, little portraits and a proper pause",
+    "author": "Waldas Game Studios",
+    "sections": [
+      {
+        "heading": "Your Valley Club identity",
+        "items": [
+          "New accounts choose a unique username; existing players can claim one while keeping their garden.",
+          "Every profile receives a generated valley portrait, stored with the account and shown on the website."
+        ]
+      },
+      {
+        "heading": "Neighbours and garden notebooks",
+        "items": [
+          "Search usernames, send and accept friend requests, decline or cancel invitations, and remove friends.",
+          "Compare accepted friends’ latest uploaded gardens across money, experience, wildlife, gardening, land coverage and more. Full saves remain private.",
+          "Open your own garden notebook for all recorded statistics."
+        ]
+      },
+      {
+        "heading": "A quieter pause",
+        "items": [
+          "Pause and Look plays softly when the garden or village is paused; regular music resumes when play continues."
+        ]
+      },
+      {
+        "heading": "Service setup",
+        "items": [
+          "Requires the new Valley Club Supabase migration and the matching game and website. Existing saves remain compatible."
+        ]
+      }
+    ],
+    "intro": "The valley has acquired neighbours. Naturally, we gave everyone a tiny mountain portrait and the ability to discover whose garden contains the most suspiciously deliberate hard dirt.",
+    "why": [
+      "Unique usernames make gardeners easier to find than email addresses. Automatic portraits give each account an identity without another upload form.",
+      "Mutual requests keep comparisons between willing neighbours. A notebook collects the numbers without turning the front page into an agricultural tax return.",
+      "Pause and Look gives a pause its own soundtrack. The hoe can wait."
+    ],
+    "issues": [
+      "The Supabase migration has been applied. Live checks confirm username validation works and signed-out callers cannot read profiles, friendships or the directory. Authenticated signup and friendship flows were tested locally with isolated data; no live accounts were created.",
+      "Comparisons reflect uploaded saves and are not cheat-proof rankings. Missing measurements appear as unavailable.",
+      "Usernames are permanent in this version. Existing players need to claim one; old game clients must update before registering."
+    ],
+    "screenshots": [
+      {
+        "path": "assets/blog/valley-club-neighbours.png",
+        "caption": "Local website preview with test accounts: generated portraits, friends and garden comparisons."
+      }
+    ]
+  },
+  {
     "version": "0.1.24",
     "date": "2026-10-02",
     "title": "A soundtrack for the valley, and a save that travels",

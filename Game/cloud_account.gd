@@ -10,6 +10,7 @@ var revision := -1
 var connected := false
 var busy := false
 var status := "Play offline, or sign in to keep a garden in the cloud."
+var profile: Dictionary = {}
 var remote: Dictionary = {}
 var queued: Dictionary = {}
 
@@ -52,18 +53,31 @@ func _refresh() -> bool:
  connected=false
  return false
 
-func authenticate(address: String, password: String, register: bool) -> void:
+func authenticate(address: String, password: String, register: bool, username: String="") -> void:
  if busy:return
  busy=true
  token=""
  refresh_token=""
  email=""
+ profile={}
+ remote={}
+ revision=-1
  connected=false
  queued={}
  status="Creating account…" if register else "Signing in…"
  changed.emit()
  var endpoint := "/auth/v1/signup?redirect_to="+Config.RETURN_URL.uri_encode() if register else "/auth/v1/token?grant_type=password"
- var result := await _request(endpoint,HTTPClient.METHOD_POST,{"email":address.strip_edges(),"password":password})
+ var body := {"email":address.strip_edges(),"password":password}
+ if register:
+  username=username.strip_edges()
+  var available := await _request("/rest/v1/rpc/cwtch_username_available",HTTPClient.METHOD_POST,{"candidate":username})
+  if not available.ok or available.data!=true:
+   status="Choose an available username: 3–20 letters, numbers or underscores." if available.ok else available.error
+   busy=false
+   changed.emit()
+   return
+  body["data"]={"username":username}
+ var result := await _request(endpoint,HTTPClient.METHOD_POST,body)
  connected=false
  revision=-1
  remote={}
@@ -71,6 +85,7 @@ func authenticate(address: String, password: String, register: bool) -> void:
  elif result.data is Dictionary and result.data.has("access_token"):
   _session(result.data)
   await _inspect()
+  await load_profile()
  else:status="Check your email to confirm your account, then sign in."
  busy=false
  changed.emit()
@@ -139,6 +154,7 @@ func logout() -> void:
  token=""
  refresh_token=""
  email=""
+ profile={}
  remote={}
  queued={}
  revision=-1
@@ -153,5 +169,23 @@ func reset_password(address: String) -> void:
  changed.emit()
  var result := await _request("/auth/v1/recover?redirect_to="+Config.RETURN_URL.uri_encode(),HTTPClient.METHOD_POST,{"email":address.strip_edges()})
  status="If that account exists, check your email for a reset link." if result.ok else result.error
+ busy=false
+ changed.emit()
+
+func load_profile() -> void:
+ var result := await _request("/rest/v1/rpc/cwtch_my_profile",HTTPClient.METHOD_POST,{},true)
+ profile=result.data if result.ok and result.data is Dictionary else {}
+ if profile.is_empty():status+=" Choose a username to join the Valley Club."
+
+func claim_username(candidate: String) -> void:
+ if busy or token.is_empty():return
+ busy=true
+ changed.emit()
+ if await _refresh():
+  var result := await _request("/rest/v1/rpc/cwtch_claim_username",HTTPClient.METHOD_POST,{"candidate":candidate.strip_edges()},true)
+  if result.ok:
+   profile=result.data
+   status="Welcome to the Valley Club, "+str(profile.username)+"."
+  else:status=result.error
  busy=false
  changed.emit()

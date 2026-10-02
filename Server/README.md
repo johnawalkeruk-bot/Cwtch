@@ -38,3 +38,18 @@ Game/runtime/Godot_v4.6.2-stable_win64_console.exe --headless --path Game --scri
 ```
 
 The first test creates and replaces a disposable local garden and checks live anonymous denial. The second uses fake server replies to check first-sync selection, conflict pausing and failed account switches. Website test: `node DevTools/tests/test_club.cjs` with Playwright available (or CWTCH_PLAYWRIGHT set to its module path); it uses an isolated headless Edge profile and mocked auth/stats responses. It does not sign up a real user.
+
+
+## Valley Club profiles and friends
+
+Apply `supabase/migrations/202610020002_valley_club.sql` once in the project's SQL Editor, after migration 001. Deploy the matching game and website together when publishing manually. New registrations now require a username; older clients can still sign in and sync existing saves, but must update before registering.
+
+Names contain 3–20 ASCII letters, digits or underscores. A case-insensitive unique database index is authoritative, including concurrent registrations. The signup trigger atomically reserves the name and stores a generated SVG valley portrait against the account ID. Portraits are procedural vector artwork with no external image service. Existing accounts keep their saves and claim a username in Account & Cloud or on the website. Names are permanent in this version.
+
+Signed-in players can search username prefixes (minimum three characters, up to 20 results). Friendships require recipient acceptance. Either player can remove a friendship; senders can cancel requests and recipients can decline them. Accepting shares a filtered snapshot of garden metrics. Full saves and email addresses remain private. Direct profile/friend table access is revoked; authenticated functions enforce access. Removal prevents subsequent comparisons, but cannot retract information already seen.
+
+Comparisons include coins, XP/level, population, discovered/resident species and visit dates, recorded births/deaths, gardening actions today, crops, harvests, purchases, watered tiles, active simulation minutes, weather/wetness and eight terrain types by percentage, tile count and square metres. The garden is currently 576 m². These are self-reported snapshots, not anti-cheat rankings. Blank metrics mean unavailable data.
+
+Local regression checks: `DevTools/tests/check_social.mjs` runs both migrations in isolated PGlite PostgreSQL and verifies registration, uniqueness, existing accounts, privacy and request/accept/remove. Its optional test runtime is `.local/pglite/package` (npm `@electric-sql/pglite`, tested at 0.5.8); never ship it. `DevTools/tests/check_club_social.cjs` tests mocked accounts in isolated Edge and takes screenshots. No live user is created.
+
+References: https://supabase.com/docs/guides/auth/managing-user-data and https://supabase.com/docs/guides/database/functions . Helpers have empty search paths and qualified table names.

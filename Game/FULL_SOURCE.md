@@ -7,6 +7,8 @@ extends PanelContainer
 var host: Node
 var account: Node
 var address: LineEdit
+var username: LineEdit
+var claim: Button
 var password: LineEdit
 var notice: Label
 var actions: Array[Button]=[]
@@ -20,7 +22,7 @@ func setup(owner_node: Node, client: Node) -> void:
  host=owner_node
  account=client
  set_anchors_and_offsets_preset(Control.PRESET_CENTER)
- offset_left=-300;offset_right=300;offset_top=-290;offset_bottom=290
+ offset_left=-300;offset_right=300;offset_top=-330;offset_bottom=330
  add_theme_stylebox_override("panel",preload("res://cwtch_theme.gd").panel(Color("182e28")))
  var box := VBoxContainer.new()
  box.add_theme_constant_override("separation",10)
@@ -30,10 +32,12 @@ func setup(owner_node: Node, client: Node) -> void:
  title.add_theme_font_size_override("font_size",25)
  box.add_child(title)
  address=LineEdit.new();address.placeholder_text="Email address";box.add_child(address)
+ username=LineEdit.new();username.placeholder_text="Username (new accounts: 3–20 letters, numbers, _)";username.max_length=20;box.add_child(username)
  password=LineEdit.new();password.placeholder_text="Password";password.secret=true;box.add_child(password)
  button(box,"SIGN IN",func(): authenticate(false))
  button(box,"REGISTER",func(): authenticate(true))
  button(box,"RESET PASSWORD",func(): account.reset_password(address.text))
+ claim=button(box,"CLAIM USERNAME",func(): account.claim_username(username.text))
  notice=Label.new();notice.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART;notice.custom_minimum_size.y=75;box.add_child(notice)
  upload=button(box,"USE THIS COMPUTER'S GARDEN",func(): ask("upload"))
  download=button(box,"USE CLOUD GARDEN",func(): ask("download"))
@@ -58,9 +62,10 @@ func authenticate(register: bool) -> void:
   return
  var secret := password.text
  password.clear()
- account.authenticate(address.text,secret,register)
+ account.authenticate(address.text,secret,register,username.text)
 func refresh() -> void:
  notice.text=account.status
+ if not account.profile.is_empty():notice.text=str(account.profile.username)+"\n"+notice.text
  if not account.email.is_empty():notice.text=account.email+"\n"+notice.text
  if not account.remote.is_empty():
   var payload: Dictionary=account.remote.get("payload",{})
@@ -69,6 +74,8 @@ func refresh() -> void:
  var signed: bool=not account.token.is_empty()
  address.visible=not signed
  password.visible=not signed
+ username.visible=not signed or account.profile.is_empty()
+ claim.visible=signed and account.profile.is_empty()
  for i in 3:actions[i].visible=not signed
  upload.visible=signed;download.visible=signed;review.visible=signed;signout.visible=signed
  upload.disabled=account.busy or account.revision<0 or not FileAccess.file_exists(host.SAVE_PATH)
@@ -834,6 +841,7 @@ var revision := -1
 var connected := false
 var busy := false
 var status := "Play offline, or sign in to keep a garden in the cloud."
+var profile: Dictionary = {}
 var remote: Dictionary = {}
 var queued: Dictionary = {}
 
@@ -876,18 +884,31 @@ func _refresh() -> bool:
  connected=false
  return false
 
-func authenticate(address: String, password: String, register: bool) -> void:
+func authenticate(address: String, password: String, register: bool, username: String="") -> void:
  if busy:return
  busy=true
  token=""
  refresh_token=""
  email=""
+ profile={}
+ remote={}
+ revision=-1
  connected=false
  queued={}
  status="Creating account…" if register else "Signing in…"
  changed.emit()
  var endpoint := "/auth/v1/signup?redirect_to="+Config.RETURN_URL.uri_encode() if register else "/auth/v1/token?grant_type=password"
- var result := await _request(endpoint,HTTPClient.METHOD_POST,{"email":address.strip_edges(),"password":password})
+ var body := {"email":address.strip_edges(),"password":password}
+ if register:
+  username=username.strip_edges()
+  var available := await _request("/rest/v1/rpc/cwtch_username_available",HTTPClient.METHOD_POST,{"candidate":username})
+  if not available.ok or available.data!=true:
+   status="Choose an available username: 3–20 letters, numbers or underscores." if available.ok else available.error
+   busy=false
+   changed.emit()
+   return
+  body["data"]={"username":username}
+ var result := await _request(endpoint,HTTPClient.METHOD_POST,body)
  connected=false
  revision=-1
  remote={}
@@ -895,6 +916,7 @@ func authenticate(address: String, password: String, register: bool) -> void:
  elif result.data is Dictionary and result.data.has("access_token"):
   _session(result.data)
   await _inspect()
+  await load_profile()
  else:status="Check your email to confirm your account, then sign in."
  busy=false
  changed.emit()
@@ -963,6 +985,7 @@ func logout() -> void:
  token=""
  refresh_token=""
  email=""
+ profile={}
  remote={}
  queued={}
  revision=-1
@@ -977,6 +1000,24 @@ func reset_password(address: String) -> void:
  changed.emit()
  var result := await _request("/auth/v1/recover?redirect_to="+Config.RETURN_URL.uri_encode(),HTTPClient.METHOD_POST,{"email":address.strip_edges()})
  status="If that account exists, check your email for a reset link." if result.ok else result.error
+ busy=false
+ changed.emit()
+
+func load_profile() -> void:
+ var result := await _request("/rest/v1/rpc/cwtch_my_profile",HTTPClient.METHOD_POST,{},true)
+ profile=result.data if result.ok and result.data is Dictionary else {}
+ if profile.is_empty():status+=" Choose a username to join the Valley Club."
+
+func claim_username(candidate: String) -> void:
+ if busy or token.is_empty():return
+ busy=true
+ changed.emit()
+ if await _refresh():
+  var result := await _request("/rest/v1/rpc/cwtch_claim_username",HTTPClient.METHOD_POST,{"candidate":candidate.strip_edges()},true)
+  if result.ok:
+   profile=result.data
+   status="Welcome to the Valley Club, "+str(profile.username)+"."
+  else:status=result.error
  busy=false
  changed.emit()
 
@@ -8703,12 +8744,19 @@ var fade: Tween
 var next_track := false
 var rng:=RandomNumberGenerator.new()
 var suspended := true
+var pause_player: AudioStreamPlayer
 var mix := 0.0
 var gains := [0.0,0.0]
 
 func setup(menu: Node) -> void:
  host=menu
  rng.randomize()
+ pause_player=AudioStreamPlayer.new()
+ pause_player.stream=load(PATH+"pause_and_look.mp3")
+ pause_player.volume_db=-23
+ add_child(pause_player)
+ pause_player.finished.connect(func():
+  if is_paused():pause_player.play())
  for index in 2:
   var player:=AudioStreamPlayer.new()
   player.volume_db=-80
@@ -8738,7 +8786,11 @@ func choose(group: String) -> String:
 
 func _process(delta: float) -> void:
  if not is_instance_valid(host):return
- var enabled: bool=is_instance_valid(host.garden) and not host.menu_active and not host.loading
+ var pause_now:=is_paused()
+ if pause_now and not pause_player.playing:pause_player.play()
+ elif not pause_now and pause_player.playing:pause_player.stop()
+ if is_instance_valid(host.garden):pause_player.volume_db=-80 if host.garden.ambience_muted else -23
+ var enabled: bool=not pause_now and is_instance_valid(host.garden) and not host.menu_active and not host.loading
  if not enabled:
   if not suspended:
    for channel in channels:channel.stream_paused=true
@@ -8796,6 +8848,14 @@ func _exit_tree() -> void:
  fade=null
  for channel in channels:
   if is_instance_valid(channel):channel.stop()
+
+func is_paused() -> bool:
+ if not is_instance_valid(host) or host.loading or host.menu_active or not is_instance_valid(host.garden):return false
+ if not host.garden.loading_complete:return false
+ if is_instance_valid(host.get("village")):return bool(host.village.paused)
+ var guide=host.garden.get("guide")
+ var intro=host.garden.get("hedgehog_intro")
+ return (is_instance_valid(guide) and guide.visible) or (intro is Node and intro.get("paused")==true)
 
 ```
 

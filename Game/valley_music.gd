@@ -18,12 +18,19 @@ var fade: Tween
 var next_track := false
 var rng:=RandomNumberGenerator.new()
 var suspended := true
+var pause_player: AudioStreamPlayer
 var mix := 0.0
 var gains := [0.0,0.0]
 
 func setup(menu: Node) -> void:
  host=menu
  rng.randomize()
+ pause_player=AudioStreamPlayer.new()
+ pause_player.stream=load(PATH+"pause_and_look.mp3")
+ pause_player.volume_db=-23
+ add_child(pause_player)
+ pause_player.finished.connect(func():
+  if is_paused():pause_player.play())
  for index in 2:
   var player:=AudioStreamPlayer.new()
   player.volume_db=-80
@@ -53,7 +60,11 @@ func choose(group: String) -> String:
 
 func _process(delta: float) -> void:
  if not is_instance_valid(host):return
- var enabled: bool=is_instance_valid(host.garden) and not host.menu_active and not host.loading
+ var pause_now:=is_paused()
+ if pause_now and not pause_player.playing:pause_player.play()
+ elif not pause_now and pause_player.playing:pause_player.stop()
+ if is_instance_valid(host.garden):pause_player.volume_db=-80 if host.garden.ambience_muted else -23
+ var enabled: bool=not pause_now and is_instance_valid(host.garden) and not host.menu_active and not host.loading
  if not enabled:
   if not suspended:
    for channel in channels:channel.stream_paused=true
@@ -111,3 +122,11 @@ func _exit_tree() -> void:
  fade=null
  for channel in channels:
   if is_instance_valid(channel):channel.stop()
+
+func is_paused() -> bool:
+ if not is_instance_valid(host) or host.loading or host.menu_active or not is_instance_valid(host.garden):return false
+ if not host.garden.loading_complete:return false
+ if is_instance_valid(host.get("village")):return bool(host.village.paused)
+ var guide=host.garden.get("guide")
+ var intro=host.garden.get("hedgehog_intro")
+ return (is_instance_valid(guide) and guide.visible) or (intro is Node and intro.get("paused")==true)

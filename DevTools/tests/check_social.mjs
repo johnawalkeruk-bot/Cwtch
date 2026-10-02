@@ -1,0 +1,30 @@
+import {PGlite} from '../../.local/pglite/package/dist/index.js';
+import fs from 'node:fs';import assert from 'node:assert/strict';
+const db=new PGlite();
+await db.exec(`create role anon;create role authenticated;create schema auth;create table auth.users(id uuid primary key,raw_user_meta_data jsonb);create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;grant usage on schema auth to anon,authenticated;`);
+const a='00000000-0000-0000-0000-000000000001',b='00000000-0000-0000-0000-000000000002',c='00000000-0000-0000-0000-000000000003',old='00000000-0000-0000-0000-000000000004';
+await db.query('insert into auth.users values($1,$2)',[old,{}]);
+for(const file of ['202610020001_cloud_saves.sql','202610020002_valley_club.sql'])await db.exec(fs.readFileSync('Server/supabase/migrations/'+file,'utf8'));
+for(const [id,username] of [[a,'Arthur'],[b,'Meera'],[c,'Robin']])await db.query('insert into auth.users values($1,$2)',[id,{username}]);
+await assert.rejects(db.query('insert into auth.users values($1,$2)',['00000000-0000-0000-0000-000000000005',{username:'aRTHUR'}]),/taken/);
+await assert.rejects(db.query('insert into auth.users values($1,$2)',['00000000-0000-0000-0000-000000000005',{}]),/Choose/);
+async function as(id,role='authenticated'){await db.exec('reset role');await db.query("select set_config('request.jwt.claim.sub',$1,false)",[id]);await db.exec('set role '+role);}
+async function rpc(sql,args=[]){return (await db.query(sql,args)).rows[0]?.value;}
+await as(old);assert.equal(await rpc('select public.cwtch_my_profile() value'),null);let p=await rpc('select public.cwtch_claim_username($1) value',['OldGardener']);assert.equal(p.username,'OldGardener');assert(p.avatar_svg.startsWith('<svg'));fs.writeFileSync('.local/club-avatar-fixture.svg',p.avatar_svg);
+await as(a);assert.equal(await rpc('select public.cwtch_username_available($1) value',['ARTHUR']),false);
+assert.equal((await rpc('select public.cwtch_search_people($1) value',['Mee']))[0].username,'Meera');
+assert.deepEqual(await rpc('select public.cwtch_search_people($1) value',['%']),[]);
+const save={version:1,terrain:Array(1296).fill(2),player:[0,0],coins:500,crops:[],purchases:[],watered:[],wildlife:{records:{hedgehog:{visit_day:1,resident_day:2}},life_events:[{kind:'birth'}]},summary:{animals:3},experience:{total:50},private_secret:'MUST NOT LEAK'};
+await rpc('select public.cwtch_put_save(0,$1) value',[save]);
+await rpc('select public.cwtch_friend_action($1,$2) value',[b,'request']);
+await assert.rejects(rpc('select public.cwtch_garden_snapshot($1) value',[b]),/Accept/);
+await rpc('select public.cwtch_friend_action($1,$2) value',[b,'accept']);
+assert.equal((await rpc('select public.cwtch_list_friends() value'))[0].accepted,false,'Sender cannot accept own request');
+await as(b);await assert.rejects(rpc('select public.cwtch_garden_snapshot($1) value',[a]),/Accept/);
+await rpc('select public.cwtch_friend_action($1,$2) value',[a,'accept']);
+const snap=await rpc('select public.cwtch_garden_snapshot($1) value',[a]);assert.equal(snap.payload.coins,500);assert.equal(snap.payload.births,1);assert(!JSON.stringify(snap).includes('MUST NOT LEAK'));assert(!('player' in snap.payload));
+assert.equal((await db.query('select * from public.cwtch_saves')).rows.length,0,'Friend cannot read raw save');
+await as(c);await assert.rejects(rpc('select public.cwtch_garden_snapshot($1) value',[a]),/Accept/);await assert.rejects(db.query('select * from public.cwtch_profiles'),/permission denied/);
+await as(b);await rpc('select public.cwtch_friend_action($1,$2) value',[a,'remove']);await assert.rejects(rpc('select public.cwtch_garden_snapshot($1) value',[a]),/Accept/);
+await as('','anon');await assert.rejects(rpc('select public.cwtch_search_people($1) value',['Art']),/permission denied/);await assert.rejects(rpc('select public.cwtch_create_profile($1,$2) value',[a,'Hacker']),/permission denied/);
+await db.close();console.log('SOCIAL_SQL_PASS: registration, case-insensitive uniqueness, legacy profile, avatar persistence, search, request/accept/remove, private saves and friend-only metrics');

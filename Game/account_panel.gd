@@ -2,6 +2,8 @@ extends PanelContainer
 var host: Node
 var account: Node
 var address: LineEdit
+var username: LineEdit
+var claim: Button
 var password: LineEdit
 var notice: Label
 var actions: Array[Button]=[]
@@ -15,7 +17,7 @@ func setup(owner_node: Node, client: Node) -> void:
  host=owner_node
  account=client
  set_anchors_and_offsets_preset(Control.PRESET_CENTER)
- offset_left=-300;offset_right=300;offset_top=-290;offset_bottom=290
+ offset_left=-300;offset_right=300;offset_top=-330;offset_bottom=330
  add_theme_stylebox_override("panel",preload("res://cwtch_theme.gd").panel(Color("182e28")))
  var box := VBoxContainer.new()
  box.add_theme_constant_override("separation",10)
@@ -25,10 +27,12 @@ func setup(owner_node: Node, client: Node) -> void:
  title.add_theme_font_size_override("font_size",25)
  box.add_child(title)
  address=LineEdit.new();address.placeholder_text="Email address";box.add_child(address)
+ username=LineEdit.new();username.placeholder_text="Username (new accounts: 3–20 letters, numbers, _)";username.max_length=20;box.add_child(username)
  password=LineEdit.new();password.placeholder_text="Password";password.secret=true;box.add_child(password)
  button(box,"SIGN IN",func(): authenticate(false))
  button(box,"REGISTER",func(): authenticate(true))
  button(box,"RESET PASSWORD",func(): account.reset_password(address.text))
+ claim=button(box,"CLAIM USERNAME",func(): account.claim_username(username.text))
  notice=Label.new();notice.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART;notice.custom_minimum_size.y=75;box.add_child(notice)
  upload=button(box,"USE THIS COMPUTER'S GARDEN",func(): ask("upload"))
  download=button(box,"USE CLOUD GARDEN",func(): ask("download"))
@@ -53,9 +57,10 @@ func authenticate(register: bool) -> void:
   return
  var secret := password.text
  password.clear()
- account.authenticate(address.text,secret,register)
+ account.authenticate(address.text,secret,register,username.text)
 func refresh() -> void:
  notice.text=account.status
+ if not account.profile.is_empty():notice.text=str(account.profile.username)+"\n"+notice.text
  if not account.email.is_empty():notice.text=account.email+"\n"+notice.text
  if not account.remote.is_empty():
   var payload: Dictionary=account.remote.get("payload",{})
@@ -64,6 +69,8 @@ func refresh() -> void:
  var signed: bool=not account.token.is_empty()
  address.visible=not signed
  password.visible=not signed
+ username.visible=not signed or account.profile.is_empty()
+ claim.visible=signed and account.profile.is_empty()
  for i in 3:actions[i].visible=not signed
  upload.visible=signed;download.visible=signed;review.visible=signed;signout.visible=signed
  upload.disabled=account.busy or account.revision<0 or not FileAccess.file_exists(host.SAVE_PATH)
