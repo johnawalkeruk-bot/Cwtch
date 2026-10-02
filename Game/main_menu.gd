@@ -42,6 +42,8 @@ var cloud: Node
 var account_panel: PanelContainer
 var autosave_age := 0.0
 var quitting := false
+var loading := false
+var garden_loader: CanvasLayer
 
 func _ready() -> void:
 	get_tree().root.theme = preload("res://cwtch_theme.gd").make()
@@ -53,6 +55,8 @@ func _ready() -> void:
 	cloud=preload("res://cloud_account.gd").new()
 	add_child(cloud)
 	_build_ui()
+	garden_loader=preload("res://garden_loading.gd").new()
+	add_child(garden_loader)
 	ControllerInput.mode_changed.connect(_focus_menu)
 	ambience = Ambience.new()
 	ambience.stream_level = 0.22
@@ -246,6 +250,7 @@ func _build_ui() -> void:
 	options.hide()
 
 func _process(delta: float) -> void:
+	if loading:return
 	autosave_age+=delta
 	if autosave_age>=60.0 and is_instance_valid(garden):
 		autosave_age=0.0
@@ -313,6 +318,11 @@ func _request_new() -> void:
 		_begin_garden(true)
 
 func _begin_garden(fresh: bool) -> void:
+	if loading:return
+	loading=true
+	if ControllerKeyboard.opened:ControllerKeyboard.finish(false)
+	garden_loader.begin()
+	ambience.update_mix(0,0,0,true)
 	if fresh:
 		coins=500
 		purchases.clear()
@@ -324,8 +334,23 @@ func _begin_garden(fresh: bool) -> void:
 		remove_child(garden)
 		garden.free()
 	if not is_instance_valid(garden):
-		garden = load("res://main.tscn").instantiate()
+		var error := ResourceLoader.load_threaded_request("res://main.tscn")
+		if error!=OK:
+			_loading_failed()
+			return
+		while ResourceLoader.load_threaded_get_status("res://main.tscn")==ResourceLoader.THREAD_LOAD_IN_PROGRESS:
+			await get_tree().process_frame
+		if ResourceLoader.load_threaded_get_status("res://main.tscn")!=ResourceLoader.THREAD_LOAD_LOADED:
+			_loading_failed()
+			return
+		var scene: PackedScene=ResourceLoader.load_threaded_get("res://main.tscn")
+		garden = scene.instantiate()
+		garden.process_mode=Node.PROCESS_MODE_DISABLED
+		garden.set_meta("loading_screen",garden_loader)
 		add_child(garden)
+		while not garden.loading_complete:
+			await get_tree().process_frame
+		garden.remove_meta("loading_screen")
 		for child in garden.get_children():
 			if child is WorldEnvironment: garden.camera.environment = child.environment
 		if not fresh: _restore_garden()
@@ -337,9 +362,14 @@ func _begin_garden(fresh: bool) -> void:
 	garden.show()
 	for layer in garden.find_children("*","CanvasLayer",true,false):
 		if layer!=garden.hedgehog_intro.ui:layer.show()
-	garden.process_mode = Node.PROCESS_MODE_INHERIT
+	garden.process_mode = Node.PROCESS_MODE_DISABLED
 	garden.camera.make_current()
 	garden._set_guide(false)
+	# Reveal a ready, stationary garden before starting its arrival/dialogue.
+	await get_tree().process_frame
+	await garden_loader.finish()
+	loading=false
+	garden.process_mode=Node.PROCESS_MODE_INHERIT
 	if fresh: garden.northern_arrival.start()
 	else: garden.hedgehog_intro.request_welcome()
 	_save_garden()
@@ -465,6 +495,7 @@ func _notification(what: int) -> void:
 		save_and_quit()
 
 func _focus_menu() -> void:
+	if loading:return
 	if ControllerKeyboard.opened:return
 	if menu_active:
 		ControllerInput.focus_first.call_deferred(account_panel if account_panel.visible else (options if options.visible else menu_buttons))
@@ -488,6 +519,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 func save_and_quit() -> void:
+	if loading:
+		garden_loader.abort()
+		get_tree().quit()
+		return
 	if quitting:return
 	if not _save_garden():
 		if is_instance_valid(garden):
@@ -582,3 +617,10 @@ func _cloud_summary() -> Dictionary:
 			if actor==garden.wildlife.robin and not garden.wildlife.records.has("robin"):continue
 			population+=1
 	return {"animals":population,"day":garden.wildlife.day(),"level":garden.experience.level()}
+
+func _loading_failed() -> void:
+	garden_loader.abort()
+	loading=false
+	menu_buttons.show()
+	loading_label.text="COULD NOT OPEN THE GARDEN. PLEASE TRY AGAIN."
+	_focus_menu()

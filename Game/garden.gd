@@ -18,6 +18,7 @@ const ValleyAmbience = preload("res://valley_ambience.gd")
 const ValleyCycle = preload("res://valley_cycle.gd")
 const BackgroundMeadow = preload("res://background_meadow.gd")
 const ValleyLandscape = preload("res://valley_landscape.gd")
+var loading_complete := false
 var northern_arrival: Node3D
 var valley_landscape: Node3D
 const CyclingNPC = preload("res://cycling_npc.gd")
@@ -83,6 +84,7 @@ var tool_buttons: Array[Button] = []
 
 func _ready() -> void:
 	super._ready()
+	await _loading_step("PREPARING THE SOIL")
 	status.hide()
 	_create_garden_ui()
 	ControllerInput.mode_changed.connect(_controller_prompts)
@@ -98,6 +100,7 @@ func _ready() -> void:
 	add_child(floating_tool)
 	floating_tool.setup(self)
 	floating_tool.effect_applied.connect(_apply_tool)
+	await _loading_step("UNPACKING THE TOOLS")
 	ambience = ValleyAmbience.new()
 	add_child(ambience)
 	visitor = WanderingNPC.new()
@@ -112,9 +115,11 @@ func _ready() -> void:
 	background_meadow = BackgroundMeadow.new()
 	add_child(background_meadow)
 	background_meadow.build(self)
+	await _loading_step("GROWING THE MEADOW")
 	valley_landscape = ValleyLandscape.new()
 	add_child(valley_landscape)
 	valley_landscape.build(self)
+	await _loading_step("RAISING THE MOUNTAINS")
 	for entry in [["Arthur", "npcs/arthur", 0.999512, Vector2i(2, 3)], ["Meera", "npcs/meera", 0.999512, Vector2i(5, 5)]]:
 		var npc := CyclingNPC.new()
 		npc.name = entry[0]
@@ -126,6 +131,7 @@ func _ready() -> void:
 		npc.setup(self)
 		SelectionTarget.attach(npc, entry[0], Vector3(0.65, 1.5, 0.65))
 		additional_visitors.append(npc)
+		await _loading_step("WELCOMING THE NEIGHBOURS")
 	var angus := preload("res://angus_npc.gd").new()
 	angus.name="Angus"
 	angus.cell=Vector2i(7,2)
@@ -133,16 +139,19 @@ func _ready() -> void:
 	angus.setup(self)
 	SelectionTarget.attach(angus,"Angus McDoogal",Vector3(0.8,1.5,0.8))
 	additional_visitors.append(angus)
+	await _loading_step("CALLING THE WILDLIFE")
 	wildlife=preload("res://garden_wildlife.gd").new()
 	add_child(wildlife)
 	wildlife.setup(self)
 	wildlife.animal_event.connect(experience.wildlife)
+	await _loading_step("SETTLING THE GARDEN")
 	animal_notices=preload("res://animal_notices.gd").new()
 	add_child(animal_notices)
 	animal_notices.setup(self)
 	var meadow_grass := preload("res://meadow_grass.gd").new()
 	add_child(meadow_grass)
 	meadow_grass.build(self)
+	await _loading_step("ADDING THE LITTLE DETAILS")
 	var model_weather := preload("res://model_weather.gd").new()
 	add_child(model_weather)
 	model_weather.setup(self)
@@ -169,6 +178,7 @@ func _ready() -> void:
 	add_child(northern_arrival)
 	northern_arrival.setup(self)
 	_refresh_ui()
+	loading_complete=true
 
 func _create_chunks() -> void:
 	heightfield = HeightTerrain.new()
@@ -682,3 +692,9 @@ func _controller_prompts() -> void:
 
 func _tool_controls() -> String:
 	return ""
+
+func _loading_step(caption: String) -> void:
+	if not has_meta("loading_screen"):return
+	var screen: Node=get_meta("loading_screen")
+	screen.report(caption)
+	await get_tree().process_frame

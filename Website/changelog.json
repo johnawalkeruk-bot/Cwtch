@@ -1,6 +1,30 @@
 {
   "entries": [
     {
+      "id": "0.1.23",
+      "label": "v0.1.23",
+      "date": "2026-10-02",
+      "title": "In development",
+      "sections": [
+        {
+          "heading": "Updates",
+          "items": [
+            "Not much to say about this one"
+          ]
+        }
+      ],
+      "blog": {
+        "intro": "Not much to say about this one",
+        "why": [
+          "Not much to say about this one"
+        ],
+        "issues": [
+          "Not much to say about this one"
+        ],
+        "screenshots": []
+      }
+    },
+    {
       "id": "unreleased",
       "label": "Next update",
       "date": null,
