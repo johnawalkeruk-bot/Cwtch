@@ -41,6 +41,8 @@ var weather_override := -1
 var cloud: Node
 var account_panel: PanelContainer
 var autosave_age := 0.0
+var account_status: CanvasLayer
+var autosave_sync_pending:=false
 var quitting := false
 var loading := false
 var garden_loader: CanvasLayer
@@ -56,6 +58,11 @@ func _ready() -> void:
 	cloud=preload("res://cloud_account.gd").new()
 	add_child(cloud)
 	_build_ui()
+	account_status=preload("res://account_status.gd").new()
+	add_child(account_status)
+	account_status.setup(self)
+	cloud.sync_finished.connect(_autosave_sync_finished)
+	cloud.restore_login.call_deferred()
 	garden_loader=preload("res://garden_loading.gd").new()
 	add_child(garden_loader)
 	ControllerInput.mode_changed.connect(_focus_menu)
@@ -255,10 +262,10 @@ func _build_ui() -> void:
 
 func _process(delta: float) -> void:
 	if loading:return
-	autosave_age+=delta
-	if autosave_age>=60.0 and is_instance_valid(garden):
+	if not menu_active and is_instance_valid(garden):autosave_age+=delta
+	if autosave_age>=300.0 and is_instance_valid(garden):
 		autosave_age=0.0
-		_save_garden()
+		_autosave()
 	if not menu_active:
 		return
 	elapsed += delta
@@ -324,6 +331,7 @@ func _request_new() -> void:
 func _begin_garden(fresh: bool) -> void:
 	if loading:return
 	loading=true
+	autosave_age=0.0
 	if ControllerKeyboard.opened:ControllerKeyboard.finish(false)
 	garden_loader.begin()
 	ambience.update_mix(0,0,0,true)
@@ -404,7 +412,7 @@ func open_menu() -> void:
 	_focus_menu()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
-func _save_garden() -> bool:
+func _save_garden(sync_cloud: bool=true) -> bool:
 	if not is_instance_valid(garden): return true
 	var terrain := []
 	for z in range(garden.grid_size.y):
@@ -426,7 +434,7 @@ func _save_garden() -> bool:
 	file.close()
 	if not success:return false
 	if DirAccess.rename_absolute(ProjectSettings.globalize_path(SAVE_PATH+".tmp"),ProjectSettings.globalize_path(SAVE_PATH))!=OK:return false
-	cloud.sync(data)
+	if sync_cloud:cloud.sync(data)
 	return true
 
 func _saved_watered() -> Array:
@@ -619,6 +627,7 @@ func use_cloud_garden(data: Variant) -> void:
 	valley_music.silence()
 	valley_music.band=""
 	cloud.connected=true
+	cloud.remember()
 	cloud.status="Cloud garden ready. Choose ENTER GARDEN. Previous local save backed up."
 	cloud.changed.emit()
 func _cloud_summary() -> Dictionary:
@@ -636,3 +645,17 @@ func _loading_failed() -> void:
 	menu_buttons.show()
 	loading_label.text="COULD NOT OPEN THE GARDEN. PLEASE TRY AGAIN."
 	_focus_menu()
+
+func _autosave() -> void:
+	if not _save_garden(false):
+		account_status.show_toast("Could not save garden · please check available disk space")
+		return
+	account_status.show_toast("Garden saved locally · syncing…" if not cloud.token.is_empty() else "Garden saved locally · offline")
+	autosave_sync_pending=true
+	var data=JSON.parse_string(FileAccess.get_file_as_string(SAVE_PATH))
+	cloud.sync(data)
+
+func _autosave_sync_finished(_ok: bool, message: String) -> void:
+	if not autosave_sync_pending:return
+	autosave_sync_pending=false
+	account_status.show_toast(message)

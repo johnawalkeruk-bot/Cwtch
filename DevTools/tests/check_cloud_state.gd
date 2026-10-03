@@ -10,6 +10,7 @@ func _initialize():run.call_deferred()
 func run():
  var a=FakeAccount.new()
  root.add_child(a)
+ a.persistence_enabled=false
  a.token='fake';a.expires=Time.get_unix_time_from_system()+600
  a.revision=0
  a.sync({'version':1})

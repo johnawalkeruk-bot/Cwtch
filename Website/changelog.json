@@ -8,6 +8,30 @@
       "sections": []
     },
     {
+      "id": "0.1.28",
+      "label": "v0.1.28",
+      "date": "2026-10-02",
+      "title": "Fixed in-game login",
+      "sections": [
+        {
+          "heading": "Login fix",
+          "items": [
+            "Not much to say about this one"
+          ]
+        }
+      ],
+      "blog": {
+        "intro": "Not much to say about this one",
+        "why": [
+          "Not much to say about this one"
+        ],
+        "issues": [
+          "Not much to say about this one"
+        ],
+        "screenshots": []
+      }
+    },
+    {
       "id": "0.1.27",
       "label": "v0.1.27",
       "date": "2026-10-02",

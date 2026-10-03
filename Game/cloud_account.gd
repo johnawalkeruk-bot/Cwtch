@@ -1,6 +1,7 @@
 extends Node
-## Tokens live in memory only. First sync is always an explicit local/cloud choice.
+## Refresh sessions are protected by Windows DPAPI; cloud revisions remain conflict checked.
 signal changed
+signal sync_finished(ok: bool, message: String)
 const Config = preload("res://cloud_config.gd")
 var token := ""
 var refresh_token := ""
@@ -13,6 +14,39 @@ var status := "Play offline, or sign in to keep a garden in the cloud."
 var profile: Dictionary = {}
 var remote: Dictionary = {}
 var queued: Dictionary = {}
+var store: Node
+var persistence_enabled := true
+
+func _ready() -> void:
+ store=preload("res://session_store.gd").new()
+ add_child(store)
+
+func remember() -> void:
+ if not persistence_enabled or refresh_token.is_empty():return
+ var ok: bool=await store.save({"refresh_token":refresh_token,"email":email,"username":profile.get("username",""),"revision":revision,"connected":connected})
+ if not ok:status+=" Login could not be remembered on this computer."
+
+func restore_login() -> void:
+ if busy or not persistence_enabled:return
+ busy=true
+ status="Restoring your account…"
+ changed.emit()
+ var saved: Dictionary=await store.read()
+ if not saved.get("refresh_token","").is_empty():
+  refresh_token=saved.refresh_token
+  token="restoring"
+  expires=0
+  email=str(saved.get("email",""))
+  profile={"username":saved.username} if not str(saved.get("username","")).is_empty() else {}
+  revision=int(saved.get("revision",-1))
+  connected=bool(saved.get("connected",false)) and revision>=0
+  if await _refresh():
+   await load_profile()
+   status="Signed in. Cloud autosave ready." if connected else "Signed in. Review cloud to choose your garden."
+ else:status="Play offline, or sign in to keep a garden in the cloud."
+ busy=false
+ changed.emit()
+
 
 func _request(path: String, method: int, body: Dictionary={}, authorized: bool=false) -> Dictionary:
  var http := HTTPRequest.new()
@@ -48,14 +82,19 @@ func _refresh() -> bool:
  var result := await _request("/auth/v1/token?grant_type=refresh_token",HTTPClient.METHOD_POST,{"refresh_token":refresh_token})
  if result.ok:
   _session(result.data)
+  await remember()
   return true
- status="Session expired. Sign in again. Your local save is safe."
- connected=false
+ if int(result.get("code",0)) in [400,401,403]:
+  token="";refresh_token="";email="";profile={};connected=false
+  store.clear()
+  status="Session expired. Sign in again. Your local save is safe."
+ else:status="Cloud unavailable. Your login and local save are kept."
  return false
 
 func authenticate(address: String, password: String, register: bool, username: String="") -> void:
  if busy:return
  busy=true
+ if persistence_enabled:store.clear()
  token=""
  refresh_token=""
  email=""
@@ -86,6 +125,7 @@ func authenticate(address: String, password: String, register: bool, username: S
   _session(result.data)
   await _inspect()
   await load_profile()
+  await remember()
  else:status="Check your email to confirm your account, then sign in."
  busy=false
  changed.emit()
@@ -101,6 +141,7 @@ func _inspect() -> void:
  if result.data is Array and not result.data.is_empty():
   remote=result.data[0]
   revision=int(remote.revision)
+ if revision==0:connected=true
  status="Choose which garden to keep. Cloud revision: %d."%revision if revision>0 else "No cloud garden yet. Upload your local garden to begin syncing."
 
 func inspect() -> void:
@@ -113,7 +154,12 @@ func inspect() -> void:
  changed.emit()
 
 func sync(data: Dictionary, explicit: bool=false) -> void:
- if token.is_empty() or (not connected and not explicit):return
+ if token.is_empty():
+  sync_finished.emit(false,"Saved locally · offline")
+  return
+ if not connected and not explicit:
+  sync_finished.emit(false,"Saved locally · review Account & Cloud to enable sync")
+  return
  if busy:
   if connected:queued=data.duplicate(true)
   return
@@ -124,6 +170,7 @@ func sync(data: Dictionary, explicit: bool=false) -> void:
  if not await _refresh():
   busy=false
   changed.emit()
+  sync_finished.emit(false,"Saved locally · cloud unavailable")
   return
  # JSON.parse_string represents numbers as floats. Keep the wire version an
  # integer: the deployed RPC compares the extracted version text with '1'.
@@ -137,18 +184,22 @@ func sync(data: Dictionary, explicit: bool=false) -> void:
   status="Garden synced · revision %d"%revision
  else:
   status=result.error+" Local save kept. Review cloud to retry."
-  connected=false
+  connected=(int(result.get("code",0))==0 or int(result.get("code",0))>=500) and not str(result.error).contains("Cloud garden changed")
   queued={}
+ await remember()
  busy=false
  changed.emit()
  if connected and not queued.is_empty():
   var next := queued
   queued={}
   sync(next)
+ else:
+  sync_finished.emit(bool(result.ok),"Garden saved · synced to cloud" if result.ok else "Saved locally · cloud sync needs attention")
 
 func logout() -> void:
  if busy:return
  busy=true
+ if persistence_enabled:store.clear()
  changed.emit()
  if not token.is_empty():await _request("/auth/v1/logout?scope=local",HTTPClient.METHOD_POST,{},true)
  token=""
@@ -174,7 +225,8 @@ func reset_password(address: String) -> void:
 
 func load_profile() -> void:
  var result := await _request("/rest/v1/rpc/cwtch_my_profile",HTTPClient.METHOD_POST,{},true)
- profile=result.data if result.ok and result.data is Dictionary else {}
+ if not result.ok:return
+ profile=result.data if result.data is Dictionary else {}
  if profile.is_empty():status+=" Choose a username to join the Valley Club."
 
 func claim_username(candidate: String) -> void:
@@ -186,6 +238,7 @@ func claim_username(candidate: String) -> void:
   if result.ok:
    profile=result.data
    status="Welcome to the Valley Club, "+str(profile.username)+"."
+   await remember()
   else:status=result.error
  busy=false
  changed.emit()

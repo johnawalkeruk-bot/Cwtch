@@ -1,5 +1,27 @@
 [
   {
+    "version": "0.1.28",
+    "date": "2026-10-02",
+    "title": "Fixed in-game login",
+    "author": "Waldas Game Studios",
+    "sections": [
+      {
+        "heading": "Login fix",
+        "items": [
+          "Not much to say about this one"
+        ]
+      }
+    ],
+    "intro": "Not much to say about this one",
+    "why": [
+      "Not much to say about this one"
+    ],
+    "issues": [
+      "Not much to say about this one"
+    ],
+    "screenshots": []
+  },
+  {
     "version": "0.1.27",
     "date": "2026-10-02",
     "title": "A louder pause and a left-turning rabbit",
