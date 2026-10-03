@@ -604,3 +604,33 @@ a gold marker waits with the animal and a blue marker chooses the destination.
 Player two uses yellow/red. Confirm to make the animal walk there, then resume
 wandering. Only reachable dry ground is accepted. Object rotations and purchased
 animal positions persist in saves. Older saves remain compatible.
+
+## Interface sounds
+
+UI SFX 0.4.0 native MP3 assets are centralised in `ui_sounds.gd` (UISounds autoload).
+Organic is the default, selected after reviewing all 12 catalog personalities;
+wood and water match the valley better than electronic or cinematic accents.
+Options persists interface enabled state, volume, style and optional typing in
+`options.json`, separately from master volume. Typing defaults off; passwords
+stay silent. No UI cues play until a real input event. Background refreshes,
+autosaves, scrolling and hover are silent. Reduced motion is not an audio setting.
+
+| Event | Cue |
+| --- | --- |
+| Menu / tool wheel / guide | open, close, cancel |
+| Tool or category choice | select, deselect |
+| Guide page | forward, back |
+| Purchase preview | drag-start |
+| Confirmed purchase | purchase |
+| Invalid placement / failed commit | invalid-drop, error |
+| Confirmed resident move | send |
+| Visible wildlife notice | notification |
+| Sign-in or manual cloud upload result | success, error |
+| Sound settings | toggle-on, toggle-off, volume-change, select |
+| Optional local text entry | typing |
+
+One native service owns a maximum of six finite voices; there are no repeating UI
+loops. Mute, pack changes, focus loss, logout and scene transitions stop active
+voices. High-frequency cues are limited; typing is not throttled. Hidden account
+panels discard pending outcome feedback. `check_ui_sounds.gd` and the placement
+regression cover behaviour; packaged assets include their CC0 licence and manifest.

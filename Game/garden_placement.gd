@@ -24,6 +24,7 @@ func say(text: String) -> void:
  else:driver.message_time=4.0
 func begin_purchase(id: String) -> void:
  cancel(false)
+ UISounds.play("drag-start")
  purchase_id=id;yaw=0.0
  driver._clear_use() if slot==0 else driver.clear_use()
  preview=Stock.model(id);garden.add_child(preview)
@@ -50,6 +51,7 @@ func begin_animal(subject: Node3D) -> bool:
  if subject.has_meta("relocation_owner"):
   say("The other spirit is already guiding this animal.");return true
  if not garden.contains_cell(garden.local_to_cell(subject.position)):return false
+ UISounds.play("select")
  cancel(false);animal=subject
  route_timer=0;route_target=Vector2i(-99,-99)
  animal.set_meta("relocation_owner",slot)
@@ -114,15 +116,15 @@ func update(delta: float) -> void:
   driver.cursor.follow_object(at,Vector2.ONE*garden.MICRO_SIZE,delta)
 func confirm() -> void:
  update(0.0)
- if not problem.is_empty():say(problem);return
+ if not problem.is_empty():UISounds.play("invalid-drop");say(problem);return
  if not purchase_id.is_empty():
   var host: Node=garden.get_parent()
   var result: String=host.confirm_garden_purchase(purchase_id,target,yaw)
-  if not result.is_empty():say(result);return
-  cancel(false);say("Placed in your garden.")
+  if not result.is_empty():UISounds.play("error");say(result);return
+  cancel(false);UISounds.play("purchase");say("Placed in your garden.")
  elif is_instance_valid(animal):
   if not animal.command_move(target):say("There is no clear route to that spot.");return
-  cancel(false);say("Your resident is on the way.")
+  cancel(false);UISounds.play("send");say("Your resident is on the way.")
 func cancel(notify:=true) -> void:
  var had:=active()
  var buying:=not purchase_id.is_empty()
@@ -136,7 +138,7 @@ func cancel(notify:=true) -> void:
  if is_instance_valid(driver):
   driver.cursor.restore_colors()
   if had:driver._clear_use() if slot==0 else driver.clear_use()
- if had and notify:say("Placement cancelled. No coins spent." if buying else "Your resident is free to wander again.")
+ if had and notify:UISounds.play("cancel");say("Placement cancelled. No coins spent." if buying else "Your resident is free to wander again.")
 func _exit_tree() -> void:
  if is_instance_valid(animal):
   animal.remove_meta("relocation_owner");animal.animation_player.speed_scale=animation_speed

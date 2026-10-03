@@ -27,6 +27,8 @@ var review: Button
 var signout: Button
 var confirmation: ConfirmationDialog
 var pending := ""
+var auth_feedback:=false
+var upload_feedback:=false
 func setup(owner_node: Node, client: Node) -> void:
  host=owner_node;account=client
  set_anchors_and_offsets_preset(Control.PRESET_CENTER)
@@ -58,6 +60,14 @@ func setup(owner_node: Node, client: Node) -> void:
  button(box,"BACK",func(): hide();host.menu_buttons.show();host.heading.show();host._focus_menu())
  confirmation=ConfirmationDialog.new();add_child(confirmation);confirmation.confirmed.connect(confirm)
  account.changed.connect(refresh)
+ account.auth_finished.connect(func(ok: bool):
+  if auth_feedback and is_visible_in_tree():UISounds.play("success" if ok else "error")
+  auth_feedback=false)
+ account.sync_finished.connect(func(ok: bool, _message: String):
+  if upload_feedback and is_visible_in_tree():UISounds.play("success" if ok else "error")
+  upload_feedback=false)
+ visibility_changed.connect(func():
+  if not visible:auth_feedback=false;upload_feedback=false)
  refresh();hide()
 func field(parent: Node, hint: String, secret:=false) -> LineEdit:
  var item:=LineEdit.new();item.placeholder_text=hint;item.secret=secret;parent.add_child(item);return item
@@ -65,6 +75,7 @@ func button(box: Node, caption: String, action: Callable) -> Button:
  var item:=Button.new();item.text=caption;item.custom_minimum_size.y=34;item.size_flags_horizontal=Control.SIZE_EXPAND_FILL
  item.pressed.connect(action);box.add_child(item);actions.append(item);return item
 func set_registration(value: bool) -> void:
+ if registration!=value:UISounds.play("select")
  registration=value;password.clear();register_password.clear();refresh()
  ControllerInput.focus_first.call_deferred(register_box if value else login_box)
 func authenticate(register: bool) -> void:
@@ -72,7 +83,8 @@ func authenticate(register: bool) -> void:
  var secret:=register_password.text if register else password.text
  if not mail.contains("@") or secret.is_empty() or (register and secret.length()<8):
   account.status="Enter your email and a password of at least eight characters." if register else "Enter your email and password."
-  refresh();return
+  UISounds.play("error");refresh();return
+ auth_feedback=true
  password.clear();register_password.clear()
  account.authenticate(mail,secret,register,username.text if register else "")
 func refresh() -> void:
@@ -100,6 +112,7 @@ func confirm() -> void:
   if not host._save_garden():account.status="Local save failed. Nothing uploaded.";refresh();return
   var data: Variant=JSON.parse_string(FileAccess.get_file_as_string(host.SAVE_PATH))
   if not preload("res://cloud_save_validator.gd").valid(data):account.status="This save cannot be synced safely.";refresh();return
+  upload_feedback=true
   account.sync(data,true)
  else:host.use_cloud_garden(account.remote.get("payload",{}))
 
@@ -316,6 +329,7 @@ func _process(delta: float) -> void:
    panel.hide()
    return
   current=queue.pop_front()
+  UISounds.play("notification")
   elapsed=0.0
   heading.text=TITLES[current.kind]
   var animal: String=str(current.species).capitalize()
@@ -959,6 +973,7 @@ func advance(delta: float) -> void:
 
 ```gd
 extends Node
+signal auth_finished(ok: bool)
 ## Refresh sessions are protected by Windows DPAPI; cloud revisions remain conflict checked.
 signal changed
 signal sync_finished(ok: bool, message: String)
@@ -1075,6 +1090,7 @@ func authenticate(address: String, password: String, register: bool, username: S
    status="Choose an available username: 3–20 letters, numbers or underscores." if available.ok else available.error
    busy=false
    changed.emit()
+   auth_finished.emit(false)
    return
   body["data"]={"username":username}
  var result := await _request(endpoint,HTTPClient.METHOD_POST,body)
@@ -1090,6 +1106,7 @@ func authenticate(address: String, password: String, register: bool, username: S
  else:status="Check your email to confirm your account, then sign in."
  busy=false
  changed.emit()
+ auth_finished.emit(bool(result.ok))
 
 func _inspect() -> void:
  revision=-1
@@ -1161,6 +1178,8 @@ func sync(data: Dictionary, explicit: bool=false) -> void:
   sync_finished.emit(bool(result.ok),"Garden saved · synced to cloud" if result.ok else "Saved locally · cloud sync needs attention")
 
 func logout() -> void:
+ var sound_service:=get_node_or_null("/root/UISounds")
+ if sound_service:sound_service.stop_all()
  if busy:return
  busy=true
  if persistence_enabled:store.clear()
@@ -1493,6 +1512,7 @@ func write_character(index: int) -> void:
 func append_text(value: String) -> void:
  if draft.max_length>0 and draft.text.length()+value.length()>draft.max_length:return
  draft.text+=value
+ if UISounds.typing and not draft.secret:UISounds.play("typing")
  draft.caret_column=draft.text.length()
 
 func action(label: String) -> void:
@@ -1500,7 +1520,9 @@ func action(label: String) -> void:
   "SHIFT":shift=not shift;refresh_keys()
   "SYMBOLS":symbols=not symbols;refresh_keys()
   "SPACE":append_text(" ")
-  "DELETE":draft.text=draft.text.left(maxi(0,draft.text.length()-1))
+  "DELETE":
+   if not draft.text.is_empty() and UISounds.typing and not draft.secret:UISounds.play("typing")
+   draft.text=draft.text.left(maxi(0,draft.text.length()-1))
   "CANCEL":finish(false)
   "DONE":finish(true)
 
@@ -1688,6 +1710,7 @@ func handle_input(event: InputEvent) -> void:
 		return
 	var tool_map := {JOY_BUTTON_DPAD_UP:0,JOY_BUTTON_DPAD_RIGHT:1,JOY_BUTTON_DPAD_DOWN:2,JOY_BUTTON_DPAD_LEFT:3,JOY_BUTTON_B:4}
 	if tool_map.has(event.button_index):
+		if floating_tool.selected!=tool_map[event.button_index]:UISounds.play("deselect" if tool_map[event.button_index]==4 else "select")
 		clear_use()
 		floating_tool.equip(tool_map[event.button_index])
 	elif event.button_index==JOY_BUTTON_RIGHT_STICK:world._trigger_tardis()
@@ -2231,7 +2254,7 @@ advanced_options=false
 dedicated_server=false
 custom_features=""
 export_filter="all_resources"
-include_filter="audio/ambience/*.wav"
+include_filter="audio/ambience/*.wav,assets/ui/sfx/manifest.json,assets/ui/sfx/LICENSE*,assets/ui/sfx/SOURCE.txt"
 exclude_filter="runtime/*,*-preview.png,preview.png,assets/tools/*_source.glb,assets/trees/ash.glb,assets/trees/birch.glb"
 export_path=""
 encryption_include_filters=""
@@ -2438,6 +2461,7 @@ func _panel(color: Color, radius: int) -> StyleBoxFlat:
 	return style
 
 func open(world: Node3D) -> void:
+	if not visible:UISounds.play("open")
 	garden=world
 	show()
 	viewport.render_target_update_mode=SubViewport.UPDATE_ALWAYS
@@ -2448,6 +2472,7 @@ func open(world: Node3D) -> void:
 	opening.start()
 
 func close() -> void:
+	if visible:UISounds.play("close")
 	opening.stop()
 	if reveal_tween: reveal_tween.kill()
 	hide()
@@ -2458,6 +2483,7 @@ func close() -> void:
 	closed.emit()
 
 func _category(value: String) -> void:
+	if category!=value:UISounds.play("select")
 	category=value
 	for tab in tabs:
 		tab.modulate=Color("ffe5ae") if tab.text==category else Color("b9aa8c")
@@ -2473,6 +2499,7 @@ func _turn(direction: int) -> void:
 		land_page.turn(direction)
 		return
 	if entries.is_empty():return
+	if entries.size()>1:UISounds.play("forward" if direction>0 else "back")
 	page=posmod(page+direction,entries.size())
 	_show_entry()
 
@@ -3090,6 +3117,7 @@ func _trigger_tardis() -> void:
 	_refresh_ui()
 
 func _cycle_shovel(direction: int) -> void:
+	UISounds.play("select")
 	floating_tool.shovel_mode=posmod(floating_tool.shovel_mode+direction,4)
 	_refresh_ui()
 
@@ -3499,6 +3527,7 @@ func _toggle_guide() -> void:
 	_set_guide(not guide.visible)
 
 func _set_guide(open: bool) -> void:
+	if loading_complete and guide.visible!=open:UISounds.play("open" if open else "close")
 	if open and is_instance_valid(placement):
 		placement.cancel(false)
 		if is_instance_valid(local_coop) and is_instance_valid(local_coop.second) and is_instance_valid(local_coop.second.placement):local_coop.second.placement.cancel(false)
@@ -3529,6 +3558,7 @@ func _set_guide(open: bool) -> void:
 	Input.mouse_mode=Input.MOUSE_MODE_VISIBLE if open else Input.MOUSE_MODE_CAPTURED
 
 func _select_tool(index: int) -> void:
+	if loading_complete and index!=tool and not tool_wheel.visible:UISounds.play("deselect" if index==Tool.NONE else "select")
 	_clear_use()
 	tool=clampi(index,0,4)
 	action_pending=false
@@ -3831,6 +3861,7 @@ func say(text: String) -> void:
  else:driver.message_time=4.0
 func begin_purchase(id: String) -> void:
  cancel(false)
+ UISounds.play("drag-start")
  purchase_id=id;yaw=0.0
  driver._clear_use() if slot==0 else driver.clear_use()
  preview=Stock.model(id);garden.add_child(preview)
@@ -3857,6 +3888,7 @@ func begin_animal(subject: Node3D) -> bool:
  if subject.has_meta("relocation_owner"):
   say("The other spirit is already guiding this animal.");return true
  if not garden.contains_cell(garden.local_to_cell(subject.position)):return false
+ UISounds.play("select")
  cancel(false);animal=subject
  route_timer=0;route_target=Vector2i(-99,-99)
  animal.set_meta("relocation_owner",slot)
@@ -3921,15 +3953,15 @@ func update(delta: float) -> void:
   driver.cursor.follow_object(at,Vector2.ONE*garden.MICRO_SIZE,delta)
 func confirm() -> void:
  update(0.0)
- if not problem.is_empty():say(problem);return
+ if not problem.is_empty():UISounds.play("invalid-drop");say(problem);return
  if not purchase_id.is_empty():
   var host: Node=garden.get_parent()
   var result: String=host.confirm_garden_purchase(purchase_id,target,yaw)
-  if not result.is_empty():say(result);return
-  cancel(false);say("Placed in your garden.")
+  if not result.is_empty():UISounds.play("error");say(result);return
+  cancel(false);UISounds.play("purchase");say("Placed in your garden.")
  elif is_instance_valid(animal):
   if not animal.command_move(target):say("There is no clear route to that spot.");return
-  cancel(false);say("Your resident is on the way.")
+  cancel(false);UISounds.play("send");say("Your resident is on the way.")
 func cancel(notify:=true) -> void:
  var had:=active()
  var buying:=not purchase_id.is_empty()
@@ -3943,7 +3975,7 @@ func cancel(notify:=true) -> void:
  if is_instance_valid(driver):
   driver.cursor.restore_colors()
   if had:driver._clear_use() if slot==0 else driver.clear_use()
- if had and notify:say("Placement cancelled. No coins spent." if buying else "Your resident is free to wander again.")
+ if had and notify:UISounds.play("cancel");say("Placement cancelled. No coins spent." if buying else "Your resident is free to wander again.")
 func _exit_tree() -> void:
  if is_instance_valid(animal):
   animal.remove_meta("relocation_owner");animal.animation_player.speed_scale=animation_speed
@@ -6171,7 +6203,7 @@ func _build_ui() -> void:
 	menu_buttons.offset_bottom = -24
 	_button("enter garden",func(): _begin_garden(false),menu_buttons)
 	_button("new garden",_request_new,menu_buttons)
-	_button("options",func(): options.show(); menu_buttons.hide(); heading.hide(); ControllerInput.focus_first.call_deferred(options),menu_buttons)
+	_button("options",func(): UISounds.play("open"); options.show(); menu_buttons.hide(); heading.hide(); ControllerInput.focus_first.call_deferred(options),menu_buttons)
 	_button("ACCOUNT & CLOUD",_open_account,menu_buttons)
 	_button("QUIT GAME",save_and_quit,menu_buttons)
 	account_panel=preload("res://account_panel.gd").new()
@@ -6201,14 +6233,14 @@ func _build_ui() -> void:
 	options.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	options.offset_left = -220
 	options.offset_right = 220
-	options.offset_top = -160
-	options.offset_bottom = 160
+	options.offset_top = -295
+	options.offset_bottom = 295
 	options.add_theme_stylebox_override("panel",_style(Color(0.07,0.13,0.12,0.97)))
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation",10)
 	options.add_child(box)
 	box.add_child(_label("OPTIONS",24,Color("e2bf6e")))
-	box.add_child(_label("Sound volume",16,Color("eee6d0")))
+	box.add_child(_label("Master sound volume",16,Color("eee6d0")))
 	var volume := HSlider.new()
 	volume.name = "Volume"
 	volume.min_value = 0
@@ -6216,8 +6248,21 @@ func _build_ui() -> void:
 	volume.value = 70
 	volume.value_changed.connect(func(value: float):
 		AudioServer.set_bus_volume_db(0,linear_to_db(maxf(value/100.0,0.0001)))
-		_save_options(value))
+		_save_options(value)
+		UISounds.play("volume-change"))
 	box.add_child(volume)
+	var ui_enabled:=CheckButton.new();ui_enabled.name="UISFXEnabled";ui_enabled.text="Interface sounds";ui_enabled.button_pressed=UISounds.enabled
+	ui_enabled.toggled.connect(UISounds.set_enabled);box.add_child(ui_enabled)
+	box.add_child(_label("Interface sound volume",16,Color("eee6d0")))
+	var ui_volume:=HSlider.new();ui_volume.name="UISFXVolume";ui_volume.max_value=100;ui_volume.value=UISounds.volume*100
+	ui_volume.value_changed.connect(func(value: float):UISounds.set_volume(value/100.0));box.add_child(ui_volume)
+	box.add_child(_label("Interface sound style",16,Color("eee6d0")))
+	var ui_pack:=OptionButton.new();ui_pack.name="UISFXPack"
+	for value in UISounds.PACKS:ui_pack.add_item(str(value).capitalize())
+	ui_pack.select(UISounds.PACKS.find(UISounds.pack))
+	ui_pack.item_selected.connect(func(index: int):UISounds.set_pack(UISounds.PACKS[index]));box.add_child(ui_pack)
+	var ui_typing:=CheckButton.new();ui_typing.name="UISFXTyping";ui_typing.text="Quiet typing sounds (optional)";ui_typing.button_pressed=UISounds.typing
+	ui_typing.toggled.connect(UISounds.set_typing);box.add_child(ui_typing)
 	_button("toggle fullscreen",func():
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED if DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN else DisplayServer.WINDOW_MODE_FULLSCREEN)
 		_save_options(volume.value),box)
@@ -6300,6 +6345,7 @@ func _request_new() -> void:
 
 func _begin_garden(fresh: bool) -> void:
 	if loading:return
+	UISounds.stop_all()
 	loading=true
 	autosave_age=0.0
 	if ControllerKeyboard.opened:ControllerKeyboard.finish(false)
@@ -6365,6 +6411,7 @@ func _begin_garden(fresh: bool) -> void:
 	menu_buttons.show()
 
 func open_menu() -> void:
+	UISounds.stop_all()
 	_save_garden()
 	garden._set_guide(true)
 	garden.ambience.update_mix(0,0,0,true)
@@ -6477,7 +6524,7 @@ func _restore_garden() -> void:
 
 func _save_options(volume: float) -> void:
 	var file := FileAccess.open(OPTIONS_PATH,FileAccess.WRITE)
-	if file: file.store_string(JSON.stringify({"volume":volume,"fullscreen":DisplayServer.window_get_mode()==DisplayServer.WINDOW_MODE_FULLSCREEN}))
+	if file: file.store_string(JSON.stringify({"volume":volume,"fullscreen":DisplayServer.window_get_mode()==DisplayServer.WINDOW_MODE_FULLSCREEN,"ui_sfx":UISounds.preferences()}))
 
 func _load_options() -> void:
 	var volume := 70.0
@@ -6501,6 +6548,7 @@ func _focus_menu() -> void:
 		ControllerInput.focus_first.call_deferred(account_panel if account_panel.visible else (options if options.visible else menu_buttons))
 
 func _close_options() -> void:
+	if options.visible:UISounds.play("close")
 	options.hide()
 	menu_buttons.show()
 	heading.show()
@@ -6537,6 +6585,7 @@ func save_and_quit() -> void:
 	get_tree().quit()
 
 func open_village() -> void:
+	UISounds.stop_all()
 	if not is_instance_valid(garden) or is_instance_valid(village): return
 	garden._set_guide(true)
 	garden.ambience.update_mix(0,0,0,true)
@@ -6593,6 +6642,7 @@ func confirm_garden_purchase(id: String, cell: Vector2i, yaw: float) -> String:
 	return ""
 
 func _open_account() -> void:
+	UISounds.play("open")
 	menu_buttons.hide()
 	heading.hide()
 	account_panel.show()
@@ -8021,6 +8071,8 @@ config/features=PackedStringArray("4.6")
 
 [autoload]
 
+UISounds="*res://ui_sounds.gd"
+
 ControllerInput="*res://controller_input.gd"
 ControllerKeyboard="*res://controller_keyboard.gd"
 
@@ -8639,6 +8691,7 @@ func _layout() -> void:
  queue_redraw()
 
 func open(current: int) -> void:
+ if not visible:UISounds.play("open")
  mode_page=false
  selected=clampi(current,0,4)
  hovered=selected
@@ -8662,6 +8715,7 @@ func _refresh() -> void:
  queue_redraw()
 
 func _choose() -> void:
+ UISounds.play("select")
  if mode_page:mode_selected.emit(hovered)
  else:tool_selected.emit(hovered)
 
@@ -8676,9 +8730,9 @@ func handle_event(event: InputEvent) -> bool:
   if event is InputEventJoypadButton and event.pressed:
    match event.button_index:
     JOY_BUTTON_A:_choose()
-    JOY_BUTTON_B:cancelled.emit()
+    JOY_BUTTON_B:_cancel()
     JOY_BUTTON_START:
-     cancelled.emit()
+     _cancel()
      return false
     JOY_BUTTON_DPAD_LEFT:hovered=posmod(hovered-1,_labels().size())
     JOY_BUTTON_DPAD_RIGHT:hovered=posmod(hovered+1,_labels().size())
@@ -8688,7 +8742,7 @@ func handle_event(event: InputEvent) -> bool:
   return true
  if player_slot!=0:return false
  if event is InputEventKey and event.pressed and not event.echo:
-  if event.keycode in [KEY_ESCAPE,KEY_TAB]:cancelled.emit()
+  if event.keycode in [KEY_ESCAPE,KEY_TAB]:_cancel()
   elif event.keycode in [KEY_ENTER,KEY_SPACE]:_choose()
   elif event.keycode in [KEY_LEFT,KEY_RIGHT]:hovered=posmod(hovered+(-1 if event.keycode==KEY_LEFT else 1),_labels().size())
   _refresh()
@@ -8706,7 +8760,7 @@ func _gui_input(event: InputEvent) -> void:
   _refresh()
  elif event is InputEventMouseButton and event.pressed:
   if event.button_index==MOUSE_BUTTON_LEFT and (event.position-center).length()<230*radius_scale:_choose()
-  elif event.button_index==MOUSE_BUTTON_RIGHT:cancelled.emit()
+  elif event.button_index==MOUSE_BUTTON_RIGHT:_cancel()
   accept_event()
 
 func _process(delta: float) -> void:
@@ -8744,6 +8798,111 @@ func attach_clock(world: Node3D, slot: int) -> void:
  var clock:=preload("res://petal_clock.gd").new()
  add_child(clock)
  clock.setup(world,slot)
+
+func _cancel() -> void:
+ UISounds.play("cancel")
+ cancelled.emit()
+
+```
+
+## ui_sounds.gd
+
+```gd
+extends Node
+## Native UI SFX service. One-shots only: existing music covers loading and waiting.
+signal cue_played(cue: String)
+const BASE="res://assets/ui/sfx/"
+const OPTIONS="user://options.json"
+const PACKS=["minimal","soft","glass","arcade","mechanical","organic","dreamy","scifi","rubber","cinematic","studio","zen"]
+var enabled:=true
+var volume:=0.35
+var pack:="organic"
+var typing:=false
+var unlocked:=false
+var catalog: Dictionary={}
+var cache: Dictionary={}
+var recent: Dictionary={}
+var voices: Array[AudioStreamPlayer]=[]
+func _ready() -> void:
+ process_mode=Node.PROCESS_MODE_ALWAYS
+ var manifest: Dictionary=JSON.parse_string(FileAccess.get_file_as_string(BASE+"manifest.json"))
+ for asset in manifest.assets:catalog[asset.pack+"/"+asset.cue]=asset
+ restore()
+ get_tree().node_added.connect(_node_added)
+func _input(event: InputEvent) -> void:
+ if (event is InputEventKey and event.pressed and not event.echo) or (event is InputEventMouseButton and event.pressed) or (event is InputEventJoypadButton and event.pressed) or (event is InputEventScreenTouch and event.pressed):unlocked=true
+func _notification(what: int) -> void:
+ if what==NOTIFICATION_APPLICATION_FOCUS_OUT:
+  stop_all();unlocked=false
+func _node_added(node: Node) -> void:
+ if node is LineEdit:_bind_text.call_deferred(node.get_instance_id())
+func _bind_text(field_id: int) -> void:
+ var field:=instance_from_id(field_id) as LineEdit
+ if not is_instance_valid(field) or field.has_meta("uisfx_bound"):return
+ field.set_meta("uisfx_bound",true)
+ field.text_changed.connect(func(_text: String):
+  if typing and field.has_focus() and not field.secret:play("typing"))
+func play(cue: String) -> AudioStreamPlayer:
+ if not enabled or not unlocked or volume<=0:return null
+ var key:=pack+"/"+cue
+ if not catalog.has(key) or bool(catalog[key].loop):return null
+ var now:=Time.get_ticks_msec()
+ if cue=="notification" and now-int(recent.get("purchase",-100000))<1200:return null
+ var delay: int={"volume-change":220,"notification":2000,"progress-step":400,"hover":250,"seek":200}.get(cue,90)
+ if cue!="typing" and now-int(recent.get(cue,-100000))<delay:return null
+ voices=voices.filter(func(v):return is_instance_valid(v) and not v.is_queued_for_deletion())
+ if voices.size()>=6:
+  var oldest: AudioStreamPlayer=voices.pop_front();oldest.stop();oldest.queue_free()
+ if not cache.has(key):
+  var stream:=load(BASE+key+".mp3") as AudioStreamMP3
+  if not stream:return null
+  stream=stream.duplicate();stream.loop=false;cache[key]=stream
+ var player:=AudioStreamPlayer.new()
+ add_child(player);voices.append(player)
+ player.stream=cache[key]
+ player.volume_db=linear_to_db(maxf(0.0001,volume*float(catalog[key].defaultVolume)))
+ player.finished.connect(func():
+  voices.erase(player);player.queue_free())
+ recent[cue]=now
+ player.play();cue_played.emit(cue)
+ return player
+func stop_all() -> void:
+ for voice in voices:
+  if is_instance_valid(voice):voice.stop();voice.queue_free()
+ voices.clear()
+func set_enabled(value: bool) -> void:
+ if enabled==value:return
+ stop_all();enabled=value;save()
+ if enabled:play("toggle-on")
+func set_volume(value: float) -> void:
+ volume=clampf(value,0,1);stop_all();save();play("volume-change")
+func set_pack(value: String) -> void:
+ if value not in PACKS or pack==value:return
+ stop_all();cache.clear();recent.clear();pack=value;save();play("select")
+func set_typing(value: bool) -> void:
+ if typing==value:return
+ typing=value;save();play("toggle-on" if value else "toggle-off")
+func preferences() -> Dictionary:
+ return {"enabled":enabled,"volume":volume,"pack":pack,"typing":typing}
+func restore() -> void:
+ var data=JSON.parse_string(FileAccess.get_file_as_string(OPTIONS)) if FileAccess.file_exists(OPTIONS) else {}
+ if not data is Dictionary:return
+ var prefs=data.get("ui_sfx",{})
+ if not prefs is Dictionary:return
+ enabled=prefs.get("enabled",true)==true
+ typing=prefs.get("typing",false)==true
+ var level=prefs.get("volume",0.35)
+ volume=clampf(float(level),0,1) if (level is float or level is int) and is_finite(float(level)) else 0.35
+ pack=str(prefs.get("pack","organic"))
+ if pack not in PACKS:pack="organic"
+func save() -> void:
+ var data=JSON.parse_string(FileAccess.get_file_as_string(OPTIONS)) if FileAccess.file_exists(OPTIONS) else {}
+ if not data is Dictionary:data={}
+ data["ui_sfx"]=preferences()
+ var file:=FileAccess.open(OPTIONS,FileAccess.WRITE)
+ if file:file.store_string(JSON.stringify(data))
+func _exit_tree() -> void:
+ stop_all()
 
 ```
 
@@ -9714,6 +9873,7 @@ func _input_mode() -> void:
  elif paused: ControllerInput.focus_first.call_deferred(pause_panel)
 
 func _pause(value: bool) -> void:
+ if paused!=value:UISounds.play("open" if value else "close")
  paused=value
  pause_panel.visible=value
  pause_shade.visible=value
@@ -9776,6 +9936,7 @@ var shop_player:=0
 func enter_shop(index: int, player_slot: int=0) -> void:
  shop_player=player_slot
  if index<0 or index>=SHOPS.size(): return
+ UISounds.play("open")
  current_shop=index
  camera.environment=indoor_environment
  sun.hide()
@@ -9831,6 +9992,7 @@ func _buy(id: String) -> void:
  _refresh_balance()
 
 func _leave_shop() -> void:
+ UISounds.play("back")
  current_shop=-1
  camera.environment=outdoor_environment
  sun.show()

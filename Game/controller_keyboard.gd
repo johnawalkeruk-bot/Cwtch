@@ -86,6 +86,7 @@ func write_character(index: int) -> void:
 func append_text(value: String) -> void:
  if draft.max_length>0 and draft.text.length()+value.length()>draft.max_length:return
  draft.text+=value
+ if UISounds.typing and not draft.secret:UISounds.play("typing")
  draft.caret_column=draft.text.length()
 
 func action(label: String) -> void:
@@ -93,7 +94,9 @@ func action(label: String) -> void:
   "SHIFT":shift=not shift;refresh_keys()
   "SYMBOLS":symbols=not symbols;refresh_keys()
   "SPACE":append_text(" ")
-  "DELETE":draft.text=draft.text.left(maxi(0,draft.text.length()-1))
+  "DELETE":
+   if not draft.text.is_empty() and UISounds.typing and not draft.secret:UISounds.play("typing")
+   draft.text=draft.text.left(maxi(0,draft.text.length()-1))
   "CANCEL":finish(false)
   "DONE":finish(true)
 

@@ -50,6 +50,7 @@ func _process(delta: float) -> void:
    panel.hide()
    return
   current=queue.pop_front()
+  UISounds.play("notification")
   elapsed=0.0
   heading.text=TITLES[current.kind]
   var animal: String=str(current.species).capitalize()

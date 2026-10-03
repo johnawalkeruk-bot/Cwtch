@@ -66,6 +66,7 @@ func _layout() -> void:
  queue_redraw()
 
 func open(current: int) -> void:
+ if not visible:UISounds.play("open")
  mode_page=false
  selected=clampi(current,0,4)
  hovered=selected
@@ -89,6 +90,7 @@ func _refresh() -> void:
  queue_redraw()
 
 func _choose() -> void:
+ UISounds.play("select")
  if mode_page:mode_selected.emit(hovered)
  else:tool_selected.emit(hovered)
 
@@ -103,9 +105,9 @@ func handle_event(event: InputEvent) -> bool:
   if event is InputEventJoypadButton and event.pressed:
    match event.button_index:
     JOY_BUTTON_A:_choose()
-    JOY_BUTTON_B:cancelled.emit()
+    JOY_BUTTON_B:_cancel()
     JOY_BUTTON_START:
-     cancelled.emit()
+     _cancel()
      return false
     JOY_BUTTON_DPAD_LEFT:hovered=posmod(hovered-1,_labels().size())
     JOY_BUTTON_DPAD_RIGHT:hovered=posmod(hovered+1,_labels().size())
@@ -115,7 +117,7 @@ func handle_event(event: InputEvent) -> bool:
   return true
  if player_slot!=0:return false
  if event is InputEventKey and event.pressed and not event.echo:
-  if event.keycode in [KEY_ESCAPE,KEY_TAB]:cancelled.emit()
+  if event.keycode in [KEY_ESCAPE,KEY_TAB]:_cancel()
   elif event.keycode in [KEY_ENTER,KEY_SPACE]:_choose()
   elif event.keycode in [KEY_LEFT,KEY_RIGHT]:hovered=posmod(hovered+(-1 if event.keycode==KEY_LEFT else 1),_labels().size())
   _refresh()
@@ -133,7 +135,7 @@ func _gui_input(event: InputEvent) -> void:
   _refresh()
  elif event is InputEventMouseButton and event.pressed:
   if event.button_index==MOUSE_BUTTON_LEFT and (event.position-center).length()<230*radius_scale:_choose()
-  elif event.button_index==MOUSE_BUTTON_RIGHT:cancelled.emit()
+  elif event.button_index==MOUSE_BUTTON_RIGHT:_cancel()
   accept_event()
 
 func _process(delta: float) -> void:
@@ -171,3 +173,7 @@ func attach_clock(world: Node3D, slot: int) -> void:
  var clock:=preload("res://petal_clock.gd").new()
  add_child(clock)
  clock.setup(world,slot)
+
+func _cancel() -> void:
+ UISounds.play("cancel")
+ cancelled.emit()

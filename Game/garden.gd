@@ -246,6 +246,7 @@ func _trigger_tardis() -> void:
 	_refresh_ui()
 
 func _cycle_shovel(direction: int) -> void:
+	UISounds.play("select")
 	floating_tool.shovel_mode=posmod(floating_tool.shovel_mode+direction,4)
 	_refresh_ui()
 
@@ -655,6 +656,7 @@ func _toggle_guide() -> void:
 	_set_guide(not guide.visible)
 
 func _set_guide(open: bool) -> void:
+	if loading_complete and guide.visible!=open:UISounds.play("open" if open else "close")
 	if open and is_instance_valid(placement):
 		placement.cancel(false)
 		if is_instance_valid(local_coop) and is_instance_valid(local_coop.second) and is_instance_valid(local_coop.second.placement):local_coop.second.placement.cancel(false)
@@ -685,6 +687,7 @@ func _set_guide(open: bool) -> void:
 	Input.mouse_mode=Input.MOUSE_MODE_VISIBLE if open else Input.MOUSE_MODE_CAPTURED
 
 func _select_tool(index: int) -> void:
+	if loading_complete and index!=tool and not tool_wheel.visible:UISounds.play("deselect" if index==Tool.NONE else "select")
 	_clear_use()
 	tool=clampi(index,0,4)
 	action_pending=false

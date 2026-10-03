@@ -202,7 +202,7 @@ func _build_ui() -> void:
 	menu_buttons.offset_bottom = -24
 	_button("enter garden",func(): _begin_garden(false),menu_buttons)
 	_button("new garden",_request_new,menu_buttons)
-	_button("options",func(): options.show(); menu_buttons.hide(); heading.hide(); ControllerInput.focus_first.call_deferred(options),menu_buttons)
+	_button("options",func(): UISounds.play("open"); options.show(); menu_buttons.hide(); heading.hide(); ControllerInput.focus_first.call_deferred(options),menu_buttons)
 	_button("ACCOUNT & CLOUD",_open_account,menu_buttons)
 	_button("QUIT GAME",save_and_quit,menu_buttons)
 	account_panel=preload("res://account_panel.gd").new()
@@ -232,14 +232,14 @@ func _build_ui() -> void:
 	options.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	options.offset_left = -220
 	options.offset_right = 220
-	options.offset_top = -160
-	options.offset_bottom = 160
+	options.offset_top = -295
+	options.offset_bottom = 295
 	options.add_theme_stylebox_override("panel",_style(Color(0.07,0.13,0.12,0.97)))
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation",10)
 	options.add_child(box)
 	box.add_child(_label("OPTIONS",24,Color("e2bf6e")))
-	box.add_child(_label("Sound volume",16,Color("eee6d0")))
+	box.add_child(_label("Master sound volume",16,Color("eee6d0")))
 	var volume := HSlider.new()
 	volume.name = "Volume"
 	volume.min_value = 0
@@ -247,8 +247,21 @@ func _build_ui() -> void:
 	volume.value = 70
 	volume.value_changed.connect(func(value: float):
 		AudioServer.set_bus_volume_db(0,linear_to_db(maxf(value/100.0,0.0001)))
-		_save_options(value))
+		_save_options(value)
+		UISounds.play("volume-change"))
 	box.add_child(volume)
+	var ui_enabled:=CheckButton.new();ui_enabled.name="UISFXEnabled";ui_enabled.text="Interface sounds";ui_enabled.button_pressed=UISounds.enabled
+	ui_enabled.toggled.connect(UISounds.set_enabled);box.add_child(ui_enabled)
+	box.add_child(_label("Interface sound volume",16,Color("eee6d0")))
+	var ui_volume:=HSlider.new();ui_volume.name="UISFXVolume";ui_volume.max_value=100;ui_volume.value=UISounds.volume*100
+	ui_volume.value_changed.connect(func(value: float):UISounds.set_volume(value/100.0));box.add_child(ui_volume)
+	box.add_child(_label("Interface sound style",16,Color("eee6d0")))
+	var ui_pack:=OptionButton.new();ui_pack.name="UISFXPack"
+	for value in UISounds.PACKS:ui_pack.add_item(str(value).capitalize())
+	ui_pack.select(UISounds.PACKS.find(UISounds.pack))
+	ui_pack.item_selected.connect(func(index: int):UISounds.set_pack(UISounds.PACKS[index]));box.add_child(ui_pack)
+	var ui_typing:=CheckButton.new();ui_typing.name="UISFXTyping";ui_typing.text="Quiet typing sounds (optional)";ui_typing.button_pressed=UISounds.typing
+	ui_typing.toggled.connect(UISounds.set_typing);box.add_child(ui_typing)
 	_button("toggle fullscreen",func():
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED if DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN else DisplayServer.WINDOW_MODE_FULLSCREEN)
 		_save_options(volume.value),box)
@@ -331,6 +344,7 @@ func _request_new() -> void:
 
 func _begin_garden(fresh: bool) -> void:
 	if loading:return
+	UISounds.stop_all()
 	loading=true
 	autosave_age=0.0
 	if ControllerKeyboard.opened:ControllerKeyboard.finish(false)
@@ -396,6 +410,7 @@ func _begin_garden(fresh: bool) -> void:
 	menu_buttons.show()
 
 func open_menu() -> void:
+	UISounds.stop_all()
 	_save_garden()
 	garden._set_guide(true)
 	garden.ambience.update_mix(0,0,0,true)
@@ -508,7 +523,7 @@ func _restore_garden() -> void:
 
 func _save_options(volume: float) -> void:
 	var file := FileAccess.open(OPTIONS_PATH,FileAccess.WRITE)
-	if file: file.store_string(JSON.stringify({"volume":volume,"fullscreen":DisplayServer.window_get_mode()==DisplayServer.WINDOW_MODE_FULLSCREEN}))
+	if file: file.store_string(JSON.stringify({"volume":volume,"fullscreen":DisplayServer.window_get_mode()==DisplayServer.WINDOW_MODE_FULLSCREEN,"ui_sfx":UISounds.preferences()}))
 
 func _load_options() -> void:
 	var volume := 70.0
@@ -532,6 +547,7 @@ func _focus_menu() -> void:
 		ControllerInput.focus_first.call_deferred(account_panel if account_panel.visible else (options if options.visible else menu_buttons))
 
 func _close_options() -> void:
+	if options.visible:UISounds.play("close")
 	options.hide()
 	menu_buttons.show()
 	heading.show()
@@ -568,6 +584,7 @@ func save_and_quit() -> void:
 	get_tree().quit()
 
 func open_village() -> void:
+	UISounds.stop_all()
 	if not is_instance_valid(garden) or is_instance_valid(village): return
 	garden._set_guide(true)
 	garden.ambience.update_mix(0,0,0,true)
@@ -624,6 +641,7 @@ func confirm_garden_purchase(id: String, cell: Vector2i, yaw: float) -> String:
 	return ""
 
 func _open_account() -> void:
+	UISounds.play("open")
 	menu_buttons.hide()
 	heading.hide()
 	account_panel.show()

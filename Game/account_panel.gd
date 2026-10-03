@@ -22,6 +22,8 @@ var review: Button
 var signout: Button
 var confirmation: ConfirmationDialog
 var pending := ""
+var auth_feedback:=false
+var upload_feedback:=false
 func setup(owner_node: Node, client: Node) -> void:
  host=owner_node;account=client
  set_anchors_and_offsets_preset(Control.PRESET_CENTER)
@@ -53,6 +55,14 @@ func setup(owner_node: Node, client: Node) -> void:
  button(box,"BACK",func(): hide();host.menu_buttons.show();host.heading.show();host._focus_menu())
  confirmation=ConfirmationDialog.new();add_child(confirmation);confirmation.confirmed.connect(confirm)
  account.changed.connect(refresh)
+ account.auth_finished.connect(func(ok: bool):
+  if auth_feedback and is_visible_in_tree():UISounds.play("success" if ok else "error")
+  auth_feedback=false)
+ account.sync_finished.connect(func(ok: bool, _message: String):
+  if upload_feedback and is_visible_in_tree():UISounds.play("success" if ok else "error")
+  upload_feedback=false)
+ visibility_changed.connect(func():
+  if not visible:auth_feedback=false;upload_feedback=false)
  refresh();hide()
 func field(parent: Node, hint: String, secret:=false) -> LineEdit:
  var item:=LineEdit.new();item.placeholder_text=hint;item.secret=secret;parent.add_child(item);return item
@@ -60,6 +70,7 @@ func button(box: Node, caption: String, action: Callable) -> Button:
  var item:=Button.new();item.text=caption;item.custom_minimum_size.y=34;item.size_flags_horizontal=Control.SIZE_EXPAND_FILL
  item.pressed.connect(action);box.add_child(item);actions.append(item);return item
 func set_registration(value: bool) -> void:
+ if registration!=value:UISounds.play("select")
  registration=value;password.clear();register_password.clear();refresh()
  ControllerInput.focus_first.call_deferred(register_box if value else login_box)
 func authenticate(register: bool) -> void:
@@ -67,7 +78,8 @@ func authenticate(register: bool) -> void:
  var secret:=register_password.text if register else password.text
  if not mail.contains("@") or secret.is_empty() or (register and secret.length()<8):
   account.status="Enter your email and a password of at least eight characters." if register else "Enter your email and password."
-  refresh();return
+  UISounds.play("error");refresh();return
+ auth_feedback=true
  password.clear();register_password.clear()
  account.authenticate(mail,secret,register,username.text if register else "")
 func refresh() -> void:
@@ -95,5 +107,6 @@ func confirm() -> void:
   if not host._save_garden():account.status="Local save failed. Nothing uploaded.";refresh();return
   var data: Variant=JSON.parse_string(FileAccess.get_file_as_string(host.SAVE_PATH))
   if not preload("res://cloud_save_validator.gd").valid(data):account.status="This save cannot be synced safely.";refresh();return
+  upload_feedback=true
   account.sync(data,true)
  else:host.use_cloud_garden(account.remote.get("payload",{}))

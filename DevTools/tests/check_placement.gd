@@ -2,6 +2,7 @@ extends SceneTree
 const Stock=preload("res://village_stock.gd")
 var menu: Node
 var garden: Node
+var sounds: Array[String]=[]
 func _initialize():run.call_deferred()
 func button(index: int) -> InputEventJoypadButton:
  var e:=InputEventJoypadButton.new();e.button_index=index;e.pressed=true;e.device=-1;return e
@@ -20,6 +21,8 @@ func run():
  await process_frame
  await menu._begin_garden(true)
  garden=menu.garden
+ var ui=root.get_node("UISounds");ui.unlocked=true;ui.enabled=true;ui.volume=0.35
+ ui.cue_played.connect(func(cue: String):sounds.append(cue))
  garden.northern_arrival.finish()
  if garden.hedgehog_intro.active:garden.hedgehog_intro._finish()
  garden.hedgehog_intro.welcome_pending=false
@@ -59,6 +62,7 @@ func run():
  assert(garden.placement.target==place and garden.placement.problem.is_empty())
  await shot("purchase-preview")
  garden.placement.confirm()
+ assert(sounds.count("purchase")==1,"Purchase sound follows the committed transaction exactly once")
  assert(not garden.placement.active() and menu.coins==starting_coins-30 and menu.purchases.size()==count+1)
  assert(is_equal_approx(menu.purchases.back().yaw,PI/2))
  assert(garden.blocked_cells.has(place))
@@ -90,6 +94,7 @@ func run():
  assert(garden.placement.target==goal and garden.placement.problem.is_empty())
  await shot("resident-destination")
  garden.placement.confirm()
+ assert(sounds.has("send"),"Movement confirmation has its own semantic cue")
  assert(not animal.has_meta("relocation_owner") and animal.position==before and animal.commanded_goal==goal)
  assert(garden.cursor.source_colors.has(garden.cursor.top_color))
  for step in 3000:

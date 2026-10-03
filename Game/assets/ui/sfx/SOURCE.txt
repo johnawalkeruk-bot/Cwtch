@@ -1,0 +1,6 @@
+UI SFX 0.4.0
+https://github.com/romainsimon/uisfx
+https://uisfx.com/agent-prompt.txt
+Audio: CC0-1.0; library: MIT.
+Downloaded npm tarball SHA-512 verified against registry integrity.
+Default pack: Organic; all 12 packs available.

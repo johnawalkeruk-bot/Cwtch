@@ -307,6 +307,7 @@ func _input_mode() -> void:
  elif paused: ControllerInput.focus_first.call_deferred(pause_panel)
 
 func _pause(value: bool) -> void:
+ if paused!=value:UISounds.play("open" if value else "close")
  paused=value
  pause_panel.visible=value
  pause_shade.visible=value
@@ -369,6 +370,7 @@ var shop_player:=0
 func enter_shop(index: int, player_slot: int=0) -> void:
  shop_player=player_slot
  if index<0 or index>=SHOPS.size(): return
+ UISounds.play("open")
  current_shop=index
  camera.environment=indoor_environment
  sun.hide()
@@ -424,6 +426,7 @@ func _buy(id: String) -> void:
  _refresh_balance()
 
 func _leave_shop() -> void:
+ UISounds.play("back")
  current_shop=-1
  camera.environment=outdoor_environment
  sun.show()

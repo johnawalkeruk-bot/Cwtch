@@ -18,6 +18,8 @@ config/features=PackedStringArray("4.6")
 
 [autoload]
 
+UISounds="*res://ui_sounds.gd"
+
 ControllerInput="*res://controller_input.gd"
 ControllerKeyboard="*res://controller_keyboard.gd"
 

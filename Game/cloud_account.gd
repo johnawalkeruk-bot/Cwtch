@@ -1,4 +1,5 @@
 extends Node
+signal auth_finished(ok: bool)
 ## Refresh sessions are protected by Windows DPAPI; cloud revisions remain conflict checked.
 signal changed
 signal sync_finished(ok: bool, message: String)
@@ -115,6 +116,7 @@ func authenticate(address: String, password: String, register: bool, username: S
    status="Choose an available username: 3–20 letters, numbers or underscores." if available.ok else available.error
    busy=false
    changed.emit()
+   auth_finished.emit(false)
    return
   body["data"]={"username":username}
  var result := await _request(endpoint,HTTPClient.METHOD_POST,body)
@@ -130,6 +132,7 @@ func authenticate(address: String, password: String, register: bool, username: S
  else:status="Check your email to confirm your account, then sign in."
  busy=false
  changed.emit()
+ auth_finished.emit(bool(result.ok))
 
 func _inspect() -> void:
  revision=-1
@@ -201,6 +204,8 @@ func sync(data: Dictionary, explicit: bool=false) -> void:
   sync_finished.emit(bool(result.ok),"Garden saved · synced to cloud" if result.ok else "Saved locally · cloud sync needs attention")
 
 func logout() -> void:
+ var sound_service:=get_node_or_null("/root/UISounds")
+ if sound_service:sound_service.stop_all()
  if busy:return
  busy=true
  if persistence_enabled:store.clear()

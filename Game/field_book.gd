@@ -184,6 +184,7 @@ func _panel(color: Color, radius: int) -> StyleBoxFlat:
 	return style
 
 func open(world: Node3D) -> void:
+	if not visible:UISounds.play("open")
 	garden=world
 	show()
 	viewport.render_target_update_mode=SubViewport.UPDATE_ALWAYS
@@ -194,6 +195,7 @@ func open(world: Node3D) -> void:
 	opening.start()
 
 func close() -> void:
+	if visible:UISounds.play("close")
 	opening.stop()
 	if reveal_tween: reveal_tween.kill()
 	hide()
@@ -204,6 +206,7 @@ func close() -> void:
 	closed.emit()
 
 func _category(value: String) -> void:
+	if category!=value:UISounds.play("select")
 	category=value
 	for tab in tabs:
 		tab.modulate=Color("ffe5ae") if tab.text==category else Color("b9aa8c")
@@ -219,6 +222,7 @@ func _turn(direction: int) -> void:
 		land_page.turn(direction)
 		return
 	if entries.is_empty():return
+	if entries.size()>1:UISounds.play("forward" if direction>0 else "back")
 	page=posmod(page+direction,entries.size())
 	_show_entry()
 

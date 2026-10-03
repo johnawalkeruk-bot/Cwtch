@@ -111,6 +111,7 @@ func handle_input(event: InputEvent) -> void:
 		return
 	var tool_map := {JOY_BUTTON_DPAD_UP:0,JOY_BUTTON_DPAD_RIGHT:1,JOY_BUTTON_DPAD_DOWN:2,JOY_BUTTON_DPAD_LEFT:3,JOY_BUTTON_B:4}
 	if tool_map.has(event.button_index):
+		if floating_tool.selected!=tool_map[event.button_index]:UISounds.play("deselect" if tool_map[event.button_index]==4 else "select")
 		clear_use()
 		floating_tool.equip(tool_map[event.button_index])
 	elif event.button_index==JOY_BUTTON_RIGHT_STICK:world._trigger_tardis()
