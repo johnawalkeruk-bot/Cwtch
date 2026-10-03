@@ -2,11 +2,21 @@
 import argparse
 import json
 import re
+import sys
 from datetime import date
 from html import escape
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / 'Website/changelog.json'
+
+def meaningful_notes(entry):
+    sections = entry.get('sections', [])
+    return (isinstance(entry.get('title'), str) and entry['title'].strip() not in ['', 'In development']
+        and isinstance(sections, list) and bool(sections)
+        and all(isinstance(section, dict) and isinstance(section.get('heading'), str)
+            and section['heading'].strip() and isinstance(section.get('items'), list)
+            and bool(section['items']) and all(isinstance(item, str) and item.strip()
+                for item in section['items']) for section in sections))
 
 def promote(data, version):
     if not re.fullmatch(r'\d+\.\d+\.\d+', version):
@@ -14,7 +24,7 @@ def promote(data, version):
     if any(entry['id'] == version for entry in data['entries']):
         return  # A resumed manual publish must not duplicate an entry.
     pending = next((entry for entry in data['entries'] if entry['id'] == 'unreleased'), None)
-    if pending is None or not pending['sections']:
+    if pending is None or not meaningful_notes(pending):
         raise ValueError('Add player-facing notes to Website/changelog.json before releasing.')
     pending.update(id=version, label='v'+version, date=date.today().isoformat())
     data['entries'].insert(0, {'id':'unreleased','label':'Next update','date':None,
@@ -69,4 +79,8 @@ def main():
     (ROOT/'Website/changelog.html').write_text(html,encoding='utf-8')
     print('Updated Website/changelog.html')
 
-if __name__=='__main__':main()
+if __name__=='__main__':
+    try:main()
+    except (ValueError, KeyError, TypeError, OSError) as error:
+        print('Release notes need attention: '+str(error), file=sys.stderr)
+        sys.exit(1)

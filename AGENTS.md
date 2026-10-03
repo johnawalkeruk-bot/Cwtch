@@ -25,3 +25,9 @@ as Waldas Game Studios. Store uniquely named images in Website/assets/blog/ and
 run DevTools/build_blog.py for the local preview. Manual publishing creates one
 post per release automatically. Never invent issues, screenshots or test results;
 never overwrite published post snapshots or their images while drafting an update.
+
+Before handing back a completed update, run the read-only release preparation check:
+`Launcher/Python/python.exe DevTools/publish.py --check`.
+Keep the unreleased notes and blog accurate and complete so the user's next manual
+publish has its release notes ready. Never invent notes for unfinished work.
+The --check option performs no build, commit, push or publication.

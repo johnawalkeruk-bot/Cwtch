@@ -182,3 +182,11 @@ are saved; old saves remain compatible.
 
 The save emblem spins for at least four seconds on each save, and stays on during
 longer cloud uploads. The toast reports whether saving or cloud syncing succeeded.
+
+## Check before publishing
+
+`Launcher/Python/python.exe DevTools/publish.py --check` validates release notes
+and blog images without building, committing, uploading or publishing. The manual
+publisher runs this same check first. If it reports missing notes, complete the
+Next update entry in Website/changelog.json, then retry Publish Next Version.cmd.
+An interrupted release keeps its pending version and can reuse promoted notes.

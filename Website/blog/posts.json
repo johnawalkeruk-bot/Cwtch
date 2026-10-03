@@ -1,5 +1,31 @@
 [
   {
+    "version": "0.1.31",
+    "date": "2026-10-03",
+    "title": "Check the paperwork before packing the valley",
+    "author": "Waldas Game Studios",
+    "sections": [
+      {
+        "heading": "More reliable manual publishing",
+        "items": [
+          "Release notes and blog images are now checked before building the game or contacting GitHub, avoiding a completed build followed by a missing-notes failure.",
+          "Empty or placeholder release notes produce a clear explanation of what to fix, without a Python traceback. Interrupted releases with already-promoted notes can still resume.",
+          "A read-only publishing check is available for future updates. Existing game saves and gameplay are unchanged."
+        ]
+      }
+    ],
+    "intro": "The publisher used to pack the whole valley into a suitcase, zip it shut, and only then ask whether anyone had written the label. We have moved the paperwork to the beginning. The hedgehog remains opposed to being checked luggage.",
+    "why": [
+      "A missing changelog should be discovered before the slow build and compression work. Release notes, their title and the blog images are now checked first.",
+      "The error now points to the notes that need attention. A retry after notes were already promoted still works, so recovering an interrupted release does not require inventing another update."
+    ],
+    "issues": [
+      "This fixes the release-preparation failure shown in the report. Authentication, network outages and unrelated build failures can still stop a release; they are separate checks.",
+      "This update changes publishing tools only. Existing garden saves need no migration."
+    ],
+    "screenshots": []
+  },
+  {
     "version": "0.1.30",
     "date": "2026-10-03",
     "title": "A place for everything, including the chicken",
