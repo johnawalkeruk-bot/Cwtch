@@ -43,6 +43,7 @@ var account_panel: PanelContainer
 var autosave_age := 0.0
 var account_status: CanvasLayer
 var autosave_sync_pending:=false
+var autosave_writing:=false
 var quitting := false
 var loading := false
 var garden_loader: CanvasLayer
@@ -515,6 +516,7 @@ func _notification(what: int) -> void:
 func _focus_menu() -> void:
 	if loading:return
 	if ControllerKeyboard.opened:return
+	if is_instance_valid(account_status) and account_status.popup.visible:return
 	if menu_active:
 		ControllerInput.focus_first.call_deferred(account_panel if account_panel.visible else (options if options.visible else menu_buttons))
 
@@ -647,9 +649,17 @@ func _loading_failed() -> void:
 	_focus_menu()
 
 func _autosave() -> void:
+	if autosave_writing:return
+	autosave_writing=true
+	account_status.begin_save()
+	await get_tree().process_frame
 	if not _save_garden(false):
+		autosave_writing=false
+		account_status.end_save()
 		account_status.show_toast("Could not save garden · please check available disk space")
 		return
+	autosave_writing=false
+	account_status.end_save()
 	account_status.show_toast("Garden saved locally · syncing…" if not cloud.token.is_empty() else "Garden saved locally · offline")
 	autosave_sync_pending=true
 	var data=JSON.parse_string(FileAccess.get_file_as_string(SAVE_PATH))

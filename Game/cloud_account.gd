@@ -10,6 +10,7 @@ var expires := 0.0
 var revision := -1
 var connected := false
 var busy := false
+var syncing := false
 var status := "Play offline, or sign in to keep a garden in the cloud."
 var profile: Dictionary = {}
 var remote: Dictionary = {}
@@ -165,11 +166,13 @@ func sync(data: Dictionary, explicit: bool=false) -> void:
   return
  if revision<0:return
  busy=true
+ syncing=true
  status="Syncing garden…"
  changed.emit()
  if not await _refresh():
   busy=false
   changed.emit()
+  syncing=false
   sync_finished.emit(false,"Saved locally · cloud unavailable")
   return
  # JSON.parse_string represents numbers as floats. Keep the wire version an
@@ -187,6 +190,7 @@ func sync(data: Dictionary, explicit: bool=false) -> void:
   connected=(int(result.get("code",0))==0 or int(result.get("code",0))>=500) and not str(result.error).contains("Cloud garden changed")
   queued={}
  await remember()
+ syncing=false
  busy=false
  changed.emit()
  if connected and not queued.is_empty():

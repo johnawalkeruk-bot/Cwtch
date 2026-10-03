@@ -1,5 +1,50 @@
 [
   {
+    "version": "0.1.29",
+    "date": "2026-10-03",
+    "title": "A proper welcome, and a little sign of saving",
+    "author": "Waldas Game Studios",
+    "sections": [
+      {
+        "heading": "Welcome back",
+        "items": [
+          "A personalised welcome popup greets you by username after sign-in, including remembered sessions.",
+          "Press A / Cross, Enter or Head Outside to continue to the garden, or stay at the main menu.",
+          "The popup explains autosave and shows the supplied save icon; it also flags any unresolved cloud-garden choice."
+        ]
+      },
+      {
+        "heading": "Saving and account access",
+        "items": [
+          "The new save emblem rotates slowly during local autosaves and cloud uploads. Local and cloud results remain separate toast messages.",
+          "In-game Sign In and Create Account now use separate forms. Existing players need only their email and password to sign in.",
+          "Verified protected login restoration, sign-out cleanup, five-minute autosaves and garden/village account badges."
+        ]
+      }
+    ],
+    "intro": "The valley now remembers your name and says hello before handing you a hoe. There is also a small rotating mountain-and-floppy-disk badge, because even a peaceful garden occasionally needs to say: one moment, I am writing this down.",
+    "why": [
+      "The welcome explains saving before you start playing, using your username and the supplied save artwork. Controller players get the matching A or Cross prompt.",
+      "The save icon stays visible through cloud uploads, while the toast tells you whether the garden reached the cloud or was saved locally.",
+      "Sign-in and registration are now separate inside the game as well as on the website. Existing gardeners need not wade through new-account fields."
+    ],
+    "issues": [
+      "Cloud conflicts still need a garden choice in Account & Cloud. The welcome makes that clear rather than silently replacing either save.",
+      "Windows protects remembered refresh sessions; revoked sessions still require signing in again. Passwords are not saved.",
+      "Tests use disposable player profiles and fixture accounts. Screenshot usernames are examples, not real player data."
+    ],
+    "screenshots": [
+      {
+        "path": "assets/blog/welcome-save-popup.png",
+        "caption": "Development build with a test username: the welcome popup and supplied save icon."
+      },
+      {
+        "path": "assets/blog/game-create-account.png",
+        "caption": "Development build: registration has its own in-game form."
+      }
+    ]
+  },
+  {
     "version": "0.1.28",
     "date": "2026-10-02",
     "title": "Fixed in-game login",

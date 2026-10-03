@@ -7,10 +7,19 @@ extends PanelContainer
 var host: Node
 var account: Node
 var address: LineEdit
-var username: LineEdit
-var claim: Button
 var password: LineEdit
+var register_address: LineEdit
+var register_password: LineEdit
+var username: LineEdit
+var claim_name: LineEdit
+var claim_box: VBoxContainer
 var notice: Label
+var login_box: VBoxContainer
+var register_box: VBoxContainer
+var tabs: HBoxContainer
+var login_tab: Button
+var register_tab: Button
+var registration:=false
 var actions: Array[Button]=[]
 var upload: Button
 var download: Button
@@ -19,64 +28,64 @@ var signout: Button
 var confirmation: ConfirmationDialog
 var pending := ""
 func setup(owner_node: Node, client: Node) -> void:
- host=owner_node
- account=client
+ host=owner_node;account=client
  set_anchors_and_offsets_preset(Control.PRESET_CENTER)
- offset_left=-300;offset_right=300;offset_top=-330;offset_bottom=330
+ offset_left=-300;offset_right=300;offset_top=-325;offset_bottom=325
  add_theme_stylebox_override("panel",preload("res://cwtch_theme.gd").panel(Color("182e28")))
- var box := VBoxContainer.new()
- box.add_theme_constant_override("separation",10)
- add_child(box)
- var title := Label.new()
- title.text="YOUR VALLEY ACCOUNT"
- title.add_theme_font_size_override("font_size",25)
- box.add_child(title)
- address=LineEdit.new();address.placeholder_text="Email address";box.add_child(address)
- username=LineEdit.new();username.placeholder_text="Username (new accounts: 3–20 letters, numbers, _)";username.max_length=20;box.add_child(username)
- password=LineEdit.new();password.placeholder_text="Password";password.secret=true;box.add_child(password)
- button(box,"SIGN IN",func(): authenticate(false))
- button(box,"REGISTER",func(): authenticate(true))
- button(box,"RESET PASSWORD",func(): account.reset_password(address.text))
- claim=button(box,"CLAIM USERNAME",func(): account.claim_username(username.text))
- notice=Label.new();notice.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART;notice.custom_minimum_size.y=75;box.add_child(notice)
+ var box:=VBoxContainer.new();box.add_theme_constant_override("separation",10);add_child(box)
+ var title:=Label.new();title.text="YOUR VALLEY ACCOUNT";title.add_theme_font_size_override("font_size",25);box.add_child(title)
+ tabs=HBoxContainer.new();box.add_child(tabs)
+ login_tab=button(tabs,"SIGN IN",func(): set_registration(false))
+ register_tab=button(tabs,"CREATE ACCOUNT",func(): set_registration(true))
+ login_box=VBoxContainer.new();box.add_child(login_box)
+ address=field(login_box,"Email address")
+ password=field(login_box,"Password",true)
+ button(login_box,"SIGN IN",func(): authenticate(false))
+ button(login_box,"RESET PASSWORD",func(): account.reset_password(address.text))
+ register_box=VBoxContainer.new();box.add_child(register_box)
+ username=field(register_box,"Username · 3–20 letters, numbers or underscores");username.max_length=20
+ register_address=field(register_box,"Email address")
+ register_password=field(register_box,"Password · at least eight characters",true)
+ button(register_box,"CREATE ACCOUNT",func(): authenticate(true))
+ claim_box=VBoxContainer.new();box.add_child(claim_box)
+ claim_name=field(claim_box,"Choose your username");claim_name.max_length=20
+ button(claim_box,"CLAIM USERNAME",func(): account.claim_username(claim_name.text))
+ notice=Label.new();notice.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART;notice.custom_minimum_size.y=80;box.add_child(notice)
  upload=button(box,"USE THIS COMPUTER'S GARDEN",func(): ask("upload"))
  download=button(box,"USE CLOUD GARDEN",func(): ask("download"))
  review=button(box,"REVIEW CLOUD / RETRY",func(): account.inspect())
  signout=button(box,"SIGN OUT",func(): account.logout())
- button(box,"BACK",func():
-  hide();host.menu_buttons.show();host.heading.show();host._focus_menu())
- confirmation=ConfirmationDialog.new()
- add_child(confirmation)
- confirmation.confirmed.connect(confirm)
+ button(box,"BACK",func(): hide();host.menu_buttons.show();host.heading.show();host._focus_menu())
+ confirmation=ConfirmationDialog.new();add_child(confirmation);confirmation.confirmed.connect(confirm)
  account.changed.connect(refresh)
- refresh()
- hide()
+ refresh();hide()
+func field(parent: Node, hint: String, secret:=false) -> LineEdit:
+ var item:=LineEdit.new();item.placeholder_text=hint;item.secret=secret;parent.add_child(item);return item
 func button(box: Node, caption: String, action: Callable) -> Button:
- var item := Button.new();item.text=caption;item.custom_minimum_size.y=34
- item.pressed.connect(action);box.add_child(item);actions.append(item)
- return item
+ var item:=Button.new();item.text=caption;item.custom_minimum_size.y=34;item.size_flags_horizontal=Control.SIZE_EXPAND_FILL
+ item.pressed.connect(action);box.add_child(item);actions.append(item);return item
+func set_registration(value: bool) -> void:
+ registration=value;password.clear();register_password.clear();refresh()
+ ControllerInput.focus_first.call_deferred(register_box if value else login_box)
 func authenticate(register: bool) -> void:
- if not address.text.contains("@") or password.text.length()<8:
-  account.status="Enter your email and a password of at least eight characters."
-  refresh()
-  return
- var secret := password.text
- password.clear()
- account.authenticate(address.text,secret,register,username.text)
+ var mail:=register_address.text if register else address.text
+ var secret:=register_password.text if register else password.text
+ if not mail.contains("@") or secret.is_empty() or (register and secret.length()<8):
+  account.status="Enter your email and a password of at least eight characters." if register else "Enter your email and password."
+  refresh();return
+ password.clear();register_password.clear()
+ account.authenticate(mail,secret,register,username.text if register else "")
 func refresh() -> void:
  notice.text=account.status
- if not account.profile.is_empty():notice.text=str(account.profile.username)+"\n"+notice.text
- if not account.email.is_empty():notice.text=account.email+"\n"+notice.text
+ if not account.profile.is_empty():notice.text=str(account.profile.get("username",""))+"\n"+notice.text
  if not account.remote.is_empty():
   var payload: Dictionary=account.remote.get("payload",{})
   notice.text+="\nCloud: %d coins · saved %s"%[int(payload.get("coins",0)),str(account.remote.get("updated_at","")).left(16)]
  for action in actions:action.disabled=account.busy
  var signed: bool=not account.token.is_empty()
- address.visible=not signed
- password.visible=not signed
- username.visible=not signed or account.profile.is_empty()
- claim.visible=signed and account.profile.is_empty()
- for i in 3:actions[i].visible=not signed
+ tabs.visible=not signed;login_box.visible=not signed and not registration;register_box.visible=not signed and registration
+ login_tab.disabled=account.busy or not registration;register_tab.disabled=account.busy or registration
+ claim_box.visible=signed and account.profile.is_empty()
  upload.visible=signed;download.visible=signed;review.visible=signed;signout.visible=signed
  upload.disabled=account.busy or account.revision<0 or not FileAccess.file_exists(host.SAVE_PATH)
  download.disabled=account.busy or account.remote.is_empty()
@@ -93,6 +102,123 @@ func confirm() -> void:
   if not preload("res://cloud_save_validator.gd").valid(data):account.status="This save cannot be synced safely.";refresh();return
   account.sync(data,true)
  else:host.use_cloud_garden(account.remote.get("payload",{}))
+
+```
+
+## account_status.gd
+
+```gd
+extends CanvasLayer
+var host: Node
+var badge: Label
+var toast: Label
+var age:=0.0
+var save_icon: TextureRect
+var local_saving:=false
+var save_tail:=0.0
+var popup: ColorRect
+var greeting: Label
+var invitation: RichTextLabel
+var prompt_icon: Texture2D
+var cloud_note: Label
+var continue_button: Button
+var shown_for:=""
+const SAVE_ICON=preload("res://assets/ui/save.png")
+func setup(owner_node: Node) -> void:
+ host=owner_node
+ layer=180
+ var root:=Control.new();root.theme=preload("res://cwtch_theme.gd").make();add_child(root)
+ root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+ root.mouse_filter=Control.MOUSE_FILTER_IGNORE
+ badge=Label.new();root.add_child(badge)
+ badge.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+ badge.offset_left=-400;badge.offset_right=-24;badge.offset_top=20;badge.offset_bottom=64
+ badge.horizontal_alignment=HORIZONTAL_ALIGNMENT_RIGHT
+ badge.add_theme_color_override("font_color",Color("f0d69a"))
+ badge.add_theme_color_override("font_shadow_color",Color("10251f"))
+ badge.add_theme_constant_override("shadow_offset_y",2)
+ badge.add_theme_font_size_override("font_size",18)
+ toast=Label.new();root.add_child(toast)
+ toast.set_anchors_and_offsets_preset(Control.PRESET_CENTER_BOTTOM)
+ toast.offset_left=-350;toast.offset_right=350;toast.offset_top=-86;toast.offset_bottom=-38
+ toast.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
+ toast.add_theme_color_override("font_color",Color("f5ebd3"))
+ toast.add_theme_stylebox_override("normal",preload("res://cwtch_theme.gd").compact_card())
+ toast.hide()
+ save_icon=TextureRect.new();root.add_child(save_icon)
+ save_icon.texture=SAVE_ICON;save_icon.expand_mode=TextureRect.EXPAND_IGNORE_SIZE;save_icon.stretch_mode=TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+ save_icon.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_RIGHT)
+ save_icon.offset_left=-96;save_icon.offset_right=-32;save_icon.offset_top=-100;save_icon.offset_bottom=-36
+ save_icon.pivot_offset=Vector2(32,32);save_icon.mouse_filter=Control.MOUSE_FILTER_IGNORE;save_icon.hide()
+ _build_welcome(root)
+ host.cloud.changed.connect(refresh)
+ refresh()
+func refresh() -> void:
+ var account: Node=host.cloud
+ var name:=str(account.profile.get("username",account.email))
+ badge.text="Signed in · "+name if not account.token.is_empty() else "Offline · not signed in"
+ if account.token.is_empty():shown_for="";popup.hide()
+func show_toast(message: String) -> void:
+ toast.text=message;age=5.0;toast.show()
+func _process(delta: float) -> void:
+ age=maxf(0,age-delta);toast.visible=age>0
+ save_tail=maxf(0,save_tail-delta)
+ save_icon.visible=local_saving or host.cloud.syncing or save_tail>0
+ if save_icon.visible:save_icon.rotation=fposmod(save_icon.rotation+delta*0.55,TAU)
+ var account: Node=host.cloud
+ var username:=str(account.profile.get("username",""))
+ if host.menu_active and not host.loading and not account.busy and not account.token.is_empty() and account.expires>Time.get_unix_time_from_system() and not username.is_empty() and shown_for!=account.email:
+  shown_for=account.email
+  show_welcome(username)
+ if popup.visible:
+  var icon:=preload("res://controller_icons.gd").texture("accept",ControllerInput.primary_device())
+  continue_button.icon=icon
+  if icon!=prompt_icon:
+   prompt_icon=icon
+   invitation.text="Grab your tools and press [img=28x28]%s[/img] whenever you're ready to head outside."%icon.resource_path
+ var paused:=false
+ if is_instance_valid(host.village):paused=host.village.paused
+ elif is_instance_valid(host.garden) and host.garden.loading_complete:
+  paused=host.garden.guide.visible or host.garden.hedgehog_intro.paused
+ badge.visible=not host.loading and not popup.visible and (host.menu_active or paused)
+
+func begin_save() -> void:
+ local_saving=true
+func end_save() -> void:
+ local_saving=false;save_tail=0.5
+func _build_welcome(root: Control) -> void:
+ popup=ColorRect.new();root.add_child(popup)
+ popup.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT);popup.color=Color(0.015,0.035,0.03,0.8);popup.hide()
+ var panel:=PanelContainer.new();popup.add_child(panel)
+ panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+ panel.offset_left=-340;panel.offset_right=340;panel.offset_top=-220;panel.offset_bottom=220
+ var box:=VBoxContainer.new();box.add_theme_constant_override("separation",20);panel.add_child(box)
+ greeting=Label.new();greeting.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART;greeting.add_theme_font_size_override("font_size",24);greeting.add_theme_color_override("font_color",Color("e5c17c"));box.add_child(greeting)
+ var note:=RichTextLabel.new();note.bbcode_enabled=true;note.fit_content=true;note.scroll_active=false
+ note.text="[b]Note:[/b] [b]Cwtch[/b] autosaves your progress and syncs it to the cloud automatically. Do not close the game while [img=42x42]res://assets/ui/save.png[/img] is on screen."
+ box.add_child(note)
+ invitation=RichTextLabel.new();invitation.bbcode_enabled=true;invitation.fit_content=true;invitation.scroll_active=false;box.add_child(invitation)
+ cloud_note=Label.new();cloud_note.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART;cloud_note.add_theme_font_size_override("font_size",14);box.add_child(cloud_note)
+ continue_button=Button.new();continue_button.text="HEAD OUTSIDE · ENTER";continue_button.expand_icon=true;continue_button.add_theme_constant_override("icon_max_width",32);continue_button.custom_minimum_size.y=48;box.add_child(continue_button)
+ continue_button.pressed.connect(head_outside)
+ var back:=Button.new();back.text="STAY AT THE MENU";box.add_child(back);back.pressed.connect(func(): popup.hide();host._focus_menu())
+func show_welcome(username: String) -> void:
+ if ControllerKeyboard.opened:ControllerKeyboard.finish(false)
+ greeting.text="Hello %s, welcome back—you're all signed in and ready to get to work."%username
+ cloud_note.text="" if host.cloud.connected else "Cloud sync needs a garden choice in Account & Cloud. Your progress will still save locally."
+ popup.show();continue_button.grab_focus()
+func head_outside() -> void:
+ popup.hide();host.account_panel.hide()
+ host._begin_garden(not FileAccess.file_exists(host.SAVE_PATH))
+func _input(event: InputEvent) -> void:
+ if not is_instance_valid(popup) or not popup.visible:return
+ if event.is_action_pressed("ui_accept") or (event is InputEventJoypadButton and event.pressed and event.button_index==JOY_BUTTON_A):
+  var focused:=get_viewport().gui_get_focus_owner()
+  if focused is Button and popup.is_ancestor_of(focused) and focused!=continue_button:focused.pressed.emit()
+  else:head_outside()
+  get_viewport().set_input_as_handled()
+ elif event.is_action_pressed("ui_cancel"):
+  popup.hide();host._focus_menu();get_viewport().set_input_as_handled()
 
 ```
 
@@ -830,8 +956,9 @@ func advance(delta: float) -> void:
 
 ```gd
 extends Node
-## Tokens live in memory only. First sync is always an explicit local/cloud choice.
+## Refresh sessions are protected by Windows DPAPI; cloud revisions remain conflict checked.
 signal changed
+signal sync_finished(ok: bool, message: String)
 const Config = preload("res://cloud_config.gd")
 var token := ""
 var refresh_token := ""
@@ -840,10 +967,44 @@ var expires := 0.0
 var revision := -1
 var connected := false
 var busy := false
+var syncing := false
 var status := "Play offline, or sign in to keep a garden in the cloud."
 var profile: Dictionary = {}
 var remote: Dictionary = {}
 var queued: Dictionary = {}
+var store: Node
+var persistence_enabled := true
+
+func _ready() -> void:
+ store=preload("res://session_store.gd").new()
+ add_child(store)
+
+func remember() -> void:
+ if not persistence_enabled or refresh_token.is_empty():return
+ var ok: bool=await store.save({"refresh_token":refresh_token,"email":email,"username":profile.get("username",""),"revision":revision,"connected":connected})
+ if not ok:status+=" Login could not be remembered on this computer."
+
+func restore_login() -> void:
+ if busy or not persistence_enabled:return
+ busy=true
+ status="Restoring your account…"
+ changed.emit()
+ var saved: Dictionary=await store.read()
+ if not saved.get("refresh_token","").is_empty():
+  refresh_token=saved.refresh_token
+  token="restoring"
+  expires=0
+  email=str(saved.get("email",""))
+  profile={"username":saved.username} if not str(saved.get("username","")).is_empty() else {}
+  revision=int(saved.get("revision",-1))
+  connected=bool(saved.get("connected",false)) and revision>=0
+  if await _refresh():
+   await load_profile()
+   status="Signed in. Cloud autosave ready." if connected else "Signed in. Review cloud to choose your garden."
+ else:status="Play offline, or sign in to keep a garden in the cloud."
+ busy=false
+ changed.emit()
+
 
 func _request(path: String, method: int, body: Dictionary={}, authorized: bool=false) -> Dictionary:
  var http := HTTPRequest.new()
@@ -879,14 +1040,19 @@ func _refresh() -> bool:
  var result := await _request("/auth/v1/token?grant_type=refresh_token",HTTPClient.METHOD_POST,{"refresh_token":refresh_token})
  if result.ok:
   _session(result.data)
+  await remember()
   return true
- status="Session expired. Sign in again. Your local save is safe."
- connected=false
+ if int(result.get("code",0)) in [400,401,403]:
+  token="";refresh_token="";email="";profile={};connected=false
+  store.clear()
+  status="Session expired. Sign in again. Your local save is safe."
+ else:status="Cloud unavailable. Your login and local save are kept."
  return false
 
 func authenticate(address: String, password: String, register: bool, username: String="") -> void:
  if busy:return
  busy=true
+ if persistence_enabled:store.clear()
  token=""
  refresh_token=""
  email=""
@@ -917,6 +1083,7 @@ func authenticate(address: String, password: String, register: bool, username: S
   _session(result.data)
   await _inspect()
   await load_profile()
+  await remember()
  else:status="Check your email to confirm your account, then sign in."
  busy=false
  changed.emit()
@@ -932,6 +1099,7 @@ func _inspect() -> void:
  if result.data is Array and not result.data.is_empty():
   remote=result.data[0]
   revision=int(remote.revision)
+ if revision==0:connected=true
  status="Choose which garden to keep. Cloud revision: %d."%revision if revision>0 else "No cloud garden yet. Upload your local garden to begin syncing."
 
 func inspect() -> void:
@@ -944,17 +1112,25 @@ func inspect() -> void:
  changed.emit()
 
 func sync(data: Dictionary, explicit: bool=false) -> void:
- if token.is_empty() or (not connected and not explicit):return
+ if token.is_empty():
+  sync_finished.emit(false,"Saved locally · offline")
+  return
+ if not connected and not explicit:
+  sync_finished.emit(false,"Saved locally · review Account & Cloud to enable sync")
+  return
  if busy:
   if connected:queued=data.duplicate(true)
   return
  if revision<0:return
  busy=true
+ syncing=true
  status="Syncing garden…"
  changed.emit()
  if not await _refresh():
   busy=false
   changed.emit()
+  syncing=false
+  sync_finished.emit(false,"Saved locally · cloud unavailable")
   return
  # JSON.parse_string represents numbers as floats. Keep the wire version an
  # integer: the deployed RPC compares the extracted version text with '1'.
@@ -968,18 +1144,23 @@ func sync(data: Dictionary, explicit: bool=false) -> void:
   status="Garden synced · revision %d"%revision
  else:
   status=result.error+" Local save kept. Review cloud to retry."
-  connected=false
+  connected=(int(result.get("code",0))==0 or int(result.get("code",0))>=500) and not str(result.error).contains("Cloud garden changed")
   queued={}
+ await remember()
+ syncing=false
  busy=false
  changed.emit()
  if connected and not queued.is_empty():
   var next := queued
   queued={}
   sync(next)
+ else:
+  sync_finished.emit(bool(result.ok),"Garden saved · synced to cloud" if result.ok else "Saved locally · cloud sync needs attention")
 
 func logout() -> void:
  if busy:return
  busy=true
+ if persistence_enabled:store.clear()
  changed.emit()
  if not token.is_empty():await _request("/auth/v1/logout?scope=local",HTTPClient.METHOD_POST,{},true)
  token=""
@@ -1005,7 +1186,8 @@ func reset_password(address: String) -> void:
 
 func load_profile() -> void:
  var result := await _request("/rest/v1/rpc/cwtch_my_profile",HTTPClient.METHOD_POST,{},true)
- profile=result.data if result.ok and result.data is Dictionary else {}
+ if not result.ok:return
+ profile=result.data if result.data is Dictionary else {}
  if profile.is_empty():status+=" Choose a username to join the Valley Club."
 
 func claim_username(candidate: String) -> void:
@@ -1017,6 +1199,7 @@ func claim_username(candidate: String) -> void:
   if result.ok:
    profile=result.data
    status="Welcome to the Valley Club, "+str(profile.username)+"."
+   await remember()
   else:status=result.error
  busy=false
  changed.emit()
@@ -5636,6 +5819,9 @@ var weather_override := -1
 var cloud: Node
 var account_panel: PanelContainer
 var autosave_age := 0.0
+var account_status: CanvasLayer
+var autosave_sync_pending:=false
+var autosave_writing:=false
 var quitting := false
 var loading := false
 var garden_loader: CanvasLayer
@@ -5651,6 +5837,11 @@ func _ready() -> void:
 	cloud=preload("res://cloud_account.gd").new()
 	add_child(cloud)
 	_build_ui()
+	account_status=preload("res://account_status.gd").new()
+	add_child(account_status)
+	account_status.setup(self)
+	cloud.sync_finished.connect(_autosave_sync_finished)
+	cloud.restore_login.call_deferred()
 	garden_loader=preload("res://garden_loading.gd").new()
 	add_child(garden_loader)
 	ControllerInput.mode_changed.connect(_focus_menu)
@@ -5850,10 +6041,10 @@ func _build_ui() -> void:
 
 func _process(delta: float) -> void:
 	if loading:return
-	autosave_age+=delta
-	if autosave_age>=60.0 and is_instance_valid(garden):
+	if not menu_active and is_instance_valid(garden):autosave_age+=delta
+	if autosave_age>=300.0 and is_instance_valid(garden):
 		autosave_age=0.0
-		_save_garden()
+		_autosave()
 	if not menu_active:
 		return
 	elapsed += delta
@@ -5919,6 +6110,7 @@ func _request_new() -> void:
 func _begin_garden(fresh: bool) -> void:
 	if loading:return
 	loading=true
+	autosave_age=0.0
 	if ControllerKeyboard.opened:ControllerKeyboard.finish(false)
 	garden_loader.begin()
 	ambience.update_mix(0,0,0,true)
@@ -5999,7 +6191,7 @@ func open_menu() -> void:
 	_focus_menu()
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
-func _save_garden() -> bool:
+func _save_garden(sync_cloud: bool=true) -> bool:
 	if not is_instance_valid(garden): return true
 	var terrain := []
 	for z in range(garden.grid_size.y):
@@ -6021,7 +6213,7 @@ func _save_garden() -> bool:
 	file.close()
 	if not success:return false
 	if DirAccess.rename_absolute(ProjectSettings.globalize_path(SAVE_PATH+".tmp"),ProjectSettings.globalize_path(SAVE_PATH))!=OK:return false
-	cloud.sync(data)
+	if sync_cloud:cloud.sync(data)
 	return true
 
 func _saved_watered() -> Array:
@@ -6102,6 +6294,7 @@ func _notification(what: int) -> void:
 func _focus_menu() -> void:
 	if loading:return
 	if ControllerKeyboard.opened:return
+	if is_instance_valid(account_status) and account_status.popup.visible:return
 	if menu_active:
 		ControllerInput.focus_first.call_deferred(account_panel if account_panel.visible else (options if options.visible else menu_buttons))
 
@@ -6214,6 +6407,7 @@ func use_cloud_garden(data: Variant) -> void:
 	valley_music.silence()
 	valley_music.band=""
 	cloud.connected=true
+	cloud.remember()
 	cloud.status="Cloud garden ready. Choose ENTER GARDEN. Previous local save backed up."
 	cloud.changed.emit()
 func _cloud_summary() -> Dictionary:
@@ -6231,6 +6425,28 @@ func _loading_failed() -> void:
 	menu_buttons.show()
 	loading_label.text="COULD NOT OPEN THE GARDEN. PLEASE TRY AGAIN."
 	_focus_menu()
+
+func _autosave() -> void:
+	if autosave_writing:return
+	autosave_writing=true
+	account_status.begin_save()
+	await get_tree().process_frame
+	if not _save_garden(false):
+		autosave_writing=false
+		account_status.end_save()
+		account_status.show_toast("Could not save garden · please check available disk space")
+		return
+	autosave_writing=false
+	account_status.end_save()
+	account_status.show_toast("Garden saved locally · syncing…" if not cloud.token.is_empty() else "Garden saved locally · offline")
+	autosave_sync_pending=true
+	var data=JSON.parse_string(FileAccess.get_file_as_string(SAVE_PATH))
+	cloud.sync(data)
+
+func _autosave_sync_finished(_ok: bool, message: String) -> void:
+	if not autosave_sync_pending:return
+	autosave_sync_pending=false
+	account_status.show_toast(message)
 
 ```
 
@@ -7694,6 +7910,61 @@ static func attach(parent: Node3D, title: String, size: Vector3, cell := Vector2
 func selection_size() -> Vector2:
 	var world_scale := subject.global_basis.get_scale()
 	return footprint * Vector2(absf(world_scale.x), absf(world_scale.z)) + Vector2.ONE * 0.16
+
+```
+
+## session_store.gd
+
+```gd
+extends Node
+## Windows DPAPI: only the current Windows user can decrypt the remembered login.
+var generation:=0
+var writing:=false
+const PATH := "user://account_session.bin"
+const COMMAND := """$ErrorActionPreference='Stop';try{Add-Type -AssemblyName System.Security;$r=[Console]::ReadLine()|ConvertFrom-Json;$b=[Convert]::FromBase64String($r.data);if($r.mode -eq 'protect'){$v=[Security.Cryptography.ProtectedData]::Protect($b,$null,[Security.Cryptography.DataProtectionScope]::CurrentUser)}else{$v=[Security.Cryptography.ProtectedData]::Unprotect($b,$null,[Security.Cryptography.DataProtectionScope]::CurrentUser)};[Console]::WriteLine([Convert]::ToBase64String($v))}catch{[Console]::WriteLine('FAILED');exit 1}"""
+
+func crypt(data: PackedByteArray, mode: String) -> PackedByteArray:
+ if OS.get_name()!="Windows":return PackedByteArray()
+ var exe:=OS.get_environment("SystemRoot").path_join("System32/WindowsPowerShell/v1.0/powershell.exe")
+ var process:=OS.execute_with_pipe(exe,PackedStringArray(["-NoProfile","-NonInteractive","-WindowStyle","Hidden","-Command",COMMAND]),false)
+ if process.is_empty():return PackedByteArray()
+ var pipe: FileAccess=process.stdio
+ pipe.store_line(JSON.stringify({"mode":mode,"data":Marshalls.raw_to_base64(data)}))
+ var deadline:=Time.get_ticks_msec()+10000
+ while OS.is_process_running(process.pid) and Time.get_ticks_msec()<deadline:await get_tree().process_frame
+ if OS.is_process_running(process.pid):
+  OS.kill(process.pid)
+  return PackedByteArray()
+ var reply:=pipe.get_line().strip_edges()
+ pipe.close()
+ if reply=="FAILED" or reply.is_empty():return PackedByteArray()
+ return Marshalls.base64_to_raw(reply)
+
+func save(data: Dictionary) -> bool:
+ var epoch:=generation
+ while writing:await get_tree().process_frame
+ if epoch!=generation:return false
+ writing=true
+ var protected:=await crypt(JSON.stringify(data).to_utf8_buffer(),"protect")
+ writing=false
+ if epoch!=generation or protected.is_empty():return false
+ var file:=FileAccess.open(PATH+".tmp",FileAccess.WRITE)
+ if not file:return false
+ file.store_buffer(protected);file.flush()
+ var ok:=file.get_error()==OK
+ file.close()
+ return ok and DirAccess.rename_absolute(ProjectSettings.globalize_path(PATH+".tmp"),ProjectSettings.globalize_path(PATH))==OK
+
+func read() -> Dictionary:
+ if not FileAccess.file_exists(PATH):return {}
+ var bytes:=await crypt(FileAccess.get_file_as_bytes(PATH),"unprotect")
+ var value=JSON.parse_string(bytes.get_string_from_utf8()) if not bytes.is_empty() else null
+ return value if value is Dictionary else {}
+
+func clear() -> void:
+ generation+=1
+ for name in [PATH,PATH+".tmp"]:
+  if FileAccess.file_exists(name):DirAccess.remove_absolute(ProjectSettings.globalize_path(name))
 
 ```
 

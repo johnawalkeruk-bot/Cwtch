@@ -14,6 +14,7 @@ func run():
  menu._process(299)
  assert(not menu.account_status.toast.visible,'No autosave before five minutes')
  menu._process(1)
+ await create_timer(0.1).timeout
  assert(menu.autosave_age==0 and FileAccess.file_exists(menu.SAVE_PATH))
  assert(menu.account_status.toast.text.contains('offline'),'Offline saves must not claim cloud success')
  menu.cloud.email='fixture@example.invalid';menu.cloud.token='fixture';menu.cloud.profile={'username':'ValleyGardener'};menu.cloud.changed.emit()
@@ -31,5 +32,5 @@ func run():
   root.get_texture().get_image().save_png(ProjectSettings.globalize_path('res://../.local/account-badge-toast.png'))
  menu.cloud.token='';menu.cloud.profile={};menu.cloud.email='';menu.cloud.changed.emit()
  assert(menu.account_status.badge.text.contains('Offline'))
- menu.queue_free();await process_frame
+ menu.queue_free();await create_timer(0.2).timeout
  print('AUTOSAVE_PASS: five-minute timing, local write, offline/success/failure toast, account identity and garden/village pause badges');quit()

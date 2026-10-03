@@ -19,7 +19,7 @@ After each sign-in, choose USE THIS COMPUTER'S GARDEN or USE CLOUD GARDEN.
 Each account has one cloud garden. Replacing a cloud garden asks for confirmation.
 Downloading validates the snapshot and keeps a timestamped `garden.json.before-cloud-*.json` backup beside the local save before replacement. Select ENTER GARDEN afterwards.
 Once connected, the game saves locally every minute and uploads following local saves. Failed or conflicting uploads stop syncing, keep the local garden, and require REVIEW CLOUD / RETRY and an explicit choice. Save-and-quit allows a bounded wait for in-flight requests; local progress remains safe if offline.
-Sessions are memory-only; restarting the game or reloading the website requires signing in again. No passwords, refresh tokens, database passwords or privileged keys are stored on disk by the integration.
+The Windows game remembers its refresh session using Windows DPAPI protection for the current Windows user; it never stores the password. Signing out deletes the protected session. The website remains memory-only and signs out on page reload. Revoked server sessions require signing in again. No privileged keys are stored by the integration.
 The website is a private read-only snapshot: coins, animal population, XP, terrain percentages and first visit/residency days. It reflects the most recent upload, not a live simulation. Split-screen players share the garden account and save.
 
 ## Architecture
@@ -58,3 +58,12 @@ References: https://supabase.com/docs/guides/auth/managing-user-data and https:/
 ### Website account loading fix
 
 The sign-in form is separate from registration. Existing players use their email and password; new accounts additionally choose a username. `club-start.js` reports module-loading failures and keeps submit buttons disabled until initialization succeeds. Authentication and dashboard errors are handled separately. The publisher includes local ES-module dependencies through `site_dependencies.py`, preventing the missing `garden-metrics.js` deployment that disabled login in v0.1.25. Run `DevTools/test_site_dependencies.py` alongside the browser account tests when editing the publication process. No Supabase migration is required for this fix.
+
+
+### Game welcome and save feedback
+
+The main menu and garden/village pause screens display the account identity. The game restores its protected refresh session on startup, retaining the last accepted cloud revision so a restart cannot silently overwrite a newer save. Five-minute autosaves run while a garden is open (including village visits and pauses); menu/loading time is excluded. Local saving and cloud results have separate toast messages. Conflicts require review in Account & Cloud; temporary network failures keep local progress and retry on subsequent autosaves.
+
+The username welcome popup appears once per verified sign-in, including restored sessions, with the supplied save icon and controller-family accept glyph. A/Cross, Enter or the button continues into the existing garden, or creates one when there is no local save. Players can stay at the menu instead. A pending cloud choice is stated explicitly. The supplied save emblem rotates during local autosaves and cloud uploads. In-game Sign In and Create Account now have separate fields, with a separate username claim for legacy accounts.
+
+Regression scripts: `check_session_store.gd`, `check_remembered_account.gd`, `check_autosave.gd` and `check_welcome_save.gd` in `DevTools/tests/`. Always use disposable APPDATA profiles. The encrypted-session test uses fixture data only; the welcome screenshot uses a test username.
