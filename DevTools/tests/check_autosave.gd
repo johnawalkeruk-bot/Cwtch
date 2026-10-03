@@ -32,5 +32,5 @@ func run():
   root.get_texture().get_image().save_png(ProjectSettings.globalize_path('res://../.local/account-badge-toast.png'))
  menu.cloud.token='';menu.cloud.profile={};menu.cloud.email='';menu.cloud.changed.emit()
  assert(menu.account_status.badge.text.contains('Offline'))
- menu.queue_free();await create_timer(0.2).timeout
+ menu.queue_free();await create_timer(1.0).timeout
  print('AUTOSAVE_PASS: five-minute timing, local write, offline/success/failure toast, account identity and garden/village pause badges');quit()

@@ -27,9 +27,13 @@ func prompts() -> Array:
 	if garden.guide.visible:return [["accept","Select"],["back","Back"]]
 	var wheel: Control=garden.tool_wheel if player_slot==0 else garden.local_coop.second.tool_wheel
 	if wheel.visible:return [["accept","Select"],["back","Close"],["move","Choose"]]
-	var tool: Node3D=garden.floating_tool if player_slot==0 else garden.local_coop.second.floating_tool
-	var items := [["accept","Tools"],["use","Use tool"],["back","Put away"],["pause","Pause"]]
-	if tool.selected==3:items.insert(2,["mode","Mode"])
+	var placement: Node=garden.placement if player_slot==0 else garden.local_coop.second.placement
+	if is_instance_valid(placement) and placement.active():
+		var actions: Array=[["accept","Place" if not placement.purchase_id.is_empty() else "Send here"],["back","Cancel"]]
+		if not placement.purchase_id.is_empty():actions.append_array([["left","Rotate left"],["right","Rotate right"]])
+		return actions
+	var items := [["mode","Tools"],["accept","Move animal"],["use","Use tool"],["back","Put away"],["pause","Pause"]]
+
 	return items
 
 func _text(text: String, at: Vector2, size_px: int, color: Color=Petals.INK) -> void:
@@ -69,7 +73,9 @@ func _draw() -> void:
 		var y := 19+i*34
 		if pad:draw_texture_rect(Icons.texture(action,device),Rect2(160,y,28,28),false)
 		else:
-			var key: String={"accept":"Enter" if garden.guide.visible or village or (not village and garden.tool_wheel.visible) else "Tab","back":"Esc" if garden.guide.visible or village or (not village and garden.tool_wheel.visible) else "T","mode":"X","use":"Click","pause":"Esc","move":"Mouse","left":"←","right":"→"}.get(action,"")
+			var key: String={"accept":"Enter" if garden.guide.visible or village or (not village and garden.tool_wheel.visible) else "R","back":"Esc" if garden.guide.visible or village or (not village and garden.tool_wheel.visible) else "T","mode":"Tab","use":"Click","pause":"Esc","move":"Mouse","left":"←","right":"→"}.get(action,"")
+			if not village and is_instance_valid(garden.placement) and garden.placement.active():
+				key={"accept":"Click","back":"Esc","left":"Q","right":"E"}.get(action,key)
 			draw_string_outline(font,Vector2(157,y+19),key,HORIZONTAL_ALIGNMENT_LEFT,-1,11,3,Color("172d2a"))
 			_text(key,Vector2(157,y+19),11,Petals.GOLD)
 		draw_string_outline(font,Vector2(195,y+20),items[i][1],HORIZONTAL_ALIGNMENT_LEFT,-1,14,3,Color("172d2a"))

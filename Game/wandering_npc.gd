@@ -21,6 +21,9 @@ var collision_height := 1.5
 var motion_ratio := 0.0
 var travel_speed := 0.0
 var blocked_time := 0.0
+var directed_path: Array[Vector2i]=[]
+var commanded_goal:=Vector2i(-1,-1)
+var arrival_rest:=0.0
 
 func setup(world: Node3D) -> void:
 	garden = world
@@ -160,17 +163,35 @@ func _retarget_walk() -> Animation:
 func _physics_process(delta: float) -> void:
 	if not is_instance_valid(garden):
 		return
+	if has_meta("relocation_owner"):
+		animation_player.speed_scale=0.0
+		return
 	advance(delta)
 
 func advance(delta: float) -> void:
 	if garden.guide.visible:
 		animation_player.speed_scale = 0.0
 		return
+	if arrival_rest>0:
+		arrival_rest=maxf(0,arrival_rest-delta)
+		walking=false
+		animation_player.speed_scale=0
+		return
 	if position.distance_to(destination) < 0.001:
 		cell = next_cell
-		_choose_destination()
+		if not directed_path.is_empty():
+			next_cell=directed_path.pop_front()
+			destination=garden.cell_center(next_cell)
+		elif commanded_goal==cell:
+			commanded_goal=Vector2i(-1,-1)
+			arrival_rest=2.0
+			return
+		else:_choose_destination()
 	# A newly planted tile stops the visitor before it crosses that tile.
-	if walking and not _walkable(next_cell):
+	if not _walkable(next_cell):
+		if garden.contains_cell(commanded_goal):
+			if command_move(commanded_goal):return
+			directed_path.clear();commanded_goal=Vector2i(-1,-1)
 		next_cell = cell
 		destination = garden.cell_center(cell)
 	var offset := destination - position
@@ -199,6 +220,8 @@ func advance(delta: float) -> void:
 		destination = garden.cell_center(cell)
 		blocked_time = 0.0
 		travel_speed = 0.0
+		if garden.contains_cell(commanded_goal) and not command_move(commanded_goal):
+			directed_path.clear();commanded_goal=Vector2i(-1,-1)
 
 func _can_reserve(candidate: Vector2i) -> bool:
 	if not _walkable(candidate): return false
@@ -237,3 +260,30 @@ func _choose_destination() -> void:
 	next_cell = options[rng.randi_range(0, options.size() - 1)]
 	destination = garden.cell_center(next_cell)
 	walking = true
+
+func route_to(goal: Vector2i) -> Array[Vector2i]:
+	var path: Array[Vector2i]=[]
+	if not _can_reserve(goal):return path
+	var start: Vector2i=garden.local_to_cell(position)
+	var frontier: Array[Vector2i]=[start]
+	var previous: Dictionary={start:start}
+	var index:=0
+	while index<frontier.size():
+		var here: Vector2i=frontier[index];index+=1
+		if here==goal:break
+		for direction in DIRECTIONS:
+			var next: Vector2i=here+direction
+			if previous.has(next) or not _walkable(next):continue
+			previous[next]=here;frontier.append(next)
+	if not previous.has(goal):return path
+	var at:=goal
+	while at!=start:path.push_front(at);at=previous[at]
+	if path.is_empty():path.append(goal)
+	return path
+func command_move(goal: Vector2i) -> bool:
+	var path:=route_to(goal)
+	if path.is_empty():return false
+	directed_path=path;commanded_goal=goal;arrival_rest=0
+	cell=garden.local_to_cell(position);next_cell=cell;destination=garden.cell_center(cell)
+	blocked_time=0;travel_speed=0
+	return true

@@ -29,7 +29,8 @@ func run():
  assert(overlay.save_icon.visible and overlay.save_icon.rotation>initial)
  overlay.end_save();menu.cloud.syncing=true;overlay._process(1)
  assert(overlay.save_icon.visible,'Indicator stays on while cloud sync is active')
- menu.cloud.syncing=false;overlay._process(1);assert(not overlay.save_icon.visible)
+ menu.cloud.syncing=false;overlay._process(1);assert(overlay.save_icon.visible)
+ overlay._process(3.1);assert(not overlay.save_icon.visible)
  menu.cloud.connected=false
  overlay.show_welcome('ValleyGardener')
  var event:=InputEventJoypadButton.new();event.button_index=JOY_BUTTON_A;event.pressed=true

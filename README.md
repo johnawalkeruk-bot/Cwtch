@@ -44,7 +44,8 @@ Connect two controllers before entering the garden, or connect a second during p
 The first connected controller owns the left view (gold/blue); the second owns
 the right view (red/gold). Both use left stick to glide and right stick to aim.
 D-pad Up/Right/Down/Left selects Hoe/Seeds/Watering Can/Shovel; hold RT to use,
-X / Square changes shovel mode, and B / Circle puts the tool away.
+X / Square opens the tool wheel, and B / Circle puts the tool away.
+Choose Shovel in the wheel to select its mode. A / Cross guides a selected resident.
 Keyboard and mouse continue to control player one. Extra controllers do not
 control either spirit during play.
 
@@ -76,10 +77,11 @@ to see this panel; game updates do not replace the running launcher.
 
 ## Daffodil wheel, clock and garden experience
 
-- Open/confirm the tool wheel with **Xbox A / PlayStation Cross**; close with
+- Open the tool wheel with **Xbox X / PlayStation Square**, confirm with
+  **A / Cross**; close with
   **B / Circle**. On keyboard use **Tab**, then mouse/click or Enter; Escape closes.
 - Choose with the left stick or D-pad. Selecting Shovel opens Dig/Pick/Pour/Thump.
-  Existing 1–4 and D-pad tool shortcuts, X / Square mode cycling and held tool use
+  Existing 1–4 and D-pad tool shortcuts, keyboard X mode cycling and held tool use
   remain available. B / Circle outside the wheel still puts the tool away.
 - Each split-screen player owns a separate wheel; its blur stays inside their view.
 - The analogue clock is on the left. Its 12 petals fill toward the next level;
@@ -162,3 +164,21 @@ and short low flights, preserving the 1% water entry rule and save data.
 The high-density rock is reduced to approximately 12,000 faces for the game copy;
 its full-detail FBX remains in Decor/Rock. The latest blog post was explicitly
 revised on 2 October 2026, with unreleased changes labelled as a development follow-up.
+
+## Purchases and resident destinations
+
+Selecting shop stock returns to the garden with a translucent preview. Aim and move
+to choose clear, dry ground; LB/RB (L1/R1), or Q/E, rotate it in 45-degree steps.
+A / Cross or left click confirms; B / Circle or Escape cancels. Coins are charged
+only when a valid placement is saved. In split-screen the spirit that entered the
+shop receives the preview. Placement is cancelled if the game is paused.
+
+Aim at a resident and press A / Cross, or R on keyboard. The animal waits under
+a gold marker while a blue marker chooses its destination. Player two uses yellow
+and red. Confirm to let it walk there; cancel to resume its wandering. Visitors
+cannot be guided until resident. After reaching its destination the animal rests
+briefly, then resumes wandering. Purchased animal positions and object rotations
+are saved; old saves remain compatible.
+
+The save emblem spins for at least four seconds on each save, and stays on during
+longer cloud uploads. The toast reports whether saving or cloud syncing succeeded.

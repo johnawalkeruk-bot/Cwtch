@@ -10,7 +10,7 @@ static func valid(data: Variant) -> bool:
   "version":0,"terrain":[0],"player":[0],"player_position":[0],
   "coins":0,"elapsed":0,"harvested":0,"weather":0,"weather_elapsed":0,"wetness":0,
   "crops":[{"x":0,"z":0,"age":0,"watered":false}],"watered":[[0]],
-  "purchases":[{"id":"","x":0,"z":0}],
+  "purchases":[{"id":"","x":0,"z":0,"yaw":0}],
   "experience":{"total":0,"day":0,"worked":{}},
   "weather_pattern":{"index":0,"duration":0,"rng":""},
   "local_coop":{"position":[0],"tool":0,"mode":0,"yaw":0,"pitch":0},

@@ -84,7 +84,8 @@ You can glide while working. Releasing finishes the current stroke without
 starting another; opening a menu or the console cancels use and requires a
 fresh press. Put away stows all models and disables tool actions.
 
-Choose Shovel with 4 or D-pad Left. X / Square cycles modes while equipped;
+Choose Shovel with 4 or D-pad Left. Keyboard X cycles modes while equipped;
+with a controller, open the wheel using X / Square and select Shovel to choose its mode.
 a stroke already underway finishes in its original mode. Keys 1–4 equip hoe,
 grass seeds, watering can and shovel.
 
@@ -232,17 +233,17 @@ keyboard and mouse. Prompts change with the last input device.
 
 - Left stick: glide, with a 22% deadzone to prevent drift.
 - Right stick: aim the camera; speed is independent of frame rate.
-- Y / Triangle: open or close the tool wheel.
+- X / Square: open the tool wheel; B / Circle closes it.
 - Left stick or D-pad: choose a tool; A / Cross equips it.
-- Right trigger: use the equipped tool once per press.
-- Menu / Start: open or close the Field Guide.
+- Right trigger: hold to use the equipped tool continuously.
+- Menu / Start: open or close the pause menu; the Field Guide is available there.
 - B / Circle: close the wheel or guide; return from Options.
 - Menus: left stick or D-pad navigates, A / Cross confirms.
 
 Disconnecting the active controller opens the Field Guide and cancels pending
 use. Keyboard and mouse remain available. Validation uses simulated controller
 events for menu focus/options/back, deadzones, movement, camera, wheel selection
-without click-through, guide, trigger, held-trigger repeat prevention and
+without click-through, guide, trigger, continuous tool use and
 disconnection. Physical controller hardware has not been tested here.
 
 ---
@@ -593,3 +594,13 @@ pond floor continuously while entering and leaving water. NPCs still avoid
 water. Rain puddles remain shallow surface effects. The pond bed is generated
 from the starting water layout; gardening tools cannot change water tiles.
 
+
+## Placement controls
+
+Shop purchases show a translucent preview in the garden before charging coins.
+Use LB/RB (L1/R1) or Q/E to rotate; A / Cross or left click confirms, B / Circle
+or Escape cancels free. Aim at a resident and press A / Cross or R to guide it:
+a gold marker waits with the animal and a blue marker chooses the destination.
+Player two uses yellow/red. Confirm to make the animal walk there, then resume
+wandering. Only reachable dry ground is accepted. Object rotations and purchased
+animal positions persist in saves. Older saves remain compatible.

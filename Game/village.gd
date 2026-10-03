@@ -275,7 +275,7 @@ func _build_ui() -> void:
  stock_list.size_flags_horizontal=Control.SIZE_EXPAND_FILL
  stock_list.add_theme_constant_override("separation",8)
  stock_scroll.add_child(stock_list)
- receipt=_label(shop_stack,"Purchases are delivered to clear ground\nin your garden.",16)
+ receipt=_label(shop_stack,"Preview purchases in your garden.\nChoose a spot before paying.",16)
  receipt.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
  receipt.custom_minimum_size=Vector2(350,60)
  _button(shop_stack,"Back to the street",_leave_shop)
@@ -365,7 +365,9 @@ func _unhandled_input(event: InputEvent) -> void:
   enter_shop(selected_shop)
   get_viewport().set_input_as_handled()
 
-func enter_shop(index: int) -> void:
+var shop_player:=0
+func enter_shop(index: int, player_slot: int=0) -> void:
+ shop_player=player_slot
  if index<0 or index>=SHOPS.size(): return
  current_shop=index
  camera.environment=indoor_environment
@@ -384,7 +386,7 @@ func enter_shop(index: int) -> void:
  Input.mouse_mode=Input.MOUSE_MODE_VISIBLE
  shop_title.text=SHOPS[index]
  shop_note.text=SUBTITLES[index]
- receipt.text="Delivered to clear ground in your garden.\nYou begin with 500 village coins."
+ receipt.text="Preview your purchase in the garden before paying.\nChoose its position and rotation, or cancel for free."
  for child in stock_list.get_children(): child.free()
  purchase_buttons.clear()
  for item in Stock.STOCK:
@@ -418,7 +420,7 @@ func _refresh_balance() -> void:
   button.disabled=host.coins<int(entry.price)
 
 func _buy(id: String) -> void:
- receipt.text=host.purchase_village_item(id)
+ receipt.text=host.purchase_village_item(id,shop_player)
  _refresh_balance()
 
 func _leave_shop() -> void:

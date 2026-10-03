@@ -8,6 +8,57 @@
       "sections": []
     },
     {
+      "id": "0.1.30",
+      "label": "v0.1.30",
+      "date": "2026-10-03",
+      "title": "A place for everything, including the chicken",
+      "sections": [
+        {
+          "heading": "Place purchases in your garden",
+          "items": [
+            "Shop purchases now return you to the garden with a translucent preview. Choose clear, dry ground and rotate with LB/RB (L1/R1), or Q/E on keyboard.",
+            "Confirm with A / Cross or left click. B / Circle or Escape cancels without spending coins; payment happens only after a valid placement is saved.",
+            "Placed objects keep their rotation, and purchased animals keep their latest garden position in saves. Older saves remain compatible."
+          ]
+        },
+        {
+          "heading": "Guide your residents",
+          "items": [
+            "Aim at a resident animal and press A / Cross (R on keyboard) to choose its destination. A gold ring stays with the waiting animal while a blue ring selects the destination.",
+            "Confirm to let the animal walk around blocked ground; cancel to let it wander again. Player two uses yellow and red markers, with separate placement ownership.",
+            "Xbox X / PlayStation Square now opens the tool wheel. A / Cross remains the selection and confirmation button; shovel modes are available inside the wheel."
+          ]
+        },
+        {
+          "heading": "Clear saving feedback",
+          "items": [
+            "The save emblem spins for at least four seconds for a save, and remains visible if a cloud upload takes longer. Local and cloud result messages still report the actual outcome.",
+            "Reviewed all 13 published studio posts, including the corrected v0.1.19 follow-up and v0.1.23 loading-screen story. Added a repeatable local audit for release details, authors, links and images."
+          ]
+        }
+      ],
+      "blog": {
+        "intro": "Buying a bench used to be an act of faith: hand over the coins and hope the delivery service shared your artistic vision. Now the bench auditions as a slightly ghostly bench first. The chicken has also acquired a very small traffic-control system.",
+        "why": [
+          "The garden is yours to arrange. A translucent preview lets you judge position and rotation before spending anything, while occupied ground, water and steep patches explain why a spot is unsuitable. Cancelling leaves the purse untouched.",
+          "A resident should be easy to guide without being teleported across the flowerbeds. One colour stays with the waiting animal and the other marks its destination; after confirmation it walks there, then resumes its usual important investigations. Each split-screen spirit has its own interaction.",
+          "X / Square opens tools so A / Cross can handle selection. The save emblem now takes a four-second turn even when a local save is quick. A longer cloud upload keeps it visible; a reassuring spin does not turn a failed upload into a successful one."
+        ],
+        "issues": [
+          "Placement needs clear, dry ground inside the garden and rejects uneven footprints. Animals need a reachable dry destination; visitors must become residents before they can be guided.",
+          "An animal pauses at its chosen destination, then returns to wandering. This is a gentle move request, not a permanent stay command.",
+          "Controller interactions have automated coverage for both players, including cancellation and ownership. Physical Xbox and PlayStation hardware still needs a hands-on check.",
+          "Old saves remain compatible. New purchase records include rotation; purchased animals update their saved position when the garden saves."
+        ],
+        "screenshots": [
+          {
+            "path": "assets/blog/resident-two-colour-destination.png",
+            "caption": "Local development build: a gold marker stays with the waiting chicken while the blue marker chooses where it will walk."
+          }
+        ]
+      }
+    },
+    {
       "id": "0.1.29",
       "label": "v0.1.29",
       "date": "2026-10-03",

@@ -40,6 +40,7 @@ var valley_cycle: Node3D
 
 var visitor: Node3D
 var chicken: Node3D
+var placement: Node
 var selected_target: Area3D
 var camera_pitch := PI / 4.0
 var aiming := false
@@ -178,6 +179,9 @@ func _ready() -> void:
 	add_child(northern_arrival)
 	northern_arrival.setup(self)
 	_refresh_ui()
+	placement=preload("res://garden_placement.gd").new()
+	add_child(placement)
+	placement.setup(self,self,0)
 	loading_complete=true
 
 func _create_chunks() -> void:
@@ -250,13 +254,16 @@ func _unhandled_input(event: InputEvent) -> void:
 	if is_instance_valid(hedgehog_intro) and hedgehog_intro.active:return
 	if is_instance_valid(dev_console) and dev_console.opened:return
 	if field_book.visible:return
+	if not guide.visible and placement.handle(event):
+		get_viewport().set_input_as_handled()
+		return
 	var modal: bool=guide.visible
 	if event.is_action_pressed("pad_guide"):
 		_toggle_guide()
 		get_viewport().set_input_as_handled()
 		return
 	if event is InputEventJoypadButton and event.pressed:
-		if event.button_index==JOY_BUTTON_A and not modal:
+		if event.button_index==JOY_BUTTON_X and not modal:
 			_set_wheel(true)
 			get_viewport().set_input_as_handled()
 			return
@@ -271,8 +278,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				_select_tool(tools_by_direction[event.button_index])
 				get_viewport().set_input_as_handled()
 				return
-			if event.button_index==JOY_BUTTON_X:
-				if tool==Tool.SHOVEL:_cycle_shovel(1)
+			if event.button_index==JOY_BUTTON_A:
+				if is_instance_valid(selected_target):placement.begin_animal(selected_target.subject)
 				get_viewport().set_input_as_handled()
 				return
 	if event.is_action("pad_use"):
@@ -297,6 +304,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			_toggle_ambience()
 			return
 		if modal:return
+		if event.keycode==KEY_R and is_instance_valid(selected_target):
+			placement.begin_animal(selected_target.subject)
+			return
 		if event.keycode==KEY_TAB:
 			_set_wheel(true)
 			get_viewport().set_input_as_handled()
@@ -361,6 +371,11 @@ func _physics_process(delta: float) -> void:
 	camera_pitch = clampf(camera_pitch+look.y*1.5*delta,deg_to_rad(-80),deg_to_rad(80))
 	player.advance(delta,input,camera_yaw)
 	DioramaCamera.follow(camera,player.position,camera_yaw,camera_pitch)
+	if placement.active():
+		placement.update(delta)
+		action_pending=false
+		floating_tool.hide()
+		return
 	var target: Vector2i = player.cell
 	selected_target = null if floating_tool.busy else _pick_object(get_viewport().get_visible_rect().size*0.5)
 	if floating_tool.busy:
@@ -640,6 +655,9 @@ func _toggle_guide() -> void:
 	_set_guide(not guide.visible)
 
 func _set_guide(open: bool) -> void:
+	if open and is_instance_valid(placement):
+		placement.cancel(false)
+		if is_instance_valid(local_coop) and is_instance_valid(local_coop.second) and is_instance_valid(local_coop.second.placement):local_coop.second.placement.cancel(false)
 	if is_instance_valid(hedgehog_intro) and hedgehog_intro.active:
 		hedgehog_intro.set_paused(open)
 		return

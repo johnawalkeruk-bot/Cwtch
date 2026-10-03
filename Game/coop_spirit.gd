@@ -14,6 +14,8 @@ var camera_pitch := PI/4.0
 var message := "Welcome, player two."
 var message_time := 0.0
 var selected_shop := -1
+var selected_target: Area3D
+var placement: Node
 var guide: Control:
 	get: return world.guide
 var tool_wheel: Control
@@ -58,6 +60,9 @@ func setup(scene: Node3D, in_village: bool) -> void:
 		add_child(floating_tool)
 		floating_tool.setup(self)
 		floating_tool.effect_applied.connect(_apply_tool)
+		placement=preload("res://garden_placement.gd").new()
+		add_child(placement)
+		placement.setup(world,self,1)
 	set_enabled(false)
 
 func place_near_player_one() -> void:
@@ -68,6 +73,7 @@ func place_near_player_one() -> void:
 			return
 
 func set_enabled(value: bool) -> void:
+	if not value and is_instance_valid(placement):placement.cancel(false)
 	enabled=value
 	visible=value
 	clear_use()
@@ -94,17 +100,19 @@ func _apply_tool(cell: Vector2i, tool: int, mode: int) -> void:
 func handle_input(event: InputEvent) -> void:
 	if blocked() or not event is InputEventJoypadButton or not event.pressed:return
 	if village:
-		if event.button_index==JOY_BUTTON_A and selected_shop>=0:world.enter_shop(selected_shop)
+		if event.button_index==JOY_BUTTON_A and selected_shop>=0:world.enter_shop(selected_shop,1)
 		return
+	if placement.handle(event):return
 	if event.button_index==JOY_BUTTON_A:
+		if is_instance_valid(selected_target):placement.begin_animal(selected_target.subject)
+		return
+	if event.button_index==JOY_BUTTON_X:
 		set_wheel(true)
 		return
 	var tool_map := {JOY_BUTTON_DPAD_UP:0,JOY_BUTTON_DPAD_RIGHT:1,JOY_BUTTON_DPAD_DOWN:2,JOY_BUTTON_DPAD_LEFT:3,JOY_BUTTON_B:4}
 	if tool_map.has(event.button_index):
 		clear_use()
 		floating_tool.equip(tool_map[event.button_index])
-	elif event.button_index==JOY_BUTTON_X and floating_tool.selected==3:
-		floating_tool.shovel_mode=posmod(floating_tool.shovel_mode+1,4)
 	elif event.button_index==JOY_BUTTON_RIGHT_STICK:world._trigger_tardis()
 
 func _physics_process(delta: float) -> void:
@@ -141,10 +149,15 @@ func _physics_process(delta: float) -> void:
 			cursor.follow_object(Vector3(-7 if selected_shop%2==0 else 7,0,-10 if selected_shop<2 else 4),Vector2.ONE*6.4,delta)
 			if use and not release_required:
 				release_required=true
-				world.enter_shop(selected_shop)
+				world.enter_shop(selected_shop,1)
+		return
+	if placement.active():
+		placement.update(delta)
+		floating_tool.hide()
 		return
 	var target: Area3D=null
 	if not floating_tool.busy and not hit.is_empty() and hit.collider is SelectionTarget:target=hit.collider
+	selected_target=target
 	if floating_tool.busy:cursor.follow_object(floating_tool.target_point,Vector2.ONE*world.MICRO_SIZE,delta)
 	elif is_instance_valid(target):cursor.follow_object(world.to_local(target.subject.global_position),target.selection_size(),delta)
 	else:cursor.follow_feet(player.position,Vector2.ONE*world.MICRO_SIZE,delta)

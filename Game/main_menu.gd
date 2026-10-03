@@ -414,7 +414,18 @@ func open_menu() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func _save_garden(sync_cloud: bool=true) -> bool:
+	account_status.begin_save()
+	var saved:=_write_garden(sync_cloud)
+	account_status.end_save()
+	return saved
+
+func _write_garden(sync_cloud: bool=true) -> bool:
 	if not is_instance_valid(garden): return true
+	for actor in garden.additional_visitors:
+		if is_instance_valid(actor) and actor.has_meta("purchase_record"):
+			var record: Dictionary=actor.get_meta("purchase_record")
+			var cell: Vector2i=garden.local_to_cell(actor.position)
+			record.x=cell.x;record.z=cell.y;record.yaw=actor.visual.rotation.y
 	var terrain := []
 	for z in range(garden.grid_size.y):
 		for x in range(garden.grid_size.x): terrain.append(garden.get_terrain(Vector2i(x,z)))
@@ -569,7 +580,7 @@ func open_village() -> void:
 	add_child(village)
 	village.activate(self)
 
-func return_from_village() -> void:
+func return_from_village(welcome: bool=true) -> void:
 	if not is_instance_valid(village): return
 	garden.valley_cycle.active_ambience=null
 	village.free()
@@ -580,26 +591,37 @@ func return_from_village() -> void:
 	garden.process_mode=Node.PROCESS_MODE_INHERIT
 	garden.camera.make_current()
 	garden._set_guide(false)
-	garden.hedgehog_intro.request_welcome()
+	if welcome:garden.hedgehog_intro.request_welcome()
 	_save_garden()
 
-func purchase_village_item(id: String) -> String:
+func purchase_village_item(id: String, player_slot: int=0) -> String:
 	var item: Dictionary=preload("res://village_stock.gd").item(id)
-	if item.is_empty(): return "That item is unavailable."
-	if id=="hedgehog" and garden.wildlife.grass_ratio()<0.01:return "Hedgehogs need at least 1% grass before visiting your garden."
-	if coins<int(item.price): return "There are not enough coins in your purse."
-	var cell: Vector2i=preload("res://village_stock.gd").find_space(garden,id)
-	if cell.x<0: return "Your garden needs more clear ground for this delivery."
-	var record: Dictionary={"id":id,"x":cell.x,"z":cell.y}
-	coins-=int(item.price)
-	purchases.append(record)
-	if not _save_garden():
-		coins+=int(item.price)
-		purchases.pop_back()
+	if item.is_empty():return "That item is unavailable."
+	if coins<int(item.price):return "There are not enough coins in your purse."
+	if id=="hedgehog" and garden.wildlife.grass_ratio()<0.01:return "Hedgehogs need at least 1% grass before visiting."
+	_begin_purchase_preview.call_deferred(id,player_slot)
+	return "Choose where to place it in your garden. Coins are charged when you confirm."
+
+func _begin_purchase_preview(id: String, player_slot: int=0) -> void:
+	return_from_village(false)
+	if player_slot==1 and garden.local_coop.second.enabled: garden.local_coop.second.placement.begin_purchase(id)
+	else:garden.placement.begin_purchase(id)
+
+func confirm_garden_purchase(id: String, cell: Vector2i, yaw: float) -> String:
+	var stock=preload("res://village_stock.gd")
+	var item: Dictionary=stock.item(id)
+	if item.is_empty() or coins<int(item.price):return "There are not enough coins in your purse."
+	if id=="hedgehog" and garden.wildlife.grass_ratio()<0.01:return "Hedgehogs still need at least 1% grass before visiting."
+	var problem: String=stock.placement_error(garden,id,cell,yaw)
+	if not problem.is_empty():return problem
+	var record: Dictionary={"id":id,"x":cell.x,"z":cell.y,"yaw":yaw}
+	coins-=int(item.price);purchases.append(record)
+	if not _save_garden(false):
+		coins+=int(item.price);purchases.pop_back()
 		return "The purchase could not be saved. No coins were spent."
-	preload("res://village_stock.gd").deliver(garden,record)
+	stock.deliver(garden,record)
 	_save_garden()
-	return "%s delivered to your garden.\n%d coins remaining."%[item.name,coins]
+	return ""
 
 func _open_account() -> void:
 	menu_buttons.hide()

@@ -55,6 +55,8 @@ static func deliver(garden: Node3D, record: Dictionary) -> Node3D:
   actor.next_cell=cell
   actor.position=garden.cell_center(cell)
   actor.destination=actor.position
+  actor.visual.rotation.y=float(record.get("yaw",0.0))
+  actor.set_meta("purchase_record",record)
   preload("res://selection_target.gd").attach(actor,item(id).name,Vector3(0.5,0.5,0.5))
   actor.set_meta("animal_id",id)
   garden.additional_visitors.append(actor)
@@ -63,6 +65,8 @@ static func deliver(garden: Node3D, record: Dictionary) -> Node3D:
  var node:=model(id)
  garden.add_child(node)
  node.position=garden.cell_center(cell)
+ node.rotation.y=float(record.get("yaw",0.0))
+ node.set_meta("purchase_record",record)
  var size:=footprint(id)
  preload("res://selection_target.gd").attach(node,item(id).name,Vector3(size.x,2.5 if id=="cottage" else 1.0,size.y))
  var body:=StaticBody3D.new()
@@ -77,7 +81,7 @@ static func deliver(garden: Node3D, record: Dictionary) -> Node3D:
  for z in garden.grid_size.y:
   for x in garden.grid_size.x:
    var at: Vector3=garden.cell_center(Vector2i(x,z))
-   if absf(at.x-node.position.x)<size.x*0.5+garden.MICRO_SIZE*0.5 and absf(at.z-node.position.z)<size.y*0.5+garden.MICRO_SIZE*0.5:
+   if absf(at.x-node.position.x)<rotated_size(id,node.rotation.y).x*0.5+garden.MICRO_SIZE*0.5 and absf(at.z-node.position.z)<rotated_size(id,node.rotation.y).y*0.5+garden.MICRO_SIZE*0.5:
     garden.blocked_cells[Vector2i(x,z)]=true
  return node
 
@@ -109,9 +113,21 @@ static func model(id: String) -> Node3D:
  if path!="":
   var imported: Node3D=load(path).instantiate()
   var bounds: AABB=preload("res://floating_tool.gd").bounds(imported)
-  var factor:=width/(bounds.size.y if id in ["ash","birch"] else maxf(bounds.size.x,bounds.size.z))
+  var factor:=width/(bounds.size.y if id in ["ash","birch","peacock"] else maxf(bounds.size.x,bounds.size.z))
+  if id=="chicken":factor=1.0
+  if id=="hedgehog":factor=0.35/0.976685
   imported.scale*=factor
-  imported.position-=Vector3(bounds.get_center().x,bounds.position.y,bounds.get_center().z)*factor
+  if id not in ["chicken","hedgehog"]:imported.position-=Vector3(bounds.get_center().x,bounds.position.y,bounds.get_center().z)*factor
+  if id=="hedgehog":
+   # Match the resident mesh: this supplied rig has no usable rest poses.
+   for part in imported.find_children("*","MeshInstance3D",true,false):
+    var mesh:=ArrayMesh.new()
+    for surface in part.mesh.get_surface_count():
+     var arrays: Array=part.mesh.surface_get_arrays(surface)
+     arrays[Mesh.ARRAY_BONES]=null;arrays[Mesh.ARRAY_WEIGHTS]=null
+     mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,arrays)
+     mesh.surface_set_material(surface,part.mesh.surface_get_material(surface))
+    part.mesh=mesh;part.skin=null;part.skeleton=NodePath("")
   root.add_child(imported)
  elif id=="bench":
   box(root,Vector3(1.4,.12,.5),Color("795036"),Vector3(0,.48,0))
@@ -128,3 +144,34 @@ static func model(id: String) -> Node3D:
    flower.radius=.09; flower.height=.1
    part(root,flower,Color("c994ba") if i%2==0 else Color("e7bf64"),at)
  return root
+
+static func rotated_size(id: String, yaw: float) -> Vector2:
+ var size:=footprint(id)
+ return Vector2(absf(cos(yaw))*size.x+absf(sin(yaw))*size.y,absf(sin(yaw))*size.x+absf(cos(yaw))*size.y)
+
+static func placement_error(garden: Node3D, id: String, cell: Vector2i, yaw: float, ignore: Node=null) -> String:
+ if not garden.contains_cell(cell):return "Choose a spot inside the garden."
+ var center: Vector3=garden.cell_center(cell)
+ var half:=rotated_size(id,yaw)*0.5
+ if absf(center.x)+half.x> -garden.grid_min.x or absf(center.z)+half.y> -garden.grid_min.y:return "Keep the whole item inside the garden."
+ var low:=INF
+ var high:=-INF
+ var reach:=Vector2i(ceili(half.x/garden.MICRO_SIZE+0.5),ceili(half.y/garden.MICRO_SIZE+0.5))
+ for z in range(maxi(0,cell.y-reach.y),mini(garden.grid_size.y,cell.y+reach.y+1)):
+  for x in range(maxi(0,cell.x-reach.x),mini(garden.grid_size.x,cell.x+reach.x+1)):
+   var at: Vector3=garden.cell_center(Vector2i(x,z))
+   if absf(at.x-center.x)>half.x+garden.MICRO_SIZE*0.5 or absf(at.z-center.z)>half.y+garden.MICRO_SIZE*0.5:continue
+   var tile:=Vector2i(x,z)
+   if garden.blocked_cells.has(tile) or garden.crops.has(tile):return "This spot is occupied."
+   if garden.get_terrain(tile) in [garden.Terrain.WATER,garden.Terrain.DEEP_WATER]:return "Choose dry ground."
+   low=minf(low,at.y);high=maxf(high,at.y)
+ if high-low>0.45:return "Choose a flatter patch of ground."
+ for actor in garden.get_tree().get_nodes_in_group("garden_npcs"):
+  if actor==ignore or actor.garden!=garden or not actor.visible:continue
+  var reserved: Vector3=garden.cell_center(actor.next_cell)
+  for at in [actor.position,reserved]:
+   if absf(at.x-center.x)<half.x+actor.collision_radius and absf(at.z-center.z)<half.y+actor.collision_radius:return "An animal or person needs that space."
+ for spirit in [garden.player,garden.local_coop.second.player]:
+  if spirit==garden.local_coop.second.player and not garden.local_coop.split:continue
+  if absf(spirit.position.x-center.x)<half.x+0.2 and absf(spirit.position.z-center.z)<half.y+0.2:return "Move the spirit clear of the preview."
+ return ""

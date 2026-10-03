@@ -116,6 +116,7 @@ var age:=0.0
 var save_icon: TextureRect
 var local_saving:=false
 var save_tail:=0.0
+var was_syncing:=false
 var popup: ColorRect
 var greeting: Label
 var invitation: RichTextLabel
@@ -162,6 +163,8 @@ func show_toast(message: String) -> void:
  toast.text=message;age=5.0;toast.show()
 func _process(delta: float) -> void:
  age=maxf(0,age-delta);toast.visible=age>0
+ if host.cloud.syncing and not was_syncing:save_tail=maxf(save_tail,4.0)
+ was_syncing=host.cloud.syncing
  save_tail=maxf(0,save_tail-delta)
  save_icon.visible=local_saving or host.cloud.syncing or save_tail>0
  if save_icon.visible:save_icon.rotation=fposmod(save_icon.rotation+delta*0.55,TAU)
@@ -183,9 +186,9 @@ func _process(delta: float) -> void:
  badge.visible=not host.loading and not popup.visible and (host.menu_active or paused)
 
 func begin_save() -> void:
- local_saving=true
+ local_saving=true;save_tail=maxf(save_tail,4.0)
 func end_save() -> void:
- local_saving=false;save_tail=0.5
+ local_saving=false
 func _build_welcome(root: Control) -> void:
  popup=ColorRect.new();root.add_child(popup)
  popup.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT);popup.color=Color(0.015,0.035,0.03,0.8);popup.hide()
@@ -1232,7 +1235,7 @@ static func valid(data: Variant) -> bool:
   "version":0,"terrain":[0],"player":[0],"player_position":[0],
   "coins":0,"elapsed":0,"harvested":0,"weather":0,"weather_elapsed":0,"wetness":0,
   "crops":[{"x":0,"z":0,"age":0,"watered":false}],"watered":[[0]],
-  "purchases":[{"id":"","x":0,"z":0}],
+  "purchases":[{"id":"","x":0,"z":0,"yaw":0}],
   "experience":{"total":0,"day":0,"worked":{}},
   "weather_pattern":{"index":0,"duration":0,"rng":""},
   "local_coop":{"position":[0],"tool":0,"mode":0,"yaw":0,"pitch":0},
@@ -1588,6 +1591,8 @@ var camera_pitch := PI/4.0
 var message := "Welcome, player two."
 var message_time := 0.0
 var selected_shop := -1
+var selected_target: Area3D
+var placement: Node
 var guide: Control:
 	get: return world.guide
 var tool_wheel: Control
@@ -1632,6 +1637,9 @@ func setup(scene: Node3D, in_village: bool) -> void:
 		add_child(floating_tool)
 		floating_tool.setup(self)
 		floating_tool.effect_applied.connect(_apply_tool)
+		placement=preload("res://garden_placement.gd").new()
+		add_child(placement)
+		placement.setup(world,self,1)
 	set_enabled(false)
 
 func place_near_player_one() -> void:
@@ -1642,6 +1650,7 @@ func place_near_player_one() -> void:
 			return
 
 func set_enabled(value: bool) -> void:
+	if not value and is_instance_valid(placement):placement.cancel(false)
 	enabled=value
 	visible=value
 	clear_use()
@@ -1668,17 +1677,19 @@ func _apply_tool(cell: Vector2i, tool: int, mode: int) -> void:
 func handle_input(event: InputEvent) -> void:
 	if blocked() or not event is InputEventJoypadButton or not event.pressed:return
 	if village:
-		if event.button_index==JOY_BUTTON_A and selected_shop>=0:world.enter_shop(selected_shop)
+		if event.button_index==JOY_BUTTON_A and selected_shop>=0:world.enter_shop(selected_shop,1)
 		return
+	if placement.handle(event):return
 	if event.button_index==JOY_BUTTON_A:
+		if is_instance_valid(selected_target):placement.begin_animal(selected_target.subject)
+		return
+	if event.button_index==JOY_BUTTON_X:
 		set_wheel(true)
 		return
 	var tool_map := {JOY_BUTTON_DPAD_UP:0,JOY_BUTTON_DPAD_RIGHT:1,JOY_BUTTON_DPAD_DOWN:2,JOY_BUTTON_DPAD_LEFT:3,JOY_BUTTON_B:4}
 	if tool_map.has(event.button_index):
 		clear_use()
 		floating_tool.equip(tool_map[event.button_index])
-	elif event.button_index==JOY_BUTTON_X and floating_tool.selected==3:
-		floating_tool.shovel_mode=posmod(floating_tool.shovel_mode+1,4)
 	elif event.button_index==JOY_BUTTON_RIGHT_STICK:world._trigger_tardis()
 
 func _physics_process(delta: float) -> void:
@@ -1715,10 +1726,15 @@ func _physics_process(delta: float) -> void:
 			cursor.follow_object(Vector3(-7 if selected_shop%2==0 else 7,0,-10 if selected_shop<2 else 4),Vector2.ONE*6.4,delta)
 			if use and not release_required:
 				release_required=true
-				world.enter_shop(selected_shop)
+				world.enter_shop(selected_shop,1)
+		return
+	if placement.active():
+		placement.update(delta)
+		floating_tool.hide()
 		return
 	var target: Area3D=null
 	if not floating_tool.busy and not hit.is_empty() and hit.collider is SelectionTarget:target=hit.collider
+	selected_target=target
 	if floating_tool.busy:cursor.follow_object(floating_tool.target_point,Vector2.ONE*world.MICRO_SIZE,delta)
 	elif is_instance_valid(target):cursor.follow_object(world.to_local(target.subject.global_position),target.selection_size(),delta)
 	else:cursor.follow_feet(player.position,Vector2.ONE*world.MICRO_SIZE,delta)
@@ -2761,6 +2777,7 @@ func _process(delta: float) -> void:
  if not is_instance_valid(garden):return
  var paused: bool=garden.guide.visible or garden.tool_wheel.visible or (is_instance_valid(garden.dev_console) and garden.dev_console.opened)
  if garden.has_method("blocked"):paused=paused or garden.blocked()
+ if is_instance_valid(garden.placement):paused=paused or garden.placement.active()
  particles.speed_scale=0.0 if paused else 1.0
  audio.stream_paused=paused
  visible=not paused
@@ -2867,6 +2884,7 @@ var valley_cycle: Node3D
 
 var visitor: Node3D
 var chicken: Node3D
+var placement: Node
 var selected_target: Area3D
 var camera_pitch := PI / 4.0
 var aiming := false
@@ -3005,6 +3023,9 @@ func _ready() -> void:
 	add_child(northern_arrival)
 	northern_arrival.setup(self)
 	_refresh_ui()
+	placement=preload("res://garden_placement.gd").new()
+	add_child(placement)
+	placement.setup(self,self,0)
 	loading_complete=true
 
 func _create_chunks() -> void:
@@ -3077,13 +3098,16 @@ func _unhandled_input(event: InputEvent) -> void:
 	if is_instance_valid(hedgehog_intro) and hedgehog_intro.active:return
 	if is_instance_valid(dev_console) and dev_console.opened:return
 	if field_book.visible:return
+	if not guide.visible and placement.handle(event):
+		get_viewport().set_input_as_handled()
+		return
 	var modal: bool=guide.visible
 	if event.is_action_pressed("pad_guide"):
 		_toggle_guide()
 		get_viewport().set_input_as_handled()
 		return
 	if event is InputEventJoypadButton and event.pressed:
-		if event.button_index==JOY_BUTTON_A and not modal:
+		if event.button_index==JOY_BUTTON_X and not modal:
 			_set_wheel(true)
 			get_viewport().set_input_as_handled()
 			return
@@ -3098,8 +3122,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				_select_tool(tools_by_direction[event.button_index])
 				get_viewport().set_input_as_handled()
 				return
-			if event.button_index==JOY_BUTTON_X:
-				if tool==Tool.SHOVEL:_cycle_shovel(1)
+			if event.button_index==JOY_BUTTON_A:
+				if is_instance_valid(selected_target):placement.begin_animal(selected_target.subject)
 				get_viewport().set_input_as_handled()
 				return
 	if event.is_action("pad_use"):
@@ -3124,6 +3148,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			_toggle_ambience()
 			return
 		if modal:return
+		if event.keycode==KEY_R and is_instance_valid(selected_target):
+			placement.begin_animal(selected_target.subject)
+			return
 		if event.keycode==KEY_TAB:
 			_set_wheel(true)
 			get_viewport().set_input_as_handled()
@@ -3188,6 +3215,11 @@ func _physics_process(delta: float) -> void:
 	camera_pitch = clampf(camera_pitch+look.y*1.5*delta,deg_to_rad(-80),deg_to_rad(80))
 	player.advance(delta,input,camera_yaw)
 	DioramaCamera.follow(camera,player.position,camera_yaw,camera_pitch)
+	if placement.active():
+		placement.update(delta)
+		action_pending=false
+		floating_tool.hide()
+		return
 	var target: Vector2i = player.cell
 	selected_target = null if floating_tool.busy else _pick_object(get_viewport().get_visible_rect().size*0.5)
 	if floating_tool.busy:
@@ -3467,6 +3499,9 @@ func _toggle_guide() -> void:
 	_set_guide(not guide.visible)
 
 func _set_guide(open: bool) -> void:
+	if open and is_instance_valid(placement):
+		placement.cancel(false)
+		if is_instance_valid(local_coop) and is_instance_valid(local_coop.second) and is_instance_valid(local_coop.second.placement):local_coop.second.placement.cancel(false)
 	if is_instance_valid(hedgehog_intro) and hedgehog_intro.active:
 		hedgehog_intro.set_paused(open)
 		return
@@ -3764,6 +3799,154 @@ func abort() -> void:
 func _input(event: InputEvent) -> void:
  if active and (event is InputEventKey or event is InputEventMouseButton or event is InputEventMouseMotion or event is InputEventJoypadButton or event is InputEventJoypadMotion):
   get_viewport().set_input_as_handled()
+
+```
+
+## garden_placement.gd
+
+```gd
+extends Node
+## One placement interaction per spirit. Purchases are only charged on confirmation.
+const Stock=preload("res://village_stock.gd")
+var garden: Node3D
+var driver: Node
+var slot:=0
+var purchase_id:=""
+var animal: Node3D
+var preview: Node3D
+var marker: Node3D
+var yaw:=0.0
+var target:=Vector2i(-1,-1)
+var problem:=""
+var animation_speed:=1.0
+var route_timer:=0.0
+var route_target:=Vector2i(-99,-99)
+var preview_materials: Array[StandardMaterial3D]=[]
+func setup(world: Node3D, owner_node: Node, player_slot: int) -> void:
+ garden=world;driver=owner_node;slot=player_slot
+func active() -> bool:return not purchase_id.is_empty() or is_instance_valid(animal)
+func say(text: String) -> void:
+ driver.message=text
+ if slot==0:driver._refresh_ui()
+ else:driver.message_time=4.0
+func begin_purchase(id: String) -> void:
+ cancel(false)
+ purchase_id=id;yaw=0.0
+ driver._clear_use() if slot==0 else driver.clear_use()
+ preview=Stock.model(id);garden.add_child(preview)
+ for mesh in preview.find_children("*","MeshInstance3D",true,false):
+  mesh.cast_shadow=GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+  for surface in mesh.mesh.get_surface_count():
+   var source: Material=mesh.get_active_material(surface)
+   var material:=source.duplicate() as StandardMaterial3D if source is StandardMaterial3D else StandardMaterial3D.new()
+   material.transparency=BaseMaterial3D.TRANSPARENCY_ALPHA
+   material.emission_enabled=true
+   material.emission=Color("c1d8cf")
+   material.emission_energy_multiplier=0.3
+   material.albedo_color.a=0.48
+   material.set_meta("preview_color",material.albedo_color)
+   mesh.set_surface_override_material(surface,material)
+   preview_materials.append(material)
+  mesh.material_override=null
+ say("Aim to place %s · A / click confirms · LB/RB or Q/E rotates · B / Esc cancels"%Stock.item(id).name)
+func begin_animal(subject: Node3D) -> bool:
+ if not is_instance_valid(subject) or not subject.has_meta("animal_id") or not subject.has_method("command_move"):return false
+ var id:=str(subject.get_meta("animal_id"))
+ if int(garden.wildlife.records.get(id,{}).get("resident_day",0))<=0:
+  say("This visitor has not become a resident yet.");return true
+ if subject.has_meta("relocation_owner"):
+  say("The other spirit is already guiding this animal.");return true
+ if not garden.contains_cell(garden.local_to_cell(subject.position)):return false
+ cancel(false);animal=subject
+ route_timer=0;route_target=Vector2i(-99,-99)
+ animal.set_meta("relocation_owner",slot)
+ animation_speed=animal.animation_player.speed_scale
+ animal.animation_player.speed_scale=0
+ driver._clear_use() if slot==0 else driver.clear_use()
+ marker=preload("res://gliding_cursor.gd").new()
+ marker.top_color=driver.cursor.top_color;marker.side_color=marker.top_color;marker.bottom_color=marker.top_color
+ garden.add_child(marker);marker.surface_height=driver.cursor.surface_height
+ driver.cursor.single_color(driver.cursor.side_color)
+ say("Choose a dry destination · A / click to send your resident · B / Esc cancels")
+ return true
+func handle(event: InputEvent) -> bool:
+ if not active():return false
+ if event is InputEventMouseMotion:return false
+ if event is InputEventKey and not event.pressed:return false
+ if event is InputEventJoypadMotion:return false
+ var pressed: bool=event.is_pressed()
+ if pressed and ((event is InputEventJoypadButton and event.button_index==JOY_BUTTON_B) or (event is InputEventKey and event.keycode==KEY_ESCAPE)):
+  cancel();return true
+ if pressed and ((event is InputEventJoypadButton and event.button_index==JOY_BUTTON_A) or (event is InputEventMouseButton and event.button_index==MOUSE_BUTTON_LEFT) or (event is InputEventKey and event.keycode==KEY_ENTER)):
+  confirm();return true
+ if not purchase_id.is_empty() and pressed:
+  if (event is InputEventJoypadButton and event.button_index in [JOY_BUTTON_LEFT_SHOULDER,JOY_BUTTON_RIGHT_SHOULDER]) or (event is InputEventKey and event.keycode in [KEY_Q,KEY_E]):
+   var left: bool=event.button_index==JOY_BUTTON_LEFT_SHOULDER if event is InputEventJoypadButton else event.keycode==KEY_Q
+   yaw=wrapf(yaw+(-PI/4 if left else PI/4),-PI,PI);return true
+ if event is InputEventJoypadButton:return event.button_index!=JOY_BUTTON_START
+ if event is InputEventMouseButton:return true
+ return event is InputEventKey and event.keycode not in [KEY_W,KEY_A,KEY_S,KEY_D]
+func update(delta: float) -> void:
+ if not active():return
+ var camera: Camera3D=driver.camera
+ var origin:=camera.global_position
+ var query:=PhysicsRayQueryParameters3D.create(origin,origin-camera.global_basis.z*100,1)
+ var hit:=garden.get_world_3d().direct_space_state.intersect_ray(query)
+ if hit.is_empty():
+  problem="Aim at the garden ground.";driver.cursor.clear()
+  if is_instance_valid(preview):preview.hide()
+  return
+ if is_instance_valid(preview):preview.show()
+ var point: Vector3=garden.to_local(hit.position)
+ if not purchase_id.is_empty() and Vector2(point.x-driver.player.position.x,point.z-driver.player.position.z).length()<0.75:
+  var forward: Vector3=-camera.global_basis.z;forward.y=0
+  point=driver.player.position+forward.normalized()*(Stock.footprint(purchase_id).length()*0.5+0.65)
+ target=garden.local_to_cell(point)
+ if not garden.contains_cell(target):
+  problem="Choose a spot inside the garden.";driver.cursor.clear()
+  if is_instance_valid(preview):preview.hide()
+  return
+ var at: Vector3=garden.cell_center(target)
+ if not purchase_id.is_empty():
+  preview.position=at;preview.rotation.y=yaw
+  problem=Stock.placement_error(garden,purchase_id,target,yaw)
+  for material in preview_materials:material.albedo_color=material.get_meta("preview_color") if problem.is_empty() else Color(1,0.24,0.18,0.48)
+  driver.cursor.follow_object(at,Stock.rotated_size(purchase_id,yaw),delta)
+ else:
+  marker.follow_feet(animal.position,Vector2.ONE*maxf(0.7,animal.collision_radius*3),delta)
+  route_timer-=delta
+  if target!=route_target or route_timer<=0 or delta==0:
+   route_target=target;route_timer=0.25
+   problem="That destination cannot be reached on dry, clear ground." if animal.route_to(target).is_empty() else ""
+  driver.cursor.follow_object(at,Vector2.ONE*garden.MICRO_SIZE,delta)
+func confirm() -> void:
+ update(0.0)
+ if not problem.is_empty():say(problem);return
+ if not purchase_id.is_empty():
+  var host: Node=garden.get_parent()
+  var result: String=host.confirm_garden_purchase(purchase_id,target,yaw)
+  if not result.is_empty():say(result);return
+  cancel(false);say("Placed in your garden.")
+ elif is_instance_valid(animal):
+  if not animal.command_move(target):say("There is no clear route to that spot.");return
+  cancel(false);say("Your resident is on the way.")
+func cancel(notify:=true) -> void:
+ var had:=active()
+ var buying:=not purchase_id.is_empty()
+ if is_instance_valid(animal):
+  animal.remove_meta("relocation_owner")
+  animal.animation_player.speed_scale=animation_speed
+ animal=null
+ if is_instance_valid(preview):preview.queue_free()
+ if is_instance_valid(marker):marker.queue_free()
+ preview=null;marker=null;purchase_id="";preview_materials.clear()
+ if is_instance_valid(driver):
+  driver.cursor.restore_colors()
+  if had:driver._clear_use() if slot==0 else driver.clear_use()
+ if had and notify:say("Placement cancelled. No coins spent." if buying else "Your resident is free to wander again.")
+func _exit_tree() -> void:
+ if is_instance_valid(animal):
+  animal.remove_meta("relocation_owner");animal.animation_player.speed_scale=animation_speed
 
 ```
 
@@ -4236,6 +4419,14 @@ func _update_surface() -> void:
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	ring.mesh = mesh
+
+func single_color(color: Color) -> void:
+	source_colors.fill(color)
+func restore_colors() -> void:
+	var colors: PackedColorArray=_arrow_ring().surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+	source_colors.clear()
+	for i in range(0,colors.size(),3):
+		for vertex in 12:source_colors.append(colors[i])
 
 ```
 
@@ -6192,7 +6383,18 @@ func open_menu() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 func _save_garden(sync_cloud: bool=true) -> bool:
+	account_status.begin_save()
+	var saved:=_write_garden(sync_cloud)
+	account_status.end_save()
+	return saved
+
+func _write_garden(sync_cloud: bool=true) -> bool:
 	if not is_instance_valid(garden): return true
+	for actor in garden.additional_visitors:
+		if is_instance_valid(actor) and actor.has_meta("purchase_record"):
+			var record: Dictionary=actor.get_meta("purchase_record")
+			var cell: Vector2i=garden.local_to_cell(actor.position)
+			record.x=cell.x;record.z=cell.y;record.yaw=actor.visual.rotation.y
 	var terrain := []
 	for z in range(garden.grid_size.y):
 		for x in range(garden.grid_size.x): terrain.append(garden.get_terrain(Vector2i(x,z)))
@@ -6347,7 +6549,7 @@ func open_village() -> void:
 	add_child(village)
 	village.activate(self)
 
-func return_from_village() -> void:
+func return_from_village(welcome: bool=true) -> void:
 	if not is_instance_valid(village): return
 	garden.valley_cycle.active_ambience=null
 	village.free()
@@ -6358,26 +6560,37 @@ func return_from_village() -> void:
 	garden.process_mode=Node.PROCESS_MODE_INHERIT
 	garden.camera.make_current()
 	garden._set_guide(false)
-	garden.hedgehog_intro.request_welcome()
+	if welcome:garden.hedgehog_intro.request_welcome()
 	_save_garden()
 
-func purchase_village_item(id: String) -> String:
+func purchase_village_item(id: String, player_slot: int=0) -> String:
 	var item: Dictionary=preload("res://village_stock.gd").item(id)
-	if item.is_empty(): return "That item is unavailable."
-	if id=="hedgehog" and garden.wildlife.grass_ratio()<0.01:return "Hedgehogs need at least 1% grass before visiting your garden."
-	if coins<int(item.price): return "There are not enough coins in your purse."
-	var cell: Vector2i=preload("res://village_stock.gd").find_space(garden,id)
-	if cell.x<0: return "Your garden needs more clear ground for this delivery."
-	var record: Dictionary={"id":id,"x":cell.x,"z":cell.y}
-	coins-=int(item.price)
-	purchases.append(record)
-	if not _save_garden():
-		coins+=int(item.price)
-		purchases.pop_back()
+	if item.is_empty():return "That item is unavailable."
+	if coins<int(item.price):return "There are not enough coins in your purse."
+	if id=="hedgehog" and garden.wildlife.grass_ratio()<0.01:return "Hedgehogs need at least 1% grass before visiting."
+	_begin_purchase_preview.call_deferred(id,player_slot)
+	return "Choose where to place it in your garden. Coins are charged when you confirm."
+
+func _begin_purchase_preview(id: String, player_slot: int=0) -> void:
+	return_from_village(false)
+	if player_slot==1 and garden.local_coop.second.enabled: garden.local_coop.second.placement.begin_purchase(id)
+	else:garden.placement.begin_purchase(id)
+
+func confirm_garden_purchase(id: String, cell: Vector2i, yaw: float) -> String:
+	var stock=preload("res://village_stock.gd")
+	var item: Dictionary=stock.item(id)
+	if item.is_empty() or coins<int(item.price):return "There are not enough coins in your purse."
+	if id=="hedgehog" and garden.wildlife.grass_ratio()<0.01:return "Hedgehogs still need at least 1% grass before visiting."
+	var problem: String=stock.placement_error(garden,id,cell,yaw)
+	if not problem.is_empty():return problem
+	var record: Dictionary={"id":id,"x":cell.x,"z":cell.y,"yaw":yaw}
+	coins-=int(item.price);purchases.append(record)
+	if not _save_garden(false):
+		coins+=int(item.price);purchases.pop_back()
 		return "The purchase could not be saved. No coins were spent."
-	preload("res://village_stock.gd").deliver(garden,record)
+	stock.deliver(garden,record)
 	_save_garden()
-	return "%s delivered to your garden.\n%d coins remaining."%[item.name,coins]
+	return ""
 
 func _open_account() -> void:
 	menu_buttons.hide()
@@ -7457,9 +7670,13 @@ func prompts() -> Array:
 	if garden.guide.visible:return [["accept","Select"],["back","Back"]]
 	var wheel: Control=garden.tool_wheel if player_slot==0 else garden.local_coop.second.tool_wheel
 	if wheel.visible:return [["accept","Select"],["back","Close"],["move","Choose"]]
-	var tool: Node3D=garden.floating_tool if player_slot==0 else garden.local_coop.second.floating_tool
-	var items := [["accept","Tools"],["use","Use tool"],["back","Put away"],["pause","Pause"]]
-	if tool.selected==3:items.insert(2,["mode","Mode"])
+	var placement: Node=garden.placement if player_slot==0 else garden.local_coop.second.placement
+	if is_instance_valid(placement) and placement.active():
+		var actions: Array=[["accept","Place" if not placement.purchase_id.is_empty() else "Send here"],["back","Cancel"]]
+		if not placement.purchase_id.is_empty():actions.append_array([["left","Rotate left"],["right","Rotate right"]])
+		return actions
+	var items := [["mode","Tools"],["accept","Move animal"],["use","Use tool"],["back","Put away"],["pause","Pause"]]
+
 	return items
 
 func _text(text: String, at: Vector2, size_px: int, color: Color=Petals.INK) -> void:
@@ -7499,7 +7716,9 @@ func _draw() -> void:
 		var y := 19+i*34
 		if pad:draw_texture_rect(Icons.texture(action,device),Rect2(160,y,28,28),false)
 		else:
-			var key: String={"accept":"Enter" if garden.guide.visible or village or (not village and garden.tool_wheel.visible) else "Tab","back":"Esc" if garden.guide.visible or village or (not village and garden.tool_wheel.visible) else "T","mode":"X","use":"Click","pause":"Esc","move":"Mouse","left":"←","right":"→"}.get(action,"")
+			var key: String={"accept":"Enter" if garden.guide.visible or village or (not village and garden.tool_wheel.visible) else "R","back":"Esc" if garden.guide.visible or village or (not village and garden.tool_wheel.visible) else "T","mode":"Tab","use":"Click","pause":"Esc","move":"Mouse","left":"←","right":"→"}.get(action,"")
+			if not village and is_instance_valid(garden.placement) and garden.placement.active():
+				key={"accept":"Click","back":"Esc","left":"Q","right":"E"}.get(action,key)
 			draw_string_outline(font,Vector2(157,y+19),key,HORIZONTAL_ALIGNMENT_LEFT,-1,11,3,Color("172d2a"))
 			_text(key,Vector2(157,y+19),11,Petals.GOLD)
 		draw_string_outline(font,Vector2(195,y+20),items[i][1],HORIZONTAL_ALIGNMENT_LEFT,-1,14,3,Color("172d2a"))
@@ -9463,7 +9682,7 @@ func _build_ui() -> void:
  stock_list.size_flags_horizontal=Control.SIZE_EXPAND_FILL
  stock_list.add_theme_constant_override("separation",8)
  stock_scroll.add_child(stock_list)
- receipt=_label(shop_stack,"Purchases are delivered to clear ground\nin your garden.",16)
+ receipt=_label(shop_stack,"Preview purchases in your garden.\nChoose a spot before paying.",16)
  receipt.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
  receipt.custom_minimum_size=Vector2(350,60)
  _button(shop_stack,"Back to the street",_leave_shop)
@@ -9553,7 +9772,9 @@ func _unhandled_input(event: InputEvent) -> void:
   enter_shop(selected_shop)
   get_viewport().set_input_as_handled()
 
-func enter_shop(index: int) -> void:
+var shop_player:=0
+func enter_shop(index: int, player_slot: int=0) -> void:
+ shop_player=player_slot
  if index<0 or index>=SHOPS.size(): return
  current_shop=index
  camera.environment=indoor_environment
@@ -9572,7 +9793,7 @@ func enter_shop(index: int) -> void:
  Input.mouse_mode=Input.MOUSE_MODE_VISIBLE
  shop_title.text=SHOPS[index]
  shop_note.text=SUBTITLES[index]
- receipt.text="Delivered to clear ground in your garden.\nYou begin with 500 village coins."
+ receipt.text="Preview your purchase in the garden before paying.\nChoose its position and rotation, or cancel for free."
  for child in stock_list.get_children(): child.free()
  purchase_buttons.clear()
  for item in Stock.STOCK:
@@ -9606,7 +9827,7 @@ func _refresh_balance() -> void:
   button.disabled=host.coins<int(entry.price)
 
 func _buy(id: String) -> void:
- receipt.text=host.purchase_village_item(id)
+ receipt.text=host.purchase_village_item(id,shop_player)
  _refresh_balance()
 
 func _leave_shop() -> void:
@@ -9801,6 +10022,8 @@ static func deliver(garden: Node3D, record: Dictionary) -> Node3D:
   actor.next_cell=cell
   actor.position=garden.cell_center(cell)
   actor.destination=actor.position
+  actor.visual.rotation.y=float(record.get("yaw",0.0))
+  actor.set_meta("purchase_record",record)
   preload("res://selection_target.gd").attach(actor,item(id).name,Vector3(0.5,0.5,0.5))
   actor.set_meta("animal_id",id)
   garden.additional_visitors.append(actor)
@@ -9809,6 +10032,8 @@ static func deliver(garden: Node3D, record: Dictionary) -> Node3D:
  var node:=model(id)
  garden.add_child(node)
  node.position=garden.cell_center(cell)
+ node.rotation.y=float(record.get("yaw",0.0))
+ node.set_meta("purchase_record",record)
  var size:=footprint(id)
  preload("res://selection_target.gd").attach(node,item(id).name,Vector3(size.x,2.5 if id=="cottage" else 1.0,size.y))
  var body:=StaticBody3D.new()
@@ -9823,7 +10048,7 @@ static func deliver(garden: Node3D, record: Dictionary) -> Node3D:
  for z in garden.grid_size.y:
   for x in garden.grid_size.x:
    var at: Vector3=garden.cell_center(Vector2i(x,z))
-   if absf(at.x-node.position.x)<size.x*0.5+garden.MICRO_SIZE*0.5 and absf(at.z-node.position.z)<size.y*0.5+garden.MICRO_SIZE*0.5:
+   if absf(at.x-node.position.x)<rotated_size(id,node.rotation.y).x*0.5+garden.MICRO_SIZE*0.5 and absf(at.z-node.position.z)<rotated_size(id,node.rotation.y).y*0.5+garden.MICRO_SIZE*0.5:
     garden.blocked_cells[Vector2i(x,z)]=true
  return node
 
@@ -9855,9 +10080,21 @@ static func model(id: String) -> Node3D:
  if path!="":
   var imported: Node3D=load(path).instantiate()
   var bounds: AABB=preload("res://floating_tool.gd").bounds(imported)
-  var factor:=width/(bounds.size.y if id in ["ash","birch"] else maxf(bounds.size.x,bounds.size.z))
+  var factor:=width/(bounds.size.y if id in ["ash","birch","peacock"] else maxf(bounds.size.x,bounds.size.z))
+  if id=="chicken":factor=1.0
+  if id=="hedgehog":factor=0.35/0.976685
   imported.scale*=factor
-  imported.position-=Vector3(bounds.get_center().x,bounds.position.y,bounds.get_center().z)*factor
+  if id not in ["chicken","hedgehog"]:imported.position-=Vector3(bounds.get_center().x,bounds.position.y,bounds.get_center().z)*factor
+  if id=="hedgehog":
+   # Match the resident mesh: this supplied rig has no usable rest poses.
+   for part in imported.find_children("*","MeshInstance3D",true,false):
+    var mesh:=ArrayMesh.new()
+    for surface in part.mesh.get_surface_count():
+     var arrays: Array=part.mesh.surface_get_arrays(surface)
+     arrays[Mesh.ARRAY_BONES]=null;arrays[Mesh.ARRAY_WEIGHTS]=null
+     mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,arrays)
+     mesh.surface_set_material(surface,part.mesh.surface_get_material(surface))
+    part.mesh=mesh;part.skin=null;part.skeleton=NodePath("")
   root.add_child(imported)
  elif id=="bench":
   box(root,Vector3(1.4,.12,.5),Color("795036"),Vector3(0,.48,0))
@@ -9874,6 +10111,37 @@ static func model(id: String) -> Node3D:
    flower.radius=.09; flower.height=.1
    part(root,flower,Color("c994ba") if i%2==0 else Color("e7bf64"),at)
  return root
+
+static func rotated_size(id: String, yaw: float) -> Vector2:
+ var size:=footprint(id)
+ return Vector2(absf(cos(yaw))*size.x+absf(sin(yaw))*size.y,absf(sin(yaw))*size.x+absf(cos(yaw))*size.y)
+
+static func placement_error(garden: Node3D, id: String, cell: Vector2i, yaw: float, ignore: Node=null) -> String:
+ if not garden.contains_cell(cell):return "Choose a spot inside the garden."
+ var center: Vector3=garden.cell_center(cell)
+ var half:=rotated_size(id,yaw)*0.5
+ if absf(center.x)+half.x> -garden.grid_min.x or absf(center.z)+half.y> -garden.grid_min.y:return "Keep the whole item inside the garden."
+ var low:=INF
+ var high:=-INF
+ var reach:=Vector2i(ceili(half.x/garden.MICRO_SIZE+0.5),ceili(half.y/garden.MICRO_SIZE+0.5))
+ for z in range(maxi(0,cell.y-reach.y),mini(garden.grid_size.y,cell.y+reach.y+1)):
+  for x in range(maxi(0,cell.x-reach.x),mini(garden.grid_size.x,cell.x+reach.x+1)):
+   var at: Vector3=garden.cell_center(Vector2i(x,z))
+   if absf(at.x-center.x)>half.x+garden.MICRO_SIZE*0.5 or absf(at.z-center.z)>half.y+garden.MICRO_SIZE*0.5:continue
+   var tile:=Vector2i(x,z)
+   if garden.blocked_cells.has(tile) or garden.crops.has(tile):return "This spot is occupied."
+   if garden.get_terrain(tile) in [garden.Terrain.WATER,garden.Terrain.DEEP_WATER]:return "Choose dry ground."
+   low=minf(low,at.y);high=maxf(high,at.y)
+ if high-low>0.45:return "Choose a flatter patch of ground."
+ for actor in garden.get_tree().get_nodes_in_group("garden_npcs"):
+  if actor==ignore or actor.garden!=garden or not actor.visible:continue
+  var reserved: Vector3=garden.cell_center(actor.next_cell)
+  for at in [actor.position,reserved]:
+   if absf(at.x-center.x)<half.x+actor.collision_radius and absf(at.z-center.z)<half.y+actor.collision_radius:return "An animal or person needs that space."
+ for spirit in [garden.player,garden.local_coop.second.player]:
+  if spirit==garden.local_coop.second.player and not garden.local_coop.split:continue
+  if absf(spirit.position.x-center.x)<half.x+0.2 and absf(spirit.position.z-center.z)<half.y+0.2:return "Move the spirit clear of the preview."
+ return ""
 
 ```
 
@@ -10141,6 +10409,9 @@ var collision_height := 1.5
 var motion_ratio := 0.0
 var travel_speed := 0.0
 var blocked_time := 0.0
+var directed_path: Array[Vector2i]=[]
+var commanded_goal:=Vector2i(-1,-1)
+var arrival_rest:=0.0
 
 func setup(world: Node3D) -> void:
 	garden = world
@@ -10280,17 +10551,35 @@ func _retarget_walk() -> Animation:
 func _physics_process(delta: float) -> void:
 	if not is_instance_valid(garden):
 		return
+	if has_meta("relocation_owner"):
+		animation_player.speed_scale=0.0
+		return
 	advance(delta)
 
 func advance(delta: float) -> void:
 	if garden.guide.visible:
 		animation_player.speed_scale = 0.0
 		return
+	if arrival_rest>0:
+		arrival_rest=maxf(0,arrival_rest-delta)
+		walking=false
+		animation_player.speed_scale=0
+		return
 	if position.distance_to(destination) < 0.001:
 		cell = next_cell
-		_choose_destination()
+		if not directed_path.is_empty():
+			next_cell=directed_path.pop_front()
+			destination=garden.cell_center(next_cell)
+		elif commanded_goal==cell:
+			commanded_goal=Vector2i(-1,-1)
+			arrival_rest=2.0
+			return
+		else:_choose_destination()
 	# A newly planted tile stops the visitor before it crosses that tile.
-	if walking and not _walkable(next_cell):
+	if not _walkable(next_cell):
+		if garden.contains_cell(commanded_goal):
+			if command_move(commanded_goal):return
+			directed_path.clear();commanded_goal=Vector2i(-1,-1)
 		next_cell = cell
 		destination = garden.cell_center(cell)
 	var offset := destination - position
@@ -10319,6 +10608,8 @@ func advance(delta: float) -> void:
 		destination = garden.cell_center(cell)
 		blocked_time = 0.0
 		travel_speed = 0.0
+		if garden.contains_cell(commanded_goal) and not command_move(commanded_goal):
+			directed_path.clear();commanded_goal=Vector2i(-1,-1)
 
 func _can_reserve(candidate: Vector2i) -> bool:
 	if not _walkable(candidate): return false
@@ -10357,6 +10648,33 @@ func _choose_destination() -> void:
 	next_cell = options[rng.randi_range(0, options.size() - 1)]
 	destination = garden.cell_center(next_cell)
 	walking = true
+
+func route_to(goal: Vector2i) -> Array[Vector2i]:
+	var path: Array[Vector2i]=[]
+	if not _can_reserve(goal):return path
+	var start: Vector2i=garden.local_to_cell(position)
+	var frontier: Array[Vector2i]=[start]
+	var previous: Dictionary={start:start}
+	var index:=0
+	while index<frontier.size():
+		var here: Vector2i=frontier[index];index+=1
+		if here==goal:break
+		for direction in DIRECTIONS:
+			var next: Vector2i=here+direction
+			if previous.has(next) or not _walkable(next):continue
+			previous[next]=here;frontier.append(next)
+	if not previous.has(goal):return path
+	var at:=goal
+	while at!=start:path.push_front(at);at=previous[at]
+	if path.is_empty():path.append(goal)
+	return path
+func command_move(goal: Vector2i) -> bool:
+	var path:=route_to(goal)
+	if path.is_empty():return false
+	directed_path=path;commanded_goal=goal;arrival_rest=0
+	cell=garden.local_to_cell(position);next_cell=cell;destination=garden.cell_center(cell)
+	blocked_time=0;travel_speed=0
+	return true
 
 ```
 

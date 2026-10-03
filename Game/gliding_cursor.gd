@@ -168,3 +168,11 @@ func _update_surface() -> void:
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	ring.mesh = mesh
+
+func single_color(color: Color) -> void:
+	source_colors.fill(color)
+func restore_colors() -> void:
+	var colors: PackedColorArray=_arrow_ring().surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+	source_colors.clear()
+	for i in range(0,colors.size(),3):
+		for vertex in 12:source_colors.append(colors[i])

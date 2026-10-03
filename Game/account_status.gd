@@ -6,6 +6,7 @@ var age:=0.0
 var save_icon: TextureRect
 var local_saving:=false
 var save_tail:=0.0
+var was_syncing:=false
 var popup: ColorRect
 var greeting: Label
 var invitation: RichTextLabel
@@ -52,6 +53,8 @@ func show_toast(message: String) -> void:
  toast.text=message;age=5.0;toast.show()
 func _process(delta: float) -> void:
  age=maxf(0,age-delta);toast.visible=age>0
+ if host.cloud.syncing and not was_syncing:save_tail=maxf(save_tail,4.0)
+ was_syncing=host.cloud.syncing
  save_tail=maxf(0,save_tail-delta)
  save_icon.visible=local_saving or host.cloud.syncing or save_tail>0
  if save_icon.visible:save_icon.rotation=fposmod(save_icon.rotation+delta*0.55,TAU)
@@ -73,9 +76,9 @@ func _process(delta: float) -> void:
  badge.visible=not host.loading and not popup.visible and (host.menu_active or paused)
 
 func begin_save() -> void:
- local_saving=true
+ local_saving=true;save_tail=maxf(save_tail,4.0)
 func end_save() -> void:
- local_saving=false;save_tail=0.5
+ local_saving=false
 func _build_welcome(root: Control) -> void:
  popup=ColorRect.new();root.add_child(popup)
  popup.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT);popup.color=Color(0.015,0.035,0.03,0.8);popup.hide()
