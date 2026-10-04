@@ -48,6 +48,7 @@ func play(cue: String) -> AudioStreamPlayer:
   if not stream:return null
   stream=stream.duplicate();stream.loop=false;cache[key]=stream
  var player:=AudioStreamPlayer.new()
+ player.bus="UI"
  add_child(player);voices.append(player)
  player.stream=cache[key]
  player.volume_db=linear_to_db(maxf(0.0001,volume*float(catalog[key].defaultVolume)))

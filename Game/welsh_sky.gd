@@ -21,7 +21,7 @@ static func apply(world: WorldEnvironment, sun: DirectionalLight3D) -> void:
 	# Godot 4.6 supports SSAO in Compatibility as well as Forward+.
 	environment.ssao_enabled = true
 	environment.ssao_radius = 0.4
-	environment.ssao_intensity = 0.8
+	environment.ssao_intensity = 1.05
 	environment.ssao_power = 1.2
 	world.environment = environment
 	sun.sky_mode = DirectionalLight3D.SKY_MODE_LIGHT_ONLY
@@ -30,7 +30,10 @@ static func apply(world: WorldEnvironment, sun: DirectionalLight3D) -> void:
 	sun.light_energy = 1.0
 	sun.shadow_enabled = true
 	sun.shadow_blur = 2.0
-	sun.directional_shadow_max_distance = 25.0
+	sun.directional_shadow_max_distance = 110.0
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+	sun.directional_shadow_blend_splits = true
+	sun.shadow_normal_bias = 1.0
 
 static func generate_cloud_cover() -> ImageTexture:
 	var image := Image.create(512, 256, false, Image.FORMAT_RGB8)

@@ -94,6 +94,8 @@ func activate(owner_menu: Node3D) -> void:
  exterior.add_child(background_meadow)
  background_meadow.build(self)
  moon=DirectionalLight3D.new()
+ moon.shadow_enabled=true
+ moon.directional_shadow_max_distance=60.0
  add_child(moon)
  lightning=DirectionalLight3D.new()
  add_child(lightning)

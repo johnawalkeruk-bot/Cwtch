@@ -76,6 +76,7 @@ func setup(world: Node3D) -> void:
  particles.emitting=false
  add_child(particles)
  audio=AudioStreamPlayer3D.new()
+ audio.bus="Sound effects"
  audio.volume_db=-10.0
  audio.unit_size=3.0
  audio.max_distance=20.0

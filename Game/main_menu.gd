@@ -230,31 +230,42 @@ func _build_ui() -> void:
 	options = PanelContainer.new()
 	root.add_child(options)
 	options.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	options.offset_left = -220
-	options.offset_right = 220
+	options.offset_left = -270
+	options.offset_right = 270
 	options.offset_top = -295
 	options.offset_bottom = 295
 	options.add_theme_stylebox_override("panel",_style(Color(0.07,0.13,0.12,0.97)))
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation",10)
-	options.add_child(box)
+	var scroll:=ScrollContainer.new()
+	scroll.follow_focus=true
+	scroll.horizontal_scroll_mode=ScrollContainer.SCROLL_MODE_DISABLED
+	var options_layout:=VBoxContainer.new()
+	options.add_child(options_layout)
+	scroll.size_flags_vertical=Control.SIZE_EXPAND_FILL
+	options_layout.add_child(scroll)
+	box.size_flags_horizontal=Control.SIZE_EXPAND_FILL
+	scroll.add_child(box)
 	box.add_child(_label("OPTIONS",24,Color("e2bf6e")))
-	box.add_child(_label("Master sound volume",16,Color("eee6d0")))
-	var volume := HSlider.new()
-	volume.name = "Volume"
-	volume.min_value = 0
-	volume.max_value = 100
-	volume.value = 70
-	volume.value_changed.connect(func(value: float):
-		AudioServer.set_bus_volume_db(0,linear_to_db(maxf(value/100.0,0.0001)))
-		_save_options(value)
-		UISounds.play("volume-change"))
-	box.add_child(volume)
+	for bus in ["Master","Music","UI","Ambience","Sound effects","Speech"]:
+		var row:=HBoxContainer.new()
+		var audio_title:=_label(bus,15,Color("eee6d0"))
+		audio_title.custom_minimum_size.x=140;audio_title.horizontal_alignment=HORIZONTAL_ALIGNMENT_LEFT
+		row.add_child(audio_title)
+		var slider:=HSlider.new()
+		slider.name="UISFXVolume" if bus=="UI" else ("Volume" if bus=="Master" else bus.replace(" ","")+"Volume")
+		slider.max_value=100;slider.step=1;slider.size_flags_horizontal=Control.SIZE_EXPAND_FILL
+		slider.custom_minimum_size=Vector2(180,30)
+		slider.value=(UISounds.volume if bus=="UI" else float(AudioSettings.levels[bus]))*100.0
+		slider.tooltip_text=bus+" volume"
+		var amount:=_label(str(roundi(slider.value))+"%",15,Color("e2bf6e"));amount.custom_minimum_size.x=48
+		slider.value_changed.connect(func(value: float):
+			amount.text=str(roundi(value))+"%"
+			if bus=="UI":UISounds.set_volume(value/100.0)
+			else:AudioSettings.set_level(bus,value/100.0);UISounds.play("volume-change"))
+		row.add_child(slider);row.add_child(amount);box.add_child(row)
 	var ui_enabled:=CheckButton.new();ui_enabled.name="UISFXEnabled";ui_enabled.text="Interface sounds";ui_enabled.button_pressed=UISounds.enabled
 	ui_enabled.toggled.connect(UISounds.set_enabled);box.add_child(ui_enabled)
-	box.add_child(_label("Interface sound volume",16,Color("eee6d0")))
-	var ui_volume:=HSlider.new();ui_volume.name="UISFXVolume";ui_volume.max_value=100;ui_volume.value=UISounds.volume*100
-	ui_volume.value_changed.connect(func(value: float):UISounds.set_volume(value/100.0));box.add_child(ui_volume)
 	box.add_child(_label("Interface sound style",16,Color("eee6d0")))
 	var ui_pack:=OptionButton.new();ui_pack.name="UISFXPack"
 	for value in UISounds.PACKS:ui_pack.add_item(str(value).capitalize())
@@ -264,14 +275,14 @@ func _build_ui() -> void:
 	ui_typing.toggled.connect(UISounds.set_typing);box.add_child(ui_typing)
 	_button("toggle fullscreen",func():
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED if DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN else DisplayServer.WINDOW_MODE_FULLSCREEN)
-		_save_options(volume.value),box)
+		_save_options(float(AudioSettings.levels.Master)*100.0),box)
 	var preview := OptionButton.new()
 	preview.add_item("WEATHER: NATURAL CYCLE")
 	for weather in Weather.WEATHER_NAMES:
 		preview.add_item(weather.to_upper())
 	preview.item_selected.connect(func(index: int): weather_override = index-1)
 	box.add_child(preview)
-	_button("back",func(): _close_options(),box)
+	_button("back",func(): _close_options(),options_layout)
 	options.hide()
 
 func _process(delta: float) -> void:
@@ -296,12 +307,8 @@ func _update_weather(delta: float) -> void:
 	var direction := Vector3(cos(angle),sin(angle),0.25).normalized()
 	var daylight := smoothstep(-0.08,0.20,direction.y)
 	sun.look_at(-direction,Vector3.UP)
-	sun.light_energy = maxf(0.0,direction.y)*1.3*(1-cloud_cover*0.65)
-	sun.light_color = Color("ffc18b").lerp(Color("fff0cd"),smoothstep(0,0.5,direction.y))
 	var env := world.environment
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color("748bb9").lerp(Color("dad7c0"),daylight)
-	env.ambient_light_energy = lerpf(0.35,0.8,daylight)
+	preload("res://valley_lighting.gd").update(env,sun,direction.y,daylight,cloud_cover)
 	env.fog_light_color = Color("25384d").lerp(Color("b5b9ac"),daylight)
 	env.fog_density = lerpf(0.0018,0.0045,rain_strength)
 	sky_material.set_shader_parameter("sun_direction",direction)
@@ -467,6 +474,7 @@ func _write_garden(sync_cloud: bool=true) -> bool:
 func _saved_watered() -> Array:
 	var values := []
 	for cell in garden.watered_cells:
+		if float(garden.watered_cells[cell])<=0.0:continue
 		values.append([cell.x,cell.y,garden.watered_cells[cell]])
 	return values
 
@@ -522,18 +530,16 @@ func _restore_garden() -> void:
 	garden._refresh_ui()
 
 func _save_options(volume: float) -> void:
-	var file := FileAccess.open(OPTIONS_PATH,FileAccess.WRITE)
-	if file: file.store_string(JSON.stringify({"volume":volume,"fullscreen":DisplayServer.window_get_mode()==DisplayServer.WINDOW_MODE_FULLSCREEN,"ui_sfx":UISounds.preferences()}))
+	AudioSettings.set_level("Master",volume/100.0)
+	var data: Dictionary=AudioSettings.read_options()
+	data["fullscreen"]=DisplayServer.window_get_mode()==DisplayServer.WINDOW_MODE_FULLSCREEN
+	data["ui_sfx"]=UISounds.preferences()
+	var file:=FileAccess.open(OPTIONS_PATH,FileAccess.WRITE)
+	if file:file.store_string(JSON.stringify(data))
 
 func _load_options() -> void:
-	var volume := 70.0
-	if FileAccess.file_exists(OPTIONS_PATH):
-		var data = JSON.parse_string(FileAccess.get_file_as_string(OPTIONS_PATH))
-		if data is Dictionary:
-			volume = clampf(float(data.get("volume",70)),0,100)
-			if data.get("fullscreen",false): DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
-	AudioServer.set_bus_volume_db(0,linear_to_db(maxf(volume/100,0.0001)))
-	options.find_child("Volume",true,false).set_value_no_signal(volume)
+	var data: Dictionary=AudioSettings.read_options()
+	if data.get("fullscreen",false):DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:

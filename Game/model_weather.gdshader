@@ -23,6 +23,8 @@ uniform vec4 rough_channel = vec4(0,1,0,0);
 uniform vec4 metal_channel = vec4(0,0,1,0);
 uniform vec2 uv_scale = vec2(1.0);
 uniform vec2 uv_offset = vec2(0.0);
+varying vec3 surface_up;
+void vertex(){surface_up=normalize(MODEL_NORMAL_MATRIX*NORMAL);}
 void fragment(){
  if(!double_sided && !FRONT_FACING){discard;}
  vec2 uv=UV*uv_scale+uv_offset;
@@ -31,12 +33,14 @@ void fragment(){
  if(vertex_tint){paint*=COLOR;}
  float metal=metal_value*(has_metal ? dot(texture(metal_map,uv),metal_channel) : 1.0);
  float dry=roughness_value*(has_rough ? dot(texture(rough_map,uv),rough_channel) : 1.0);
- ALBEDO=paint.rgb*(1.0-wetness*0.17*(1.0-metal));
+ float damp=wetness*mix(0.35,1.0,smoothstep(-0.15,0.8,surface_up.y));
+ ALBEDO=paint.rgb*(1.0-damp*0.20*(1.0-metal));
  ALPHA=paint.a;
  ALPHA_SCISSOR_THRESHOLD=cutoff;
  METALLIC=metal;
- ROUGHNESS=mix(max(dry,mix(0.72,0.27,metal)),mix(0.48,0.22,metal),wetness*0.65);
- SPECULAR=mix(0.22,0.36,wetness);
+ ROUGHNESS=mix(clamp(dry,mix(0.48,0.20,metal),1.0),mix(0.38,0.18,metal),damp*0.65);
+ SPECULAR=mix(0.27,0.40,damp);
+ AO_LIGHT_AFFECT=0.3;
  if(has_ao){AO=dot(texture(ao_map,uv),ao_channel);}
  if(!FRONT_FACING){NORMAL=-NORMAL;}
  if(has_normal){NORMAL_MAP=texture(normal_map,uv).rgb;NORMAL_MAP_DEPTH=normal_strength;}

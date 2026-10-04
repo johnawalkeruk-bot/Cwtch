@@ -78,6 +78,7 @@ func _ready() -> void:
  art.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
  art.mouse_filter=Control.MOUSE_FILTER_STOP
  music=AudioStreamPlayer.new()
+ music.bus="Music"
  music.stream=preload("res://audio/loading/i_will_wait.mp3")
  music.volume_db=-12
  add_child(music)

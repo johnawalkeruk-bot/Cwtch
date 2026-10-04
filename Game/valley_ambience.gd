@@ -8,6 +8,7 @@ var stream_level := 0.0
 func _ready() -> void:
 	for sound in ["wind", "rain", "birds", "crickets", "thunder", "stream"]:
 		var player := AudioStreamPlayer.new()
+		player.bus="Ambience"
 		player.name = sound.capitalize()
 		var stream := load("res://audio/ambience/%s.wav" % sound).duplicate() as AudioStreamWAV
 		if sound != "thunder":

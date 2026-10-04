@@ -26,6 +26,7 @@ func setup(menu: Node) -> void:
  host=menu
  rng.randomize()
  pause_player=AudioStreamPlayer.new()
+ pause_player.bus="Music"
  pause_player.stream=load(PATH+"pause_and_look.mp3")
  pause_player.volume_db=-17
  add_child(pause_player)
@@ -33,6 +34,7 @@ func setup(menu: Node) -> void:
   if is_paused():pause_player.play())
  for index in 2:
   var player:=AudioStreamPlayer.new()
+  player.bus="Music"
   player.volume_db=-80
   add_child(player)
   channels.append(player)

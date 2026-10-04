@@ -36,6 +36,8 @@ func setup(world: Node3D) -> void:
 	environment.sky.process_mode = Sky.PROCESS_MODE_REALTIME
 	moon = DirectionalLight3D.new()
 	moon.light_color = Color("aebfdc")
+	moon.shadow_enabled = true
+	moon.directional_shadow_max_distance = 60.0
 	moon.sky_mode = DirectionalLight3D.SKY_MODE_LIGHT_ONLY
 	add_child(moon)
 	var layer := CanvasLayer.new()
@@ -116,13 +118,8 @@ func _update_visuals() -> void:
 	sun.look_at(sun.global_position - direction, Vector3.UP)
 	moon.look_at(moon.global_position + direction, Vector3.UP)
 	var daylight := smoothstep(-0.08, 0.20, direction.y)
-	sun.light_energy = maxf(0.0, direction.y) * 1.1 * (1.0 - cloud_cover * 0.65)
-	sun.light_color = Color("ffc080").lerp(Color("fff0ce"), smoothstep(0.0, 0.5, direction.y))
-	moon.light_energy = (1.0 - daylight) * 0.4
-	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.ambient_light_color = Color("8c9fc4").lerp(Color("e0dac9"), daylight)
-	environment.ambient_light_sky_contribution = 0.55
-	environment.ambient_light_energy = lerpf(0.45, 0.85, daylight) * (1.0 - cloud_cover * 0.15)
+	preload("res://valley_lighting.gd").update(environment,sun,direction.y,daylight,cloud_cover)
+	moon.light_energy = (1.0 - daylight) * 0.3
 	environment.fog_light_color = Color("243549").lerp(Color("c9c5ad"), daylight)
 	environment.fog_density = lerpf(0.0025, 0.009, rain_strength)
 	sky_material.set_shader_parameter("sun_direction", direction)

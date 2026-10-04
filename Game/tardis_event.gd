@@ -19,6 +19,7 @@ func setup(world: Node3D) -> void:
  garden=world
  name="TardisEvent"
  audio=AudioStreamPlayer3D.new()
+ audio.bus="Sound effects"
  audio.volume_db=-12.0
  audio.unit_size=12.0
  audio.max_distance=60.0

@@ -8,6 +8,55 @@
       "sections": []
     },
     {
+      "id": "0.1.33",
+      "label": "v0.1.33",
+      "date": "2026-10-04",
+      "title": "A little more depth, a little less repetition",
+      "sections": [
+        {
+          "heading": "Light and sound",
+          "items": [
+            "Rebalanced sunlight, cool sky fill and moonlight across the garden, village and main menu, with longer-range shadows and stronger contact shading.",
+            "Ground normal maps and imported material roughness retain more detail. Rain darkens and changes the sheen of exposed model surfaces while dry ground stays matte.",
+            "Start-menu Options now has Master, Music, UI, Ambience, Sound Effects and Speech controls, saved independently. Zero mutes the chosen category; music fades and dialogue ducking still work."
+          ]
+        },
+        {
+          "heading": "Arthur and Valley Club",
+          "items": [
+            "Arthur’s welcome now plays once per release, rather than every garden entry or village return. Heard welcomes are remembered locally per account and travel with the garden save; the next published version welcomes you again.",
+            "Valley Club checks for a newer cloud save every 30 seconds while visible and when you return to the page. It keeps the last loaded garden if a request fails and retries automatically.",
+            "Expired watering entries no longer inflate watered-tile counts. Gardening activity is labelled as recorded actions rather than incorrectly claiming an older day’s actions happened today.",
+            "Existing gardens and audio preferences remain compatible. Club updates still depend on a successful game upload or five-minute autosave; this does not change the cloud conflict safeguards."
+          ]
+        }
+      ],
+      "blog": {
+        "intro": "Arthur has discovered the release number. This is excellent news for anyone who has heard his welcome speech three times while popping out for a chicken. Meanwhile, the valley has acquired a little more shadow, and the sound desk now has enough faders to make the watering can feel like a recording artist.",
+        "why": [
+          "Bright ambient fill was flattening the garden. A stronger directional light, quieter sky fill, contact shading and more visible surface normals help rocks, soil and characters read as solid objects. Rain now catches exposed surfaces differently from sheltered sides.",
+          "Six volume controls mean Arthur can remain audible while the music takes a polite step back. Existing quiet interface sounds, scene fades and saved preferences are preserved.",
+          "A welcome belongs to an arrival, not every shopping trip. The build records its release version, and completed greetings are remembered across reloads and cloud saves.",
+          "The Club was waiting for someone to press Refresh. It now checks quietly for a newer cloud snapshot, shows its saved date and revision, and retries a failed check without throwing away the last garden. Expired watering marks also stop posing as freshly watered soil."
+        ],
+        "issues": [
+          "The website displays cloud snapshots, not a live feed. New gardening work appears after a successful manual upload or the existing five-minute autosave, then the next website refresh.",
+          "Game checks cover category routing, mute and persistence, welcome history and save compatibility. Isolated browser tests use fixture accounts to verify refresh, retry, weather, balances and terrain statistics; no live player account was changed.",
+          "These notes describe the local development update. The game and website changes reach players when the next version is manually published."
+        ],
+        "screenshots": [
+          {
+            "path": "assets/blog/six-channel-audio-options.png",
+            "caption": "The start-menu sound mixer, with six independent volume controls and a Back button that stays visible."
+          },
+          {
+            "path": "assets/blog/valley-lighting-depth.png",
+            "caption": "A local test garden showing the revised daylight, textured ground and distant landscape. The save used for testing is separate from player gardens."
+          }
+        ]
+      }
+    },
+    {
       "id": "0.1.32",
       "label": "v0.1.32",
       "date": "2026-10-03",

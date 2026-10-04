@@ -24,6 +24,7 @@ def zip_folder(source,output):
    if path.is_file() and path.suffix!='.tmp' and '__pycache__' not in path.parts:archive.write(path,path.relative_to(source))
 
 def build(version):
+ (ROOT/'Game/build_version.gd').write_text('extends RefCounted\nconst VERSION='+json.dumps(version)+'\n',encoding='utf-8')
  release=ROOT/'Dist'/('v'+version)
  stamp=release/'build.json'
  signature=fingerprint()

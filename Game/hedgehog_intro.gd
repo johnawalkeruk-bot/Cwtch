@@ -4,6 +4,9 @@ const CAPTIONS=preload("res://arthur_hedgehog_subtitles.gd").CUES
 const VOICE=preload("res://assets/sounds/dialogue/Arthur_Hedgehogs.mp3")
 const TALK_CLIPS=["Talking_1","Talking_2"]
 const CAMERA_SECONDS:=0.85
+const WelcomeHistory=preload("res://welcome_history.gd")
+var welcome_version:=""
+var welcome_account:="offline"
 var welcome_pending:=false
 var dialogue_kind:="hedgehog"
 var active_captions: Array=CAPTIONS
@@ -46,6 +49,7 @@ func setup(world: Node3D) -> void:
  camera.fov=42.0
  add_child(camera)
  voice=AudioStreamPlayer.new()
+ voice.bus="Speech"
  voice.name="ArthurHedgehogVoice"
  voice.stream=VOICE
  voice.volume_db=-1.0
@@ -98,9 +102,10 @@ func _animal_event(kind: String, species: String, _day: int) -> void:
   pending=true
 
 func save_data() -> Dictionary:
- return {"completed":completed,"pending":pending or (active and dialogue_kind=="hedgehog" and not completed)}
+ return {"welcome_version":welcome_version,"completed":completed,"pending":pending or (active and dialogue_kind=="hedgehog" and not completed)}
 
 func restore(data: Dictionary) -> void:
+ welcome_version=str(data.get("welcome_version",""))
  # Existing gardens with a previously recorded visit do not replay old arrivals.
  completed=bool(data.get("completed",garden.wildlife.records.has("hedgehog")))
  pending=not completed and (bool(data.get("pending",false)) or garden.wildlife.records.has("hedgehog"))
@@ -109,7 +114,13 @@ func _can_begin() -> bool:
  return garden.is_visible_in_tree() and not garden.guide.visible and not garden.tool_wheel.visible and not garden.field_book.visible and not garden.dev_console.opened
 
 func request_welcome() -> void:
- welcome_pending=true
+ if active and dialogue_kind=="welcome":return
+ var host:=garden.get_parent()
+ # Hash the account identifier; do not duplicate emails in local preferences.
+ welcome_account=str(host.cloud.email).to_lower().sha256_text() if host.get("cloud") and not host.cloud.email.is_empty() else "offline"
+ welcome_pending=WelcomeHistory.should_play(welcome_account,welcome_version)
+ if not welcome_pending and is_instance_valid(arthur) and arthur.has_meta("arrival_waiting"):
+  arthur.remove_meta("arrival_waiting")
 
 func _begin(kind: String="hedgehog") -> void:
  if active or (kind=="hedgehog" and completed) or not is_instance_valid(arthur):return
@@ -233,6 +244,9 @@ func _process(delta: float) -> void:
 
 func _begin_return() -> void:
  if not active or phase=="return":return
+ if dialogue_kind=="welcome":
+  welcome_version=WelcomeHistory.VERSION
+  WelcomeHistory.complete(welcome_account)
  if dialogue_kind=="hedgehog":
   completed=true
   pending=false

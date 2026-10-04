@@ -387,6 +387,7 @@ func _create_visual() -> void:
 			library.remove_animation(clip_name)
 			library.add_animation(clip_name, clip)
 	voice = AudioStreamPlayer3D.new()
+	voice.bus="Speech"
 	voice.name = "VisitorVoice"
 	voice.position.y = 1.3
 	voice.volume_db = -5.0
@@ -582,6 +583,50 @@ const CUES = [
   "text": "Enjoy!"
  }
 ]
+
+```
+
+## audio_settings.gd
+
+```gd
+extends Node
+## Category gains are independent of the scene's fades and dialogue ducking.
+const PATH="user://options.json"
+const BUSES=["Master","Music","Ambience","Sound effects","Speech"]
+var levels: Dictionary={"Master":0.7,"Music":1.0,"Ambience":1.0,"Sound effects":1.0,"Speech":1.0}
+func _ready() -> void:
+ process_mode=Node.PROCESS_MODE_ALWAYS
+ for bus in BUSES+["UI"]:
+  if AudioServer.get_bus_index(bus)<0:
+   AudioServer.add_bus();AudioServer.set_bus_name(AudioServer.bus_count-1,bus)
+   AudioServer.set_bus_send(AudioServer.bus_count-1,"Master")
+ restore()
+func read_options() -> Dictionary:
+ var data=JSON.parse_string(FileAccess.get_file_as_string(PATH)) if FileAccess.file_exists(PATH) else {}
+ return data if data is Dictionary else {}
+func restore() -> void:
+ var data:=read_options()
+ var legacy=data.get("volume",70)
+ var master_default:=clampf(float(legacy)/100.0,0.0,1.0) if (legacy is int or legacy is float) and is_finite(float(legacy)) else 0.7
+ var audio=data.get("audio",{})
+ if not audio is Dictionary:audio={}
+ for bus in BUSES:
+  var value=audio.get(bus,master_default if bus=="Master" else 1.0)
+  levels[bus]=clampf(float(value),0.0,1.0) if (value is int or value is float) and is_finite(float(value)) else (0.7 if bus=="Master" else 1.0)
+  apply(bus)
+func apply(bus: String) -> void:
+ var index:=AudioServer.get_bus_index(bus)
+ AudioServer.set_bus_mute(index,float(levels[bus])<=0.0)
+ AudioServer.set_bus_volume_db(index,linear_to_db(maxf(float(levels[bus]),0.0001)))
+func set_level(bus: String, value: float) -> void:
+ if not levels.has(bus) or not is_finite(value):return
+ levels[bus]=clampf(value,0.0,1.0);apply(bus);save()
+func save() -> void:
+ var data:=read_options()
+ data["audio"]=levels.duplicate()
+ data["volume"]=float(levels.Master)*100.0
+ var file:=FileAccess.open(PATH,FileAccess.WRITE)
+ if file:file.store_string(JSON.stringify(data))
 
 ```
 
@@ -914,6 +959,14 @@ func _gold(text: String, y: float, font_size: int) -> void:
 	var x:=(540-font.get_string_size(text,HORIZONTAL_ALIGNMENT_LEFT,-1,font_size).x)*0.5
 	draw_string(font,Vector2(x+1,y+2),text,HORIZONTAL_ALIGNMENT_LEFT,-1,font_size,Color("28170f"))
 	draw_string(font,Vector2(x,y),text,HORIZONTAL_ALIGNMENT_LEFT,-1,font_size,Color("d8b879"))
+
+```
+
+## build_version.gd
+
+```gd
+extends RefCounted
+const VERSION="0.1.32"
 
 ```
 
@@ -2760,6 +2813,7 @@ func setup(world: Node3D) -> void:
  particles.emitting=false
  add_child(particles)
  audio=AudioStreamPlayer3D.new()
+ audio.bus="Sound effects"
  audio.volume_db=-10.0
  audio.unit_size=3.0
  audio.max_distance=20.0
@@ -3796,6 +3850,7 @@ func _ready() -> void:
  art.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
  art.mouse_filter=Control.MOUSE_FILTER_STOP
  music=AudioStreamPlayer.new()
+ music.bus="Music"
  music.stream=preload("res://audio/loading/i_will_wait.mp3")
  music.volume_db=-12
  add_child(music)
@@ -4604,6 +4659,9 @@ const CAPTIONS=preload("res://arthur_hedgehog_subtitles.gd").CUES
 const VOICE=preload("res://assets/sounds/dialogue/Arthur_Hedgehogs.mp3")
 const TALK_CLIPS=["Talking_1","Talking_2"]
 const CAMERA_SECONDS:=0.85
+const WelcomeHistory=preload("res://welcome_history.gd")
+var welcome_version:=""
+var welcome_account:="offline"
 var welcome_pending:=false
 var dialogue_kind:="hedgehog"
 var active_captions: Array=CAPTIONS
@@ -4646,6 +4704,7 @@ func setup(world: Node3D) -> void:
  camera.fov=42.0
  add_child(camera)
  voice=AudioStreamPlayer.new()
+ voice.bus="Speech"
  voice.name="ArthurHedgehogVoice"
  voice.stream=VOICE
  voice.volume_db=-1.0
@@ -4698,9 +4757,10 @@ func _animal_event(kind: String, species: String, _day: int) -> void:
   pending=true
 
 func save_data() -> Dictionary:
- return {"completed":completed,"pending":pending or (active and dialogue_kind=="hedgehog" and not completed)}
+ return {"welcome_version":welcome_version,"completed":completed,"pending":pending or (active and dialogue_kind=="hedgehog" and not completed)}
 
 func restore(data: Dictionary) -> void:
+ welcome_version=str(data.get("welcome_version",""))
  # Existing gardens with a previously recorded visit do not replay old arrivals.
  completed=bool(data.get("completed",garden.wildlife.records.has("hedgehog")))
  pending=not completed and (bool(data.get("pending",false)) or garden.wildlife.records.has("hedgehog"))
@@ -4709,7 +4769,13 @@ func _can_begin() -> bool:
  return garden.is_visible_in_tree() and not garden.guide.visible and not garden.tool_wheel.visible and not garden.field_book.visible and not garden.dev_console.opened
 
 func request_welcome() -> void:
- welcome_pending=true
+ if active and dialogue_kind=="welcome":return
+ var host:=garden.get_parent()
+ # Hash the account identifier; do not duplicate emails in local preferences.
+ welcome_account=str(host.cloud.email).to_lower().sha256_text() if host.get("cloud") and not host.cloud.email.is_empty() else "offline"
+ welcome_pending=WelcomeHistory.should_play(welcome_account,welcome_version)
+ if not welcome_pending and is_instance_valid(arthur) and arthur.has_meta("arrival_waiting"):
+  arthur.remove_meta("arrival_waiting")
 
 func _begin(kind: String="hedgehog") -> void:
  if active or (kind=="hedgehog" and completed) or not is_instance_valid(arthur):return
@@ -4833,6 +4899,9 @@ func _process(delta: float) -> void:
 
 func _begin_return() -> void:
  if not active or phase=="return":return
+ if dialogue_kind=="welcome":
+  welcome_version=WelcomeHistory.VERSION
+  WelcomeHistory.complete(welcome_account)
  if dialogue_kind=="hedgehog":
   completed=true
   pending=false
@@ -6231,31 +6300,42 @@ func _build_ui() -> void:
 	options = PanelContainer.new()
 	root.add_child(options)
 	options.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
-	options.offset_left = -220
-	options.offset_right = 220
+	options.offset_left = -270
+	options.offset_right = 270
 	options.offset_top = -295
 	options.offset_bottom = 295
 	options.add_theme_stylebox_override("panel",_style(Color(0.07,0.13,0.12,0.97)))
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation",10)
-	options.add_child(box)
+	var scroll:=ScrollContainer.new()
+	scroll.follow_focus=true
+	scroll.horizontal_scroll_mode=ScrollContainer.SCROLL_MODE_DISABLED
+	var options_layout:=VBoxContainer.new()
+	options.add_child(options_layout)
+	scroll.size_flags_vertical=Control.SIZE_EXPAND_FILL
+	options_layout.add_child(scroll)
+	box.size_flags_horizontal=Control.SIZE_EXPAND_FILL
+	scroll.add_child(box)
 	box.add_child(_label("OPTIONS",24,Color("e2bf6e")))
-	box.add_child(_label("Master sound volume",16,Color("eee6d0")))
-	var volume := HSlider.new()
-	volume.name = "Volume"
-	volume.min_value = 0
-	volume.max_value = 100
-	volume.value = 70
-	volume.value_changed.connect(func(value: float):
-		AudioServer.set_bus_volume_db(0,linear_to_db(maxf(value/100.0,0.0001)))
-		_save_options(value)
-		UISounds.play("volume-change"))
-	box.add_child(volume)
+	for bus in ["Master","Music","UI","Ambience","Sound effects","Speech"]:
+		var row:=HBoxContainer.new()
+		var audio_title:=_label(bus,15,Color("eee6d0"))
+		audio_title.custom_minimum_size.x=140;audio_title.horizontal_alignment=HORIZONTAL_ALIGNMENT_LEFT
+		row.add_child(audio_title)
+		var slider:=HSlider.new()
+		slider.name="UISFXVolume" if bus=="UI" else ("Volume" if bus=="Master" else bus.replace(" ","")+"Volume")
+		slider.max_value=100;slider.step=1;slider.size_flags_horizontal=Control.SIZE_EXPAND_FILL
+		slider.custom_minimum_size=Vector2(180,30)
+		slider.value=(UISounds.volume if bus=="UI" else float(AudioSettings.levels[bus]))*100.0
+		slider.tooltip_text=bus+" volume"
+		var amount:=_label(str(roundi(slider.value))+"%",15,Color("e2bf6e"));amount.custom_minimum_size.x=48
+		slider.value_changed.connect(func(value: float):
+			amount.text=str(roundi(value))+"%"
+			if bus=="UI":UISounds.set_volume(value/100.0)
+			else:AudioSettings.set_level(bus,value/100.0);UISounds.play("volume-change"))
+		row.add_child(slider);row.add_child(amount);box.add_child(row)
 	var ui_enabled:=CheckButton.new();ui_enabled.name="UISFXEnabled";ui_enabled.text="Interface sounds";ui_enabled.button_pressed=UISounds.enabled
 	ui_enabled.toggled.connect(UISounds.set_enabled);box.add_child(ui_enabled)
-	box.add_child(_label("Interface sound volume",16,Color("eee6d0")))
-	var ui_volume:=HSlider.new();ui_volume.name="UISFXVolume";ui_volume.max_value=100;ui_volume.value=UISounds.volume*100
-	ui_volume.value_changed.connect(func(value: float):UISounds.set_volume(value/100.0));box.add_child(ui_volume)
 	box.add_child(_label("Interface sound style",16,Color("eee6d0")))
 	var ui_pack:=OptionButton.new();ui_pack.name="UISFXPack"
 	for value in UISounds.PACKS:ui_pack.add_item(str(value).capitalize())
@@ -6265,14 +6345,14 @@ func _build_ui() -> void:
 	ui_typing.toggled.connect(UISounds.set_typing);box.add_child(ui_typing)
 	_button("toggle fullscreen",func():
 		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED if DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_FULLSCREEN else DisplayServer.WINDOW_MODE_FULLSCREEN)
-		_save_options(volume.value),box)
+		_save_options(float(AudioSettings.levels.Master)*100.0),box)
 	var preview := OptionButton.new()
 	preview.add_item("WEATHER: NATURAL CYCLE")
 	for weather in Weather.WEATHER_NAMES:
 		preview.add_item(weather.to_upper())
 	preview.item_selected.connect(func(index: int): weather_override = index-1)
 	box.add_child(preview)
-	_button("back",func(): _close_options(),box)
+	_button("back",func(): _close_options(),options_layout)
 	options.hide()
 
 func _process(delta: float) -> void:
@@ -6297,12 +6377,8 @@ func _update_weather(delta: float) -> void:
 	var direction := Vector3(cos(angle),sin(angle),0.25).normalized()
 	var daylight := smoothstep(-0.08,0.20,direction.y)
 	sun.look_at(-direction,Vector3.UP)
-	sun.light_energy = maxf(0.0,direction.y)*1.3*(1-cloud_cover*0.65)
-	sun.light_color = Color("ffc18b").lerp(Color("fff0cd"),smoothstep(0,0.5,direction.y))
 	var env := world.environment
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color("748bb9").lerp(Color("dad7c0"),daylight)
-	env.ambient_light_energy = lerpf(0.35,0.8,daylight)
+	preload("res://valley_lighting.gd").update(env,sun,direction.y,daylight,cloud_cover)
 	env.fog_light_color = Color("25384d").lerp(Color("b5b9ac"),daylight)
 	env.fog_density = lerpf(0.0018,0.0045,rain_strength)
 	sky_material.set_shader_parameter("sun_direction",direction)
@@ -6468,6 +6544,7 @@ func _write_garden(sync_cloud: bool=true) -> bool:
 func _saved_watered() -> Array:
 	var values := []
 	for cell in garden.watered_cells:
+		if float(garden.watered_cells[cell])<=0.0:continue
 		values.append([cell.x,cell.y,garden.watered_cells[cell]])
 	return values
 
@@ -6523,18 +6600,16 @@ func _restore_garden() -> void:
 	garden._refresh_ui()
 
 func _save_options(volume: float) -> void:
-	var file := FileAccess.open(OPTIONS_PATH,FileAccess.WRITE)
-	if file: file.store_string(JSON.stringify({"volume":volume,"fullscreen":DisplayServer.window_get_mode()==DisplayServer.WINDOW_MODE_FULLSCREEN,"ui_sfx":UISounds.preferences()}))
+	AudioSettings.set_level("Master",volume/100.0)
+	var data: Dictionary=AudioSettings.read_options()
+	data["fullscreen"]=DisplayServer.window_get_mode()==DisplayServer.WINDOW_MODE_FULLSCREEN
+	data["ui_sfx"]=UISounds.preferences()
+	var file:=FileAccess.open(OPTIONS_PATH,FileAccess.WRITE)
+	if file:file.store_string(JSON.stringify(data))
 
 func _load_options() -> void:
-	var volume := 70.0
-	if FileAccess.file_exists(OPTIONS_PATH):
-		var data = JSON.parse_string(FileAccess.get_file_as_string(OPTIONS_PATH))
-		if data is Dictionary:
-			volume = clampf(float(data.get("volume",70)),0,100)
-			if data.get("fullscreen",false): DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
-	AudioServer.set_bus_volume_db(0,linear_to_db(maxf(volume/100,0.0001)))
-	options.find_child("Volume",true,false).set_value_no_signal(volume)
+	var data: Dictionary=AudioSettings.read_options()
+	if data.get("fullscreen",false):DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST:
@@ -7304,6 +7379,8 @@ uniform vec4 rough_channel = vec4(0,1,0,0);
 uniform vec4 metal_channel = vec4(0,0,1,0);
 uniform vec2 uv_scale = vec2(1.0);
 uniform vec2 uv_offset = vec2(0.0);
+varying vec3 surface_up;
+void vertex(){surface_up=normalize(MODEL_NORMAL_MATRIX*NORMAL);}
 void fragment(){
  if(!double_sided && !FRONT_FACING){discard;}
  vec2 uv=UV*uv_scale+uv_offset;
@@ -7312,12 +7389,14 @@ void fragment(){
  if(vertex_tint){paint*=COLOR;}
  float metal=metal_value*(has_metal ? dot(texture(metal_map,uv),metal_channel) : 1.0);
  float dry=roughness_value*(has_rough ? dot(texture(rough_map,uv),rough_channel) : 1.0);
- ALBEDO=paint.rgb*(1.0-wetness*0.17*(1.0-metal));
+ float damp=wetness*mix(0.35,1.0,smoothstep(-0.15,0.8,surface_up.y));
+ ALBEDO=paint.rgb*(1.0-damp*0.20*(1.0-metal));
  ALPHA=paint.a;
  ALPHA_SCISSOR_THRESHOLD=cutoff;
  METALLIC=metal;
- ROUGHNESS=mix(max(dry,mix(0.72,0.27,metal)),mix(0.48,0.22,metal),wetness*0.65);
- SPECULAR=mix(0.22,0.36,wetness);
+ ROUGHNESS=mix(clamp(dry,mix(0.48,0.20,metal),1.0),mix(0.38,0.18,metal),damp*0.65);
+ SPECULAR=mix(0.27,0.40,damp);
+ AO_LIGHT_AFFECT=0.3;
  if(has_ao){AO=dot(texture(ao_map,uv),ao_channel);}
  if(!FRONT_FACING){NORMAL=-NORMAL;}
  if(has_normal){NORMAL_MAP=texture(normal_map,uv).rgb;NORMAL_MAP_DEPTH=normal_strength;}
@@ -8071,6 +8150,7 @@ config/features=PackedStringArray("4.6")
 
 [autoload]
 
+AudioSettings="*res://audio_settings.gd"
 UISounds="*res://ui_sounds.gd"
 
 ControllerInput="*res://controller_input.gd"
@@ -8293,6 +8373,7 @@ func setup(world: Node3D) -> void:
  garden=world
  name="TardisEvent"
  audio=AudioStreamPlayer3D.new()
+ audio.bus="Sound effects"
  audio.volume_db=-12.0
  audio.unit_size=12.0
  audio.max_distance=60.0
@@ -8552,11 +8633,12 @@ void fragment() {
  vec3 data=blended_details(uv,layers,w,meadow,outside_blend,dx,dy);
  float moisture=max(wetness,texture(watered_tiles,(ground_position-grid_min)/(grid_size*micro_size)).r*(1.0-outside_blend));
  ALBEDO=color * (1.0 - moisture * 0.28);
- ROUGHNESS=mix(clamp(data.g,0.88,1.0),0.73,moisture*0.6);
- SPECULAR=0.12;
- AO=mix(1.0,data.b,0.65);
+ ROUGHNESS=mix(clamp(data.g,0.70,1.0),0.57,moisture*0.65);
+ SPECULAR=mix(0.18,0.28,moisture);
+ AO=mix(1.0,data.b,0.85);
+ AO_LIGHT_AFFECT=0.3;
  // UVs increase in world +X/+Z: OpenGL map green points toward -Z.
- vec3 normal=normalize(vec3(mapped_normal.x*0.65,mapped_normal.z,-mapped_normal.y*0.65));
+ vec3 normal=normalize(vec3(mapped_normal.x*0.95,mapped_normal.z,-mapped_normal.y*0.95));
  NORMAL=normalize(NORMAL+mat3(VIEW_MATRIX*MODEL_MATRIX)*vec3(normal.x,0.0,normal.z));
 }
 
@@ -8858,6 +8940,7 @@ func play(cue: String) -> AudioStreamPlayer:
   if not stream:return null
   stream=stream.duplicate();stream.loop=false;cache[key]=stream
  var player:=AudioStreamPlayer.new()
+ player.bus="UI"
  add_child(player);voices.append(player)
  player.stream=cache[key]
  player.volume_db=linear_to_db(maxf(0.0001,volume*float(catalog[key].defaultVolume)))
@@ -8919,6 +9002,7 @@ var stream_level := 0.0
 func _ready() -> void:
 	for sound in ["wind", "rain", "birds", "crickets", "thunder", "stream"]:
 		var player := AudioStreamPlayer.new()
+		player.bus="Ambience"
 		player.name = sound.capitalize()
 		var stream := load("res://audio/ambience/%s.wav" % sound).duplicate() as AudioStreamWAV
 		if sound != "thunder":
@@ -8990,6 +9074,8 @@ func setup(world: Node3D) -> void:
 	environment.sky.process_mode = Sky.PROCESS_MODE_REALTIME
 	moon = DirectionalLight3D.new()
 	moon.light_color = Color("aebfdc")
+	moon.shadow_enabled = true
+	moon.directional_shadow_max_distance = 60.0
 	moon.sky_mode = DirectionalLight3D.SKY_MODE_LIGHT_ONLY
 	add_child(moon)
 	var layer := CanvasLayer.new()
@@ -9070,13 +9156,8 @@ func _update_visuals() -> void:
 	sun.look_at(sun.global_position - direction, Vector3.UP)
 	moon.look_at(moon.global_position + direction, Vector3.UP)
 	var daylight := smoothstep(-0.08, 0.20, direction.y)
-	sun.light_energy = maxf(0.0, direction.y) * 1.1 * (1.0 - cloud_cover * 0.65)
-	sun.light_color = Color("ffc080").lerp(Color("fff0ce"), smoothstep(0.0, 0.5, direction.y))
-	moon.light_energy = (1.0 - daylight) * 0.4
-	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.ambient_light_color = Color("8c9fc4").lerp(Color("e0dac9"), daylight)
-	environment.ambient_light_sky_contribution = 0.55
-	environment.ambient_light_energy = lerpf(0.45, 0.85, daylight) * (1.0 - cloud_cover * 0.15)
+	preload("res://valley_lighting.gd").update(environment,sun,direction.y,daylight,cloud_cover)
+	moon.light_energy = (1.0 - daylight) * 0.3
 	environment.fog_light_color = Color("243549").lerp(Color("c9c5ad"), daylight)
 	environment.fog_density = lerpf(0.0025, 0.009, rain_strength)
 	sky_material.set_shader_parameter("sun_direction", direction)
@@ -9370,6 +9451,21 @@ func update_atmosphere() -> void:
 
 ```
 
+## valley_lighting.gd
+
+```gd
+extends RefCounted
+## Keep enough cool sky fill to navigate at night, with a warmer directional key.
+static func update(environment: Environment, sun: DirectionalLight3D, elevation: float, daylight: float, clouds: float) -> void:
+ sun.light_energy=maxf(0.0,elevation)*1.65*(1.0-clouds*0.62)
+ sun.light_color=Color("ffc18b").lerp(Color("fff1dc"),smoothstep(0.0,0.5,elevation))
+ environment.ambient_light_source=Environment.AMBIENT_SOURCE_COLOR
+ environment.ambient_light_color=Color("8398c6").lerp(Color("becbd3"),daylight)
+ environment.ambient_light_sky_contribution=0.35
+ environment.ambient_light_energy=lerpf(0.27,0.40,daylight)*(1.0-clouds*0.12)
+
+```
+
 ## valley_music.gd
 
 ```gd
@@ -9401,6 +9497,7 @@ func setup(menu: Node) -> void:
  host=menu
  rng.randomize()
  pause_player=AudioStreamPlayer.new()
+ pause_player.bus="Music"
  pause_player.stream=load(PATH+"pause_and_look.mp3")
  pause_player.volume_db=-17
  add_child(pause_player)
@@ -9408,6 +9505,7 @@ func setup(menu: Node) -> void:
   if is_paused():pause_player.play())
  for index in 2:
   var player:=AudioStreamPlayer.new()
+  player.bus="Music"
   player.volume_db=-80
   add_child(player)
   channels.append(player)
@@ -9660,6 +9758,8 @@ func activate(owner_menu: Node3D) -> void:
  exterior.add_child(background_meadow)
  background_meadow.build(self)
  moon=DirectionalLight3D.new()
+ moon.shadow_enabled=true
+ moon.directional_shadow_max_distance=60.0
  add_child(moon)
  lightning=DirectionalLight3D.new()
  add_child(lightning)
@@ -10970,6 +11070,24 @@ func restore(data: Dictionary, index: int, age: float) -> float:
 
 ```
 
+## welcome_history.gd
+
+```gd
+extends RefCounted
+const VERSION=preload("res://build_version.gd").VERSION
+const PATH="user://welcome_history.json"
+static func read_history() -> Dictionary:
+ var data=JSON.parse_string(FileAccess.get_file_as_string(PATH)) if FileAccess.file_exists(PATH) else {}
+ return data if data is Dictionary else {}
+static func should_play(account: String, saved_version: String, version: String=VERSION) -> bool:
+ return saved_version!=version and str(read_history().get(account,""))!=version
+static func complete(account: String, version: String=VERSION) -> void:
+ var history:=read_history();history[account]=version
+ var file:=FileAccess.open(PATH,FileAccess.WRITE)
+ if file:file.store_string(JSON.stringify(history))
+
+```
+
 ## welsh_sky.gd
 
 ```gd
@@ -10996,7 +11114,7 @@ static func apply(world: WorldEnvironment, sun: DirectionalLight3D) -> void:
 	# Godot 4.6 supports SSAO in Compatibility as well as Forward+.
 	environment.ssao_enabled = true
 	environment.ssao_radius = 0.4
-	environment.ssao_intensity = 0.8
+	environment.ssao_intensity = 1.05
 	environment.ssao_power = 1.2
 	world.environment = environment
 	sun.sky_mode = DirectionalLight3D.SKY_MODE_LIGHT_ONLY
@@ -11005,7 +11123,10 @@ static func apply(world: WorldEnvironment, sun: DirectionalLight3D) -> void:
 	sun.light_energy = 1.0
 	sun.shadow_enabled = true
 	sun.shadow_blur = 2.0
-	sun.directional_shadow_max_distance = 25.0
+	sun.directional_shadow_max_distance = 110.0
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+	sun.directional_shadow_blend_splits = true
+	sun.shadow_normal_bias = 1.0
 
 static func generate_cloud_cover() -> ImageTexture:
 	var image := Image.create(512, 256, false, Image.FORMAT_RGB8)

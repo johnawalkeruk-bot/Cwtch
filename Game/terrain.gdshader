@@ -121,10 +121,11 @@ void fragment() {
  vec3 data=blended_details(uv,layers,w,meadow,outside_blend,dx,dy);
  float moisture=max(wetness,texture(watered_tiles,(ground_position-grid_min)/(grid_size*micro_size)).r*(1.0-outside_blend));
  ALBEDO=color * (1.0 - moisture * 0.28);
- ROUGHNESS=mix(clamp(data.g,0.88,1.0),0.73,moisture*0.6);
- SPECULAR=0.12;
- AO=mix(1.0,data.b,0.65);
+ ROUGHNESS=mix(clamp(data.g,0.70,1.0),0.57,moisture*0.65);
+ SPECULAR=mix(0.18,0.28,moisture);
+ AO=mix(1.0,data.b,0.85);
+ AO_LIGHT_AFFECT=0.3;
  // UVs increase in world +X/+Z: OpenGL map green points toward -Z.
- vec3 normal=normalize(vec3(mapped_normal.x*0.65,mapped_normal.z,-mapped_normal.y*0.65));
+ vec3 normal=normalize(vec3(mapped_normal.x*0.95,mapped_normal.z,-mapped_normal.y*0.95));
  NORMAL=normalize(NORMAL+mat3(VIEW_MATRIX*MODEL_MATRIX)*vec3(normal.x,0.0,normal.z));
 }

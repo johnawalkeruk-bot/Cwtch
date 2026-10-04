@@ -32,6 +32,7 @@ func _create_visual() -> void:
 			library.remove_animation(clip_name)
 			library.add_animation(clip_name, clip)
 	voice = AudioStreamPlayer3D.new()
+	voice.bus="Speech"
 	voice.name = "VisitorVoice"
 	voice.position.y = 1.3
 	voice.volume_db = -5.0
