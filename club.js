@@ -7,7 +7,7 @@ function setBusy(value){busy=value;document.querySelectorAll('button').forEach(b
 async function request(path,body,method='POST',auth=false){
  const headers={'apikey':config.key,'Content-Type':'application/json'};
  if(auth) headers.Authorization=`Bearer ${session.access_token}`;
- const response=await fetch(config.url+path,{method,headers,body:method==='GET'?undefined:JSON.stringify(body),signal:AbortSignal.timeout(15000)});
+ const response=await fetch(config.url+path,{method,headers,cache:'no-store',body:method==='GET'?undefined:JSON.stringify(body),signal:AbortSignal.timeout(15000)});
  const data=await response.json().catch(()=>null);
  if(!response.ok) throw new Error(data?.msg||data?.message||data?.error_description||`Service unavailable (${response.status}).`);
  return data;
@@ -29,8 +29,26 @@ function render(row){
  $('terrain').replaceChildren();names.forEach((name,i)=>{const cells=Array.isArray(p.terrain)?p.terrain:[];const percent=cells.length?100*cells.filter(x=>x===i).length/cells.length:0;const label=document.createElement('label');label.textContent=`${name} · ${percent.toFixed(1)}%`;const bar=document.createElement('progress');bar.max=100;bar.value=percent;label.append(bar);$('terrain').append(label);});
  $('visitors').replaceChildren();Object.entries(p.wildlife?.records||{}).forEach(([name,entry])=>{const li=document.createElement('li');li.textContent=`${name.charAt(0).toUpperCase()+name.slice(1)} — first visit: day ${entry.visit_day}${entry.resident_day?`; resident: day ${entry.resident_day}`:''}`;$('visitors').append(li);});
  if(!$('visitors').children.length){const li=document.createElement('li');li.textContent='No visitors recorded yet. Every garden starts somewhere.';$('visitors').append(li);}
- status('Your private garden snapshot is up to date.');
+ status('Showing your latest cloud save. This page checks for updates every 30 seconds while visible.');
 }
+let refreshingGarden=false;
+async function refreshGarden(){
+ if(!session||busy||refreshingGarden||document.hidden||!$('recovery').hidden)return;
+ refreshingGarden=true;
+ const identity=session;
+ try{
+  await fresh();
+  const token=session.access_token;
+  const rows=await request('/rest/v1/cwtch_saves?select=payload,revision,updated_at',{},'GET',true);
+  if(!session||session.access_token!==token)return;
+  const row=rows[0];
+  if(row?.revision!==ownGarden?.revision||row?.updated_at!==ownGarden?.updated_at||$('status').textContent.startsWith('Could not refresh'))render(row);
+ }catch(e){if(session&&session===identity)status('Could not refresh the cloud garden. Showing the last loaded save; retrying automatically.');}
+ finally{refreshingGarden=false;}
+}
+setInterval(refreshGarden,30000);
+window.addEventListener('focus',refreshGarden);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshGarden();});
 async function load(){
  await fresh();const failures=[];
  try{render((await request('/rest/v1/cwtch_saves?select=payload,revision,updated_at',{},'GET',true))[0]);}
