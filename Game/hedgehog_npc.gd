@@ -32,25 +32,14 @@ func _create_visual() -> void:
   part.skeleton = NodePath("")
  animation_player = AnimationPlayer.new()
  add_child(animation_player)
- walk_time = rng.randf_range(4,8)
+ walk_time = 5.0
 
 func advance(delta: float) -> void:
- if garden.guide.visible: return
- gait += delta
- if sniff_time > 0:
-  sniff_time = maxf(0,sniff_time-delta)
-  walking = false
-  body.rotation.x = sin(gait*5.0)*0.10
-  body.rotation.z = sin(gait*2.0)*0.025
-  body.position.y = 0.003+sin(gait*3.0)*0.002
- else:
-  super.advance(delta)
-  walk_time -= delta
-  body.rotation.x = sin(gait*8.0)*0.025
-  body.rotation.z = sin(gait*10.0)*0.07
-  body.position.y = absf(sin(gait*10.0))*0.008
-  if walk_time<=0 and position.distance_to(destination)<0.03:
-   sniff_time = rng.randf_range(2,4)
-   walk_time = rng.randf_range(4,9)
- var breathing := 1.0+sin(gait*2.5)*0.012
- body.scale = Vector3(1,breathing,1)*(0.35/0.976685)
+ if garden.guide.visible:return
+ super.advance(delta)
+ gait+=delta
+ var sniff: bool=not walking and brain.state=="forage"
+ body.rotation.x=sin(gait*(5.0 if sniff else 8.0))*(0.10 if sniff else 0.025*motion_ratio)
+ body.rotation.z=sin(gait*10.0)*0.07*motion_ratio
+ body.position.y=absf(sin(gait*10.0))*0.008*motion_ratio
+ body.scale=Vector3(1,1.0+sin(gait*2.5)*0.012,1)*(0.35/0.976685)

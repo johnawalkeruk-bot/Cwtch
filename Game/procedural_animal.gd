@@ -10,6 +10,7 @@ var roam_time := 7.0
 var body_scale := 1.0
 
 func _create_visual() -> void:
+	set_meta("animal_id",species)
 	var dragon := species == "dragon"
 	move_speed = 0.28 if dragon else 0.32
 	collision_radius = 0.52 if dragon else 0.34
@@ -130,16 +131,7 @@ func _prepare_drives(_mesh: MeshInstance3D) -> void:
 func advance(delta: float) -> void:
 	if garden.guide.visible: return
 	phase += delta
-	if rest_time > 0:
-		rest_time = maxf(0,rest_time-delta)
-		walking = false
-		motion_ratio = 0
-	else:
-		super.advance(delta)
-		roam_time -= delta
-		if roam_time <= 0 and position.distance_to(destination)<0.02:
-			rest_time = rng.randf_range(2,5)
-			roam_time = rng.randf_range(5,10)
+	super.advance(delta)
 	for drive in drives:
 		var strength: float = motion_ratio if drive.gait else 1.0
 		var angle: float = sin(phase*drive.rate+drive.phase)*drive.amplitude*strength

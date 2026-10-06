@@ -202,7 +202,7 @@ func _build_ui() -> void:
 	menu_buttons.offset_bottom = -24
 	_button("enter garden",func(): _begin_garden(false),menu_buttons)
 	_button("new garden",_request_new,menu_buttons)
-	_button("options",func(): UISounds.play("open"); options.show(); menu_buttons.hide(); heading.hide(); ControllerInput.focus_first.call_deferred(options),menu_buttons)
+	_button("options",func(): UISounds.play("open"); preload("res://audio_mixer.gd").refresh(options); options.show(); menu_buttons.hide(); heading.hide(); ControllerInput.focus_first.call_deferred(options),menu_buttons)
 	_button("ACCOUNT & CLOUD",_open_account,menu_buttons)
 	_button("QUIT GAME",save_and_quit,menu_buttons)
 	account_panel=preload("res://account_panel.gd").new()
@@ -247,23 +247,7 @@ func _build_ui() -> void:
 	box.size_flags_horizontal=Control.SIZE_EXPAND_FILL
 	scroll.add_child(box)
 	box.add_child(_label("OPTIONS",24,Color("e2bf6e")))
-	for bus in ["Master","Music","UI","Ambience","Sound effects","Speech"]:
-		var row:=HBoxContainer.new()
-		var audio_title:=_label(bus,15,Color("eee6d0"))
-		audio_title.custom_minimum_size.x=140;audio_title.horizontal_alignment=HORIZONTAL_ALIGNMENT_LEFT
-		row.add_child(audio_title)
-		var slider:=HSlider.new()
-		slider.name="UISFXVolume" if bus=="UI" else ("Volume" if bus=="Master" else bus.replace(" ","")+"Volume")
-		slider.max_value=100;slider.step=1;slider.size_flags_horizontal=Control.SIZE_EXPAND_FILL
-		slider.custom_minimum_size=Vector2(180,30)
-		slider.value=(UISounds.volume if bus=="UI" else float(AudioSettings.levels[bus]))*100.0
-		slider.tooltip_text=bus+" volume"
-		var amount:=_label(str(roundi(slider.value))+"%",15,Color("e2bf6e"));amount.custom_minimum_size.x=48
-		slider.value_changed.connect(func(value: float):
-			amount.text=str(roundi(value))+"%"
-			if bus=="UI":UISounds.set_volume(value/100.0)
-			else:AudioSettings.set_level(bus,value/100.0);UISounds.play("volume-change"))
-		row.add_child(slider);row.add_child(amount);box.add_child(row)
+	preload("res://audio_mixer.gd").populate(box)
 	var ui_enabled:=CheckButton.new();ui_enabled.name="UISFXEnabled";ui_enabled.text="Interface sounds";ui_enabled.button_pressed=UISounds.enabled
 	ui_enabled.toggled.connect(UISounds.set_enabled);box.add_child(ui_enabled)
 	box.add_child(_label("Interface sound style",16,Color("eee6d0")))
@@ -283,6 +267,7 @@ func _build_ui() -> void:
 	preview.item_selected.connect(func(index: int): weather_override = index-1)
 	box.add_child(preview)
 	_button("back",func(): _close_options(),options_layout)
+	preload("res://cwtch_theme.gd").uppercase_menu(options)
 	options.hide()
 
 func _process(delta: float) -> void:
@@ -546,6 +531,9 @@ func _notification(what: int) -> void:
 		save_and_quit()
 
 func _focus_menu() -> void:
+	if AudioOptions.opened:
+		AudioOptions.focus();return
+	if is_instance_valid(options):preload("res://audio_mixer.gd").refresh(options)
 	if loading:return
 	if ControllerKeyboard.opened:return
 	if is_instance_valid(account_status) and account_status.popup.visible:return

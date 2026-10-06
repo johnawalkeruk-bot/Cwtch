@@ -52,13 +52,15 @@ func setup(owner_node: Node, client: Node) -> void:
  claim_box=VBoxContainer.new();box.add_child(claim_box)
  claim_name=field(claim_box,"Choose your username");claim_name.max_length=20
  button(claim_box,"CLAIM USERNAME",func(): account.claim_username(claim_name.text))
- notice=Label.new();notice.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART;notice.custom_minimum_size.y=80;box.add_child(notice)
+ notice=Label.new();notice.uppercase=true;notice.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART;notice.custom_minimum_size.y=80;box.add_child(notice)
  upload=button(box,"USE THIS COMPUTER'S GARDEN",func(): ask("upload"))
  download=button(box,"USE CLOUD GARDEN",func(): ask("download"))
  review=button(box,"REVIEW CLOUD / RETRY",func(): account.inspect())
  signout=button(box,"SIGN OUT",func(): account.logout())
  button(box,"BACK",func(): hide();host.menu_buttons.show();host.heading.show();host._focus_menu())
  confirmation=ConfirmationDialog.new();add_child(confirmation);confirmation.confirmed.connect(confirm)
+ confirmation.get_cancel_button().text="CANCEL"
+ confirmation.title="CONFIRM CLOUD SAVE"
  account.changed.connect(refresh)
  account.auth_finished.connect(func(ok: bool):
   if auth_feedback and is_visible_in_tree():UISounds.play("success" if ok else "error")
@@ -70,9 +72,9 @@ func setup(owner_node: Node, client: Node) -> void:
   if not visible:auth_feedback=false;upload_feedback=false)
  refresh();hide()
 func field(parent: Node, hint: String, secret:=false) -> LineEdit:
- var item:=LineEdit.new();item.placeholder_text=hint;item.secret=secret;parent.add_child(item);return item
+ var item:=LineEdit.new();item.placeholder_text=hint.to_upper();item.secret=secret;parent.add_child(item);return item
 func button(box: Node, caption: String, action: Callable) -> Button:
- var item:=Button.new();item.text=caption;item.custom_minimum_size.y=34;item.size_flags_horizontal=Control.SIZE_EXPAND_FILL
+ var item:=Button.new();item.text=caption.to_upper();item.custom_minimum_size.y=34;item.size_flags_horizontal=Control.SIZE_EXPAND_FILL
  item.pressed.connect(action);box.add_child(item);actions.append(item);return item
 func set_registration(value: bool) -> void:
  if registration!=value:UISounds.play("select")
@@ -586,6 +588,81 @@ const CUES = [
 
 ```
 
+## audio_mixer.gd
+
+```gd
+extends RefCounted
+static func populate(box: VBoxContainer) -> void:
+ for bus in ["Master","Music","UI","Ambience","Sound effects","Speech"]:
+  var row:=HBoxContainer.new()
+  var title:=Label.new();title.text=bus.to_upper();title.custom_minimum_size.x=140
+  title.add_theme_font_size_override("font_size",15);row.add_child(title)
+  var slider:=HSlider.new()
+  slider.name="UISFXVolume" if bus=="UI" else ("Volume" if bus=="Master" else bus.replace(" ","")+"Volume")
+  slider.max_value=100;slider.step=1;slider.size_flags_horizontal=Control.SIZE_EXPAND_FILL
+  slider.custom_minimum_size=Vector2(180,30);slider.tooltip_text=bus.to_upper()+" VOLUME"
+  slider.value=(UISounds.volume if bus=="UI" else float(AudioSettings.levels[bus]))*100.0
+  var amount:=Label.new();amount.text=str(roundi(slider.value))+"%";amount.custom_minimum_size.x=48
+  amount.add_theme_font_size_override("font_size",15);amount.add_theme_color_override("font_color",Color("e2bf6e"))
+  slider.value_changed.connect(func(value: float):
+   amount.text=str(roundi(value))+"%"
+   if bus=="UI":UISounds.set_volume(value/100.0)
+   else:AudioSettings.set_level(bus,value/100.0);UISounds.play("volume-change"))
+  row.add_child(slider);row.add_child(amount);box.add_child(row)
+static func refresh(box: Node) -> void:
+ for bus in ["Master","Music","UI","Ambience","Sound effects","Speech"]:
+  var name: String="UISFXVolume" if bus=="UI" else ("Volume" if bus=="Master" else bus.replace(" ","")+"Volume")
+  var slider:=box.find_child(name,true,false) as HSlider
+  if slider:
+   slider.set_value_no_signal((UISounds.volume if bus=="UI" else float(AudioSettings.levels[bus]))*100.0)
+   slider.get_parent().get_child(2).text=str(roundi(slider.value))+"%"
+
+```
+
+## audio_options.gd
+
+```gd
+extends CanvasLayer
+## Shared modal sound page. Its caller remains paused behind the overlay.
+var opened:=false
+var screen: Control
+var panel: PanelContainer
+var mixer: VBoxContainer
+var previous_focus: WeakRef
+func _ready() -> void:
+ layer=120
+ screen=Control.new();add_child(screen);screen.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+ var shade:=ColorRect.new();screen.add_child(shade);shade.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+ shade.color=Color(0.025,0.055,0.05,0.8)
+ panel=PanelContainer.new();screen.add_child(panel);panel.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+ panel.offset_left=-270;panel.offset_right=270;panel.offset_top=-205;panel.offset_bottom=205
+ panel.theme=preload("res://cwtch_theme.gd").make()
+ mixer=VBoxContainer.new();mixer.add_theme_constant_override("separation",12);panel.add_child(mixer)
+ var title:=Label.new();title.text="SOUND OPTIONS";title.horizontal_alignment=HORIZONTAL_ALIGNMENT_CENTER
+ title.add_theme_font_size_override("font_size",24);title.add_theme_color_override("font_color",Color("e5c17c"));mixer.add_child(title)
+ preload("res://audio_mixer.gd").populate(mixer)
+ var back:=Button.new();back.text="BACK";back.pressed.connect(close);mixer.add_child(back)
+ screen.hide()
+ ControllerInput.mode_changed.connect(func():if opened:focus())
+func open() -> void:
+ if opened:return
+ var control:=get_viewport().gui_get_focus_owner()
+ previous_focus=weakref(control) if control else null
+ preload("res://audio_mixer.gd").refresh(mixer)
+ opened=true;screen.show();focus();UISounds.play("open")
+func focus() -> void:
+ panel.find_child("Volume",true,false).grab_focus.call_deferred()
+func close() -> void:
+ if not opened:return
+ opened=false;screen.hide();UISounds.play("back")
+ var control=previous_focus.get_ref() if previous_focus else null
+ if is_instance_valid(control) and control.is_visible_in_tree():control.grab_focus()
+func _input(event: InputEvent) -> void:
+ if opened and (event.is_action_pressed("ui_cancel") or event.is_action_pressed("pad_guide")):
+  close();get_viewport().set_input_as_handled()
+
+```
+
 ## audio_settings.gd
 
 ```gd
@@ -966,7 +1043,7 @@ func _gold(text: String, y: float, font_size: int) -> void:
 
 ```gd
 extends RefCounted
-const VERSION="0.1.32"
+const VERSION="0.1.33"
 
 ```
 
@@ -2012,6 +2089,14 @@ static func decorate_menu(node: PanelContainer) -> void:
 	var petals:=preload("res://petal_frame.gd").new()
 	node.add_child(petals)
 
+static func uppercase_menu(node: Node) -> void:
+	# Display transformation only: never modify typed values or category IDs.
+	if node is Label:node.uppercase=true
+	if node is Button:node.text=node.text.to_upper()
+	if node is OptionButton:
+		for index in node.item_count:node.set_item_text(index,node.get_item_text(index).to_upper())
+	for child in node.get_children():uppercase_menu(child)
+
 ```
 
 ## cycling_npc.gd
@@ -2052,7 +2137,7 @@ func _create_visual() -> void:
 		animation_player.remove_animation_library(library_name)
 		animation_player.add_animation_library(library_name, library)
 	move_speed = 0.48
-	steps_until_rest = rng.randi_range(4, 8)
+	steps_until_rest = 5
 	_play("Start_Walk")
 	animation_player.advance(0.0)
 
@@ -2082,49 +2167,19 @@ func _play(clip: StringName) -> void:
 	animation_player.play(clip, 0.25)
 	clip_remaining = animation_player.get_animation(clip).length
 
-func _choose_destination() -> void:
-	steps_until_rest -= 1
-	if steps_until_rest <= 0:
-		steps_until_rest = rng.randi_range(4, 8)
-		idle_remaining = rng.randf_range(2.0, 4.0)
-		walking = false
-		travel_speed = 0.0
-		if animation_player.has_animation("Happy_Idle"):
-			_play("Happy_Idle")
-		else:
-			_play("Start_Walk")
-			animation_player.seek(0.0, true)
-		return
-	super._choose_destination()
-	if not walking: return
-	var offset := destination - position
-	var turn := wrapf(atan2(offset.x, offset.z) - visual.rotation.y, -PI, PI)
-	if absf(turn) > 0.65:
-		_play("Left_Turn" if turn > 0.0 else "Right_Turn")
-	elif current_clip != "Walking":
-		_play("Start_Walk")
-
 func advance(delta: float) -> void:
+	if garden.guide.visible:return
 	if has_meta("arrival_waiting"):
-		_play("Happy_Idle")
-		animation_player.speed_scale=1.0
-		animation_player.advance(delta)
-		return
-	if garden.guide.visible: return
-	animation_player.speed_scale = 1.0
-	if idle_remaining > 0.0:
-		idle_remaining = maxf(0.0, idle_remaining-delta)
-		if current_clip == "Happy_Idle": animation_player.advance(delta)
-		if idle_remaining == 0.0: _play("Start_Walk")
-		return
+		_play("Happy_Idle");animation_player.speed_scale=1.0;animation_player.advance(delta);return
 	super.advance(delta)
-	if idle_remaining > 0.0: return
-	animation_player.speed_scale = 1.0
-	clip_remaining -= delta
-	if clip_remaining <= 0.0: _play("Walking")
-	# Footwork must continue during steering even while forward speed is low.
-	var rate := maxf(0.12, motion_ratio*move_speed/stride_speed) if current_clip == "Walking" else 1.0
-	animation_player.advance(delta * rate)
+	animation_player.speed_scale=1.0
+	var desired: StringName="Walking" if walking and motion_ratio>0.03 else "Happy_Idle"
+	if brain.state=="shelter" and not walking and animation_player.has_animation("Shivering"):desired="Shivering"
+	if not animation_player.has_animation(desired):
+		_play("Start_Walk");animation_player.seek(0.0,true);return
+	_play(desired)
+	var rate:=maxf(0.12,motion_ratio*move_speed/stride_speed) if desired=="Walking" else 1.0
+	animation_player.advance(delta*rate)
 
 ```
 
@@ -2333,14 +2388,13 @@ extends Control
 signal closed
 const INK := Color("483322")
 const ENTRIES := [
- ["People","Arthur","Arthur brings a steady pace to the garden. Between quiet walks he pauses to enjoy the valley, content to let the day unfold.","Arthur"],
- ["People","Meera","A familiar face among the garden paths. Meera wanders between the plots and the wild edge, taking in the changing light.","Meera"],
- ["People","Angus McDoogal","There is always a little movement where Angus stands. His lively gestures bring a welcome touch of company to a quiet afternoon.","Angus"],
- ["People","The visitor","A traveller passing through the valley. Stop for a moment and watch: even an unhurried garden has its small conversations.","WanderingVisitor"],
+ ["People","Arthur","Arthur watches the north entrance in the morning, checks the garden plots through the day and rests at night. In heavy rain he seeks cover.","Arthur"],
+ ["People","Meera","A familiar face among the garden paths. Meera checks the planted beds and flowers, rests at night and seeks shelter when heavy rain arrives.","Meera"],
+ ["People","Angus McDoogal","Angus runs McDoogal Construction in the village. Visit his workshop to plan a cottage for your garden.","res://assets/npcs/angus.glb"],
  ["Animals","Robin","A bright little visitor with a warm red breast. Robins visit when water covers at least 1% of the garden, then hop and pause along the dry banks.","Robin"],
  ["Animals","Peacock","A colourful garden companion, with an iridescent neck and a magnificent tail.","Peacock"],
- ["Animals","Chicken","A small, busy companion on the garden paths. Watch those quick steps and curious pauses as it explores the ground.","WanderingChicken"],
- ["Animals","Hedgehog","Low to the ground and never in a hurry. The hedgehog noses around the garden, stopping now and then before continuing its little journey.","Hedgehog"],
+ ["Animals","Chicken","Chickens forage on grass and loose soil, drink from dry banks and rest at night. They avoid planted beds and other residents.","WanderingChicken"],
+ ["Animals","Hedgehog","Hedgehogs visit at 1% grass and settle at 5%. They forage near the wild edge at night, rest by cover in daylight and seek shelter in heavy rain.","Hedgehog"],
  ["Animals","Badger","A sturdy visitor with a distinctive striped face. The badger takes slow turns around the plots and shares the paths with its neighbours.","Badger"],
  ["Animals","Dragon","A little valley wonder. Folded wings, a restless tail and gentle movements make this unusual garden guest hard to overlook.","Dragon"],
  ["Plants","Ash","Tall woodland shapes frame the valley beyond the garden. Turn this specimen to see the branching crown and the texture of its trunk.","res://assets/trees/ash_forest.glb"],
@@ -2464,7 +2518,7 @@ func _text(value: String, at: Vector2, dimensions: Vector2, font_size: int) -> L
 
 func _button(value: String, at: Vector2, dimensions: Vector2, action: Callable) -> Button:
 	var button:=Button.new()
-	button.text=value
+	button.text=value.to_upper()
 	button.focus_mode=Control.FOCUS_NONE
 	button.position=at
 	button.size=dimensions
@@ -2539,7 +2593,7 @@ func _category(value: String) -> void:
 	if category!=value:UISounds.play("select")
 	category=value
 	for tab in tabs:
-		tab.modulate=Color("ffe5ae") if tab.text==category else Color("b9aa8c")
+		tab.modulate=Color("ffe5ae") if tab.text==category.to_upper() else Color("b9aa8c")
 	entries.clear()
 	for i in ENTRIES.size():
 		if ENTRIES[i][0]==category:
@@ -2936,7 +2990,6 @@ const ThirdPersonPlayer = preload("res://third_person_player.gd")
 const HeightTerrain = preload("res://height_terrain.gd")
 const PomMaterial = preload("res://pom_material.gd")
 const WelshSky = preload("res://welsh_sky.gd")
-const WanderingNPC = preload("res://animated_visitor.gd")
 const ChickenNPC = preload("res://chicken_npc.gd")
 const SelectionTarget = preload("res://selection_target.gd")
 const ValleyAmbience = preload("res://valley_ambience.gd")
@@ -2963,7 +3016,6 @@ var additional_visitors: Array[Node3D] = []
 var background_meadow: Node3D
 var valley_cycle: Node3D
 
-var visitor: Node3D
 var chicken: Node3D
 var placement: Node
 var selected_target: Area3D
@@ -3029,11 +3081,6 @@ func _ready() -> void:
 	await _loading_step("UNPACKING THE TOOLS")
 	ambience = ValleyAmbience.new()
 	add_child(ambience)
-	visitor = WanderingNPC.new()
-	visitor.name = "WanderingVisitor"
-	add_child(visitor)
-	visitor.setup(self)
-	SelectionTarget.attach(visitor, "Valley visitor", Vector3(0.65, 1.5, 0.65))
 	valley_cycle = ValleyCycle.new()
 	valley_cycle.name = "DayNightWeather"
 	add_child(valley_cycle)
@@ -3058,13 +3105,6 @@ func _ready() -> void:
 		SelectionTarget.attach(npc, entry[0], Vector3(0.65, 1.5, 0.65))
 		additional_visitors.append(npc)
 		await _loading_step("WELCOMING THE NEIGHBOURS")
-	var angus := preload("res://angus_npc.gd").new()
-	angus.name="Angus"
-	angus.cell=Vector2i(7,2)
-	add_child(angus)
-	angus.setup(self)
-	SelectionTarget.attach(angus,"Angus McDoogal",Vector3(0.8,1.5,0.8))
-	additional_visitors.append(angus)
 	await _loading_step("CALLING THE WILDLIFE")
 	wildlife=preload("res://garden_wildlife.gd").new()
 	add_child(wildlife)
@@ -3129,7 +3169,7 @@ func _create_cursor() -> void:
 func _toggle_ambience() -> void:
 	ambience_muted = not ambience_muted
 	ambience.muted = ambience_muted
-	ambience_button.text = "Ambient sounds · off" if ambience_muted else "Ambient sounds · on"
+	ambience_button.text = "AMBIENT SOUNDS · OFF" if ambience_muted else "AMBIENT SOUNDS · ON"
 
 func _create_view() -> void:
 	super._create_view()
@@ -3535,9 +3575,13 @@ func _create_garden_ui() -> void:
 		field_book.open(self))
 	pages.add_child(book_button)
 	ambience_button=Button.new()
-	ambience_button.text="Ambient sounds · on"
+	ambience_button.text="AMBIENT SOUNDS · ON"
 	ambience_button.pressed.connect(_toggle_ambience)
 	pages.add_child(ambience_button)
+	var sound_button:=Button.new()
+	sound_button.text="SOUND OPTIONS"
+	sound_button.pressed.connect(AudioOptions.open)
+	pages.add_child(sound_button)
 	var close := Button.new()
 	close.text="Return to the garden"
 	close.pressed.connect(_toggle_guide)
@@ -3557,6 +3601,7 @@ func _create_garden_ui() -> void:
 		quit_button.text="Save & Quit"
 		quit_button.pressed.connect(get_tree().current_scene.save_and_quit)
 		pages.add_child(quit_button)
+	preload("res://cwtch_theme.gd").uppercase_menu(guide)
 	var wheel_layer:=CanvasLayer.new()
 	wheel_layer.layer=20
 	add_child(wheel_layer)
@@ -3631,6 +3676,8 @@ func _refresh_ui() -> void:
 	notice.modulate.a=smoothstep(0,0.5,toast_timer)
 
 func _controller_prompts() -> void:
+	if AudioOptions.opened:
+		AudioOptions.focus();return
 	control_hint.text=""
 	guide_controls.text=""
 	if field_book.visible: ControllerInput.focus_first.call_deferred(field_book)
@@ -4643,7 +4690,7 @@ func _process(delta: float) -> void:
 	wind_time += delta
 	material.set_shader_parameter("wind_time", wind_time)
 	material.set_shader_parameter("spirit_position", garden.cursor.global_position)
-	material.set_shader_parameter("visitor_position", garden.visitor.global_position)
+	material.set_shader_parameter("visitor_position", garden.player.global_position)
 	material.set_shader_parameter("chicken_position", garden.chicken.global_position)
 	material.set_shader_parameter("rain_strength", garden.valley_cycle.rain_strength)
 	material.set_shader_parameter("wetness", garden.valley_cycle.wetness)
@@ -4996,28 +5043,17 @@ func _create_visual() -> void:
   part.skeleton = NodePath("")
  animation_player = AnimationPlayer.new()
  add_child(animation_player)
- walk_time = rng.randf_range(4,8)
+ walk_time = 5.0
 
 func advance(delta: float) -> void:
- if garden.guide.visible: return
- gait += delta
- if sniff_time > 0:
-  sniff_time = maxf(0,sniff_time-delta)
-  walking = false
-  body.rotation.x = sin(gait*5.0)*0.10
-  body.rotation.z = sin(gait*2.0)*0.025
-  body.position.y = 0.003+sin(gait*3.0)*0.002
- else:
-  super.advance(delta)
-  walk_time -= delta
-  body.rotation.x = sin(gait*8.0)*0.025
-  body.rotation.z = sin(gait*10.0)*0.07
-  body.position.y = absf(sin(gait*10.0))*0.008
-  if walk_time<=0 and position.distance_to(destination)<0.03:
-   sniff_time = rng.randf_range(2,4)
-   walk_time = rng.randf_range(4,9)
- var breathing := 1.0+sin(gait*2.5)*0.012
- body.scale = Vector3(1,breathing,1)*(0.35/0.976685)
+ if garden.guide.visible:return
+ super.advance(delta)
+ gait+=delta
+ var sniff: bool=not walking and brain.state=="forage"
+ body.rotation.x=sin(gait*(5.0 if sniff else 8.0))*(0.10 if sniff else 0.025*motion_ratio)
+ body.rotation.z=sin(gait*10.0)*0.07*motion_ratio
+ body.position.y=absf(sin(gait*10.0))*0.008*motion_ratio
+ body.scale=Vector3(1,1.0+sin(gait*2.5)*0.012,1)*(0.35/0.976685)
 
 ```
 
@@ -6272,7 +6308,7 @@ func _build_ui() -> void:
 	menu_buttons.offset_bottom = -24
 	_button("enter garden",func(): _begin_garden(false),menu_buttons)
 	_button("new garden",_request_new,menu_buttons)
-	_button("options",func(): UISounds.play("open"); options.show(); menu_buttons.hide(); heading.hide(); ControllerInput.focus_first.call_deferred(options),menu_buttons)
+	_button("options",func(): UISounds.play("open"); preload("res://audio_mixer.gd").refresh(options); options.show(); menu_buttons.hide(); heading.hide(); ControllerInput.focus_first.call_deferred(options),menu_buttons)
 	_button("ACCOUNT & CLOUD",_open_account,menu_buttons)
 	_button("QUIT GAME",save_and_quit,menu_buttons)
 	account_panel=preload("res://account_panel.gd").new()
@@ -6317,23 +6353,7 @@ func _build_ui() -> void:
 	box.size_flags_horizontal=Control.SIZE_EXPAND_FILL
 	scroll.add_child(box)
 	box.add_child(_label("OPTIONS",24,Color("e2bf6e")))
-	for bus in ["Master","Music","UI","Ambience","Sound effects","Speech"]:
-		var row:=HBoxContainer.new()
-		var audio_title:=_label(bus,15,Color("eee6d0"))
-		audio_title.custom_minimum_size.x=140;audio_title.horizontal_alignment=HORIZONTAL_ALIGNMENT_LEFT
-		row.add_child(audio_title)
-		var slider:=HSlider.new()
-		slider.name="UISFXVolume" if bus=="UI" else ("Volume" if bus=="Master" else bus.replace(" ","")+"Volume")
-		slider.max_value=100;slider.step=1;slider.size_flags_horizontal=Control.SIZE_EXPAND_FILL
-		slider.custom_minimum_size=Vector2(180,30)
-		slider.value=(UISounds.volume if bus=="UI" else float(AudioSettings.levels[bus]))*100.0
-		slider.tooltip_text=bus+" volume"
-		var amount:=_label(str(roundi(slider.value))+"%",15,Color("e2bf6e"));amount.custom_minimum_size.x=48
-		slider.value_changed.connect(func(value: float):
-			amount.text=str(roundi(value))+"%"
-			if bus=="UI":UISounds.set_volume(value/100.0)
-			else:AudioSettings.set_level(bus,value/100.0);UISounds.play("volume-change"))
-		row.add_child(slider);row.add_child(amount);box.add_child(row)
+	preload("res://audio_mixer.gd").populate(box)
 	var ui_enabled:=CheckButton.new();ui_enabled.name="UISFXEnabled";ui_enabled.text="Interface sounds";ui_enabled.button_pressed=UISounds.enabled
 	ui_enabled.toggled.connect(UISounds.set_enabled);box.add_child(ui_enabled)
 	box.add_child(_label("Interface sound style",16,Color("eee6d0")))
@@ -6353,6 +6373,7 @@ func _build_ui() -> void:
 	preview.item_selected.connect(func(index: int): weather_override = index-1)
 	box.add_child(preview)
 	_button("back",func(): _close_options(),options_layout)
+	preload("res://cwtch_theme.gd").uppercase_menu(options)
 	options.hide()
 
 func _process(delta: float) -> void:
@@ -6616,6 +6637,9 @@ func _notification(what: int) -> void:
 		save_and_quit()
 
 func _focus_menu() -> void:
+	if AudioOptions.opened:
+		AudioOptions.focus();return
+	if is_instance_valid(options):preload("res://audio_mixer.gd").refresh(options)
 	if loading:return
 	if ControllerKeyboard.opened:return
 	if is_instance_valid(account_status) and account_status.popup.visible:return
@@ -6797,6 +6821,67 @@ func _autosave_sync_finished(_ok: bool, message: String) -> void:
 
 [node name="Cwtch" type="Node3D"]
 script = ExtResource("1")
+
+```
+
+## meadow_animal_ai.gd
+
+```gd
+extends Node
+## The approach animals keep a small home range instead of freezing after arrival.
+## Their cinematic crossing remains authored; these routines run afterwards.
+var arrival: Node3D
+var agents: Array[Dictionary]=[]
+func setup(owner_arrival: Node3D) -> void:
+ arrival=owner_arrival
+ var actors: Array[Node3D]=[arrival.crossing]
+ actors.append_array(arrival.animals)
+ for i in actors.size():
+  var actor:=actors[i]
+  agents.append({"actor":actor,"home":actor.position,"target":actor.position,"state":"","wait":0.0,"patch":i,"phase":float(i),"rabbit":i==0,"base_scale":actor.scale})
+func decide(rabbit: bool, hour: float, rain: float) -> String:
+ if rain>=0.5:return "shelter"
+ if hour<6 or hour>=21:return "rest"
+ if rabbit and hour>=10 and hour<17:return "rest"
+ return "graze"
+func _physics_process(delta: float) -> void:
+ if arrival.active or not is_instance_valid(arrival.garden.valley_cycle):return
+ if arrival.garden.guide.visible:return
+ var cycle: Node=arrival.garden.valley_cycle
+ var hour:=fposmod(6.0+cycle.elapsed/100.0,24.0)
+ for data in agents:
+  var actor: Node3D=data.actor
+  var desired:=decide(data.rabbit,hour,cycle.rain_strength)
+  data.phase+=delta
+  if data.state!=desired or data.wait<=0.0 and actor.position.distance_to(data.target)<0.04:
+   data.state=desired
+   data.wait=18.0 if desired=="graze" else 30.0
+   # Grazing patches stay by each animal's original meadow; shelter lies at its wooded edge.
+   var offset:=Vector3(-1.5,0,-1.5)
+   if desired=="graze":
+    data.patch=(int(data.patch)+1)%4
+    offset=[Vector3(-1,0,-1),Vector3(1,0,-1),Vector3(1,0,1),Vector3(-1,0,1)][data.patch]
+   data.target=data.home+offset
+   data.target.y=arrival.ground(data.target.x,data.target.z)
+   actor.set_meta("ai_state",desired)
+  var offset: Vector3=data.target-actor.position;offset.y=0
+  var moving:=offset.length()>0.035
+  if moving:
+   var heading:=atan2(offset.x,offset.z)+(PI/2.0 if data.rabbit else 0.0)
+   actor.rotation.y=lerp_angle(actor.rotation.y,heading,1.0-exp(-2.5*delta))
+   var step:=offset.normalized()*minf(offset.length(),delta*(0.32 if data.rabbit else 0.22))
+   var next:=actor.position+step
+   var clear:=true
+   for other in agents:
+    if other.actor==actor:continue
+    if Vector2(next.x-other.actor.position.x,next.z-other.actor.position.z).length()<1.4:clear=false
+   if clear:actor.position=next
+   data.wait=18.0 if desired=="graze" else 30.0
+  else:data.wait=maxf(0.0,data.wait-delta)
+  actor.position.y=arrival.ground(actor.position.x,actor.position.z)
+  if data.rabbit and moving:actor.position.y+=absf(sin(data.phase*8.0))*.06
+  actor.rotation.z=sin(data.phase*7)*.02 if moving else 0.0
+  actor.scale=data.base_scale*Vector3(1,1+sin(data.phase*1.5)*.004,1)
 
 ```
 
@@ -7323,6 +7408,7 @@ func _convert(source: Material) -> Material:
  return result
 
 func _scan(node: Node) -> void:
+ if node.has_meta("weather_sheltered"):return
  if not seen.has(node.get_instance_id()):
   if node is MeshInstance3D and node.mesh:
    if node.material_override:
@@ -7455,6 +7541,8 @@ func setup(world: Node3D) -> void:
      triangle_bands[band].append([a,b,c])
  _build_road()
  _build_vignettes()
+ var meadow_ai:=preload("res://meadow_animal_ai.gd").new()
+ meadow_ai.name="MeadowAnimalAI";add_child(meadow_ai);meadow_ai.setup(self)
  camera=Camera3D.new()
  camera.name="ArrivalCamera"
  camera.near=0.04
@@ -7672,6 +7760,150 @@ func finish() -> void:
  garden.hedgehog_intro.request_welcome()
  var host:=garden.get_parent()
  if host.has_method("_save_garden"):host.call_deferred("_save_garden")
+
+```
+
+## npc_brain.gd
+
+```gd
+extends RefCounted
+## Local goal-driven AI: needs + species routines + reachable resources.
+## No network calls, random directions, or changes to the player's planted crops.
+var state:="observe"
+var reason:="Taking in the garden"
+var hunger:=0.65
+var thirst:=0.2
+var energy:=1.0
+var activity_left:=0.0
+var retry_left:=0.0
+var visited: Dictionary={}
+var age:=0.0
+var goal:=Vector2i(-1,-1)
+const HUMAN=["arthur","meera"]
+func role(actor: Node) -> String:
+ return str(actor.get_meta("animal_id",actor.name)).to_lower()
+func priority(kind: String, hour: float, rain: float, water: bool) -> String:
+ if rain>=0.5:return "shelter"
+ var nocturnal: bool=kind in ["hedgehog","badger"]
+ var sleeping: bool=(hour>=7 and hour<19) if nocturnal else (hour>=21 or hour<6)
+ if sleeping or energy<0.2:return "rest"
+ if kind=="arthur":return "welcome" if hour<9 else "inspect"
+ if kind=="meera":return "plants"
+ if thirst>=0.6 and water:return "drink"
+ if kind=="robin":return "riverbank"
+ if hunger>=0.5:return "forage"
+ if kind=="dragon":return "bask"
+ if kind=="peacock":return "display"
+ return "forage"
+func tick(actor: Node3D, delta: float) -> bool:
+ age+=delta
+ hunger=minf(1.0,hunger+delta/900.0);thirst=minf(1.0,thirst+delta/1100.0)
+ energy=maxf(0.0,energy-delta/1800.0)
+ retry_left=maxf(0.0,retry_left-delta)
+ if actor.manual_order:return false
+ var world: Node3D=actor.garden
+ var kind:=role(actor)
+ var hour:=fposmod(6.0+world.valley_cycle.elapsed/100.0,24.0)
+ var water: bool=not world.wildlife.water_cells().is_empty() if is_instance_valid(world.wildlife) else false
+ var desired:=priority(kind,hour,world.valley_cycle.rain_strength,water)
+ if desired!=state:
+  state=desired;activity_left=0;retry_left=0
+  actor.directed_path.clear();actor.commanded_goal=Vector2i(-1,-1)
+  actor.destination=actor.position;actor.next_cell=world.local_to_cell(actor.position)
+ if activity_left>0:
+  activity_left=maxf(0.0,activity_left-delta)
+  if activity_left==0:
+   if state in ["forage","riverbank"]:hunger=maxf(0.0,hunger-0.4)
+   if state in ["drink","riverbank"]:thirst=maxf(0.0,thirst-0.5)
+  if state in ["rest","shelter","bask"]:energy=minf(1.0,energy+delta*0.025)
+  describe(actor)
+  return true
+ if world.contains_cell(actor.commanded_goal):return false
+ if retry_left>0:return true
+ choose(actor)
+ describe(actor)
+ return not world.contains_cell(actor.commanded_goal)
+func describe(actor: Node3D) -> void:
+ var labels={"shelter":"Sheltering from the rain","rest":"Resting in a quiet spot","welcome":"Watching the northern entrance","inspect":"Checking the garden plots","plants":"Inspecting plants and flowers","drink":"Seeking a dry drinking bank","riverbank":"Foraging by the water","forage":"Looking for food","bask":"Basking on warm open ground","display":"Displaying in an open clearing"}
+ reason=labels.get(state,"Observing the garden")
+ actor.set_meta("ai_state",state)
+ actor.set_meta("inspection_text",role(actor).capitalize()+": "+reason.to_lower()+".")
+func choose(actor: Node3D) -> void:
+ var world: Node3D=actor.garden
+ var kind:=role(actor)
+ var cover: Array[Vector2i]=[]
+ var plants: Array[Vector2i]=[]
+ for node in world.get_children():
+  if not node is Node3D or not node.has_meta("purchase_record"):continue
+  var record: Dictionary=node.get_meta("purchase_record")
+  var at: Vector2i=world.local_to_cell(node.position)
+  if str(record.id) in ["ash","birch","cottage"]:cover.append(at)
+  if str(record.id) in ["ash","birch","planter"]:plants.append(at)
+ for at in world.crops:plants.append(at)
+ var water: Array[Vector2i]=world.wildlife.water_cells() if is_instance_valid(world.wildlife) else []
+ var start: Vector2i=world.local_to_cell(actor.position)
+ var frontier: Array[Vector2i]=[start]
+ var parents: Dictionary={start:start}
+ var distances: Dictionary={start:0}
+ var index:=0
+ var best:= -INF
+ var selected:=start
+ while index<frontier.size():
+  var cell: Vector2i=frontier[index];index+=1
+  var distance: int=distances[cell]
+  if actor._can_reserve(cell):
+   var ground: int=world.get_terrain(cell)
+   var edge: int=mini(mini(cell.x,cell.y),mini(world.grid_size.x-1-cell.x,world.grid_size.y-1-cell.y))
+   var value: float=-float(distance)*0.55
+   if state in ["rest","shelter"]:
+    value+=18.0/(1.0+nearest(cell,cover)) if not cover.is_empty() else 12.0/(1.0+edge)
+    if ground==3:value+=3.0
+   elif state=="welcome":value-=Vector2(cell).distance_to(Vector2(world.grid_size.x/2,1))*1.5
+   elif state in ["inspect","plants"]:
+    value+=25.0/(1.0+nearest(cell,plants)) if not plants.is_empty() else 7.0/(1.0+edge)
+    if ground==6:value+=3.0
+   elif state in ["drink","riverbank"]:
+    value+=25.0/(1.0+nearest(cell,water)) if not water.is_empty() else 0.0
+   elif state=="bask":
+    value+=12.0 if ground==7 else (5.0 if ground==1 else 0.0)
+    value+=minf(float(edge),5.0)
+   elif state=="display":
+    value+=8.0 if ground==2 else 0.0;value+=minf(float(edge),5.0)
+   else:
+    value+=12.0 if ground in [2,3] else (5.0 if ground==0 else 0.0)
+    if kind in ["hedgehog","badger"]:value+=5.0/(1.0+edge)
+    if kind=="chicken" and ground==0:value+=7.0
+   if state not in ["rest","shelter","welcome"] and visited.has(cell):value-=maxf(0.0,18.0-(age-float(visited[cell]))*0.06)
+   if value>best:best=value;selected=cell
+  for direction in actor.DIRECTIONS:
+   var next: Vector2i=cell+direction
+   if parents.has(next) or not actor._walkable(next):continue
+   if absf(world.cell_center(next).y-world.cell_center(cell).y)>0.4:continue
+   # Reserved cells are temporary obstacles, not destinations to walk through.
+   if not actor._can_reserve(next):continue
+   parents[next]=cell;distances[next]=distance+1;frontier.append(next)
+ if best==-INF:
+  retry_left=2.0;reason="Waiting for a clear route";return
+ goal=selected
+ if selected==start and actor.position.distance_to(world.cell_center(start))<0.05:
+  arrived();return
+ var path: Array[Vector2i]=[]
+ var at:=selected
+ while at!=start:path.push_front(at);at=parents[at]
+ if path.is_empty():path.append(start)
+ actor.directed_path=path;actor.commanded_goal=selected
+ actor.cell=start;actor.next_cell=start;actor.destination=world.cell_center(start)
+ actor.arrival_rest=0.0
+func arrived() -> void:
+ visited[goal]=age
+ activity_left=20.0 if state=="rest" else (12.0 if state=="shelter" else 5.0)
+ if visited.size()>100:
+  for key in visited.keys():
+   if age-float(visited[key])>300:visited.erase(key)
+static func nearest(at: Vector2i, cells: Array[Vector2i]) -> float:
+ var result:=1000.0
+ for cell in cells:result=minf(result,Vector2(at).distance_to(Vector2(cell)))
+ return result
 
 ```
 
@@ -7987,6 +8219,7 @@ var roam_time := 7.0
 var body_scale := 1.0
 
 func _create_visual() -> void:
+	set_meta("animal_id",species)
 	var dragon := species == "dragon"
 	move_speed = 0.28 if dragon else 0.32
 	collision_radius = 0.52 if dragon else 0.34
@@ -8107,16 +8340,7 @@ func _prepare_drives(_mesh: MeshInstance3D) -> void:
 func advance(delta: float) -> void:
 	if garden.guide.visible: return
 	phase += delta
-	if rest_time > 0:
-		rest_time = maxf(0,rest_time-delta)
-		walking = false
-		motion_ratio = 0
-	else:
-		super.advance(delta)
-		roam_time -= delta
-		if roam_time <= 0 and position.distance_to(destination)<0.02:
-			rest_time = rng.randf_range(2,5)
-			roam_time = rng.randf_range(5,10)
+	super.advance(delta)
 	for drive in drives:
 		var strength: float = motion_ratio if drive.gait else 1.0
 		var angle: float = sin(phase*drive.rate+drive.phase)*drive.amplitude*strength
@@ -8155,6 +8379,7 @@ UISounds="*res://ui_sounds.gd"
 
 ControllerInput="*res://controller_input.gd"
 ControllerKeyboard="*res://controller_keyboard.gd"
+AudioOptions="*res://audio_options.gd"
 
 [display]
 
@@ -8316,6 +8541,208 @@ func clear() -> void:
  generation+=1
  for name in [PATH,PATH+".tmp"]:
   if FileAccess.file_exists(name):DirAccess.remove_absolute(ProjectSettings.globalize_path(name))
+
+```
+
+## shop_interior.gd
+
+```gd
+extends Node3D
+const Stock=preload("res://village_stock.gd")
+var keeper: Node3D
+var showcase: Node3D
+var window_material: StandardMaterial3D
+var village: Node3D
+var kind:=0
+var wood_materials: Dictionary={}
+func box(size: Vector3, at: Vector3, color: String) -> MeshInstance3D:
+ var node:=Stock.box(self,size,Color(color),at)
+ var tint:=Color(color)
+ if tint.r>tint.g*1.1 and tint.b<tint.g*.85:
+  if not wood_materials.has(color):
+   var material:=ShaderMaterial.new();material.shader=preload("res://shop_wood.gdshader")
+   material.set_shader_parameter("wood_tint",tint);wood_materials[color]=material
+  node.material_override=wood_materials[color]
+ return node
+func prop(id: String, at: Vector3, scale_value: float=1.0) -> Node3D:
+ var node:=Stock.model(id);add_child(node);node.position=at;node.scale*=scale_value;return node
+func sign_text(text: String, at: Vector3, size: int=36) -> void:
+ var label:=Label3D.new();label.text=text;label.font_size=size;label.pixel_size=0.007
+ label.modulate=Color("f6e6be");label.outline_size=5;label.position=at;add_child(label)
+func build(world: Node3D, index: int) -> void:
+ village=world;kind=index;name=["AnimalShop","PlantNursery","Decorators","McDoogalConstruction"][index]
+ var wall: String=["8a9c96","9aab89","bca48d","aaa494"][index]
+ box(Vector3(12,.2,10),Vector3(0,-.1,0),"795c40")
+ for x in range(-6,7):box(Vector3(.024,.01,10),Vector3(x,0.012,0),"483826")
+ box(Vector3(12,4,.2),Vector3(0,2,-4.5),wall)
+ for x in [-5.9,5.9]:box(Vector3(.2,4,10),Vector3(x,2,0),wall)
+ box(Vector3(12,.2,10),Vector3(0,4,0),"4b3b2c")
+ for x in [-5.6,-3,0,3,5.6]:box(Vector3(.15,4,.3),Vector3(x,2,-4.32),"4d3e2a")
+ for z in [-4,-1,2]:box(Vector3(12,.25,.18),Vector3(0,3.65,z),"513d29")
+ # Framed window, sill and curtain panels; responds to the shared valley clock.
+ var window:=box(Vector3(1.8,1.6,.06),Vector3(-4,2.15,-4.35),"c1d5d1")
+ window_material=window.material_override;window_material.emission_enabled=true
+ for x in [-4.95,-3.05,-4.0]:box(Vector3(.10,1.85,.14),Vector3(x,2.15,-4.25),"69513a")
+ for y in [1.25,2.15,3.05]:box(Vector3(2.0,.1,.16),Vector3(-4,y,-4.24),"69513a")
+ box(Vector3(2.3,.16,.42),Vector3(-4,1.2,-4.1),"a88a60")
+ box(Vector3(4.4,.6,.1),Vector3(-.8,3.0,-4.08),"344a40")
+ sign_text(world.SHOPS[index],Vector3(-.8,3.0,-3.99),32)
+ # Lower counter leaves the keeper's face and hands visible beside the catalogue.
+ box(Vector3(4.4,.8,1.0),Vector3(-.6,.4,-1.4),"604932")
+ box(Vector3(4.6,.10,1.15),Vector3(-.6,.86,-1.4),"ab8859")
+ for x in [-2.4,-1.2,0,1.2]:box(Vector3(.07,.74,.05),Vector3(x,.4,-.87),"c2a071")
+ box(Vector3(1.65,.68,1.1),Vector3(-4.15,.34,.1),"594833")
+ box(Vector3(1.8,.08,1.25),Vector3(-4.15,.72,.1),"ba9766")
+ showcase=Node3D.new();showcase.position=Vector3(-4.15,.77,.1);add_child(showcase)
+ if index==0:
+  for i in range(3):
+   var at:=Vector3(2.6+i*.72,.3,-3.9)
+   box(Vector3(.63,.60,.55),at,"ae8e5f")
+   for slat in range(4):box(Vector3(.04,.48,.06),at+Vector3(-.25+slat*.16,0,.3),"58452d")
+  for x in [-2.3,-1.5]:
+   var bowl:=CylinderMesh.new();bowl.top_radius=.22;bowl.bottom_radius=.17;bowl.height=.10
+   Stock.part(self,bowl,Color("9c6747"),Vector3(x,.95,-1.4))
+  sign_text("FEED · NESTS · GOOD COMPANY",Vector3(2.65,2,-4.25),21)
+ elif index==1:
+  for y in [.65,1.55]:
+   box(Vector3(3.8,.12,.65),Vector3(2.4,y,-3.95),"62734c")
+   for i in range(5):prop("planter",Vector3(.9+i*.7,y+.06,-3.95),.65)
+  prop("planter",Vector3(-2,.92,-1.4),.7)
+  prop("planter",Vector3(4.8,0,-1),1.1)
+ elif index==2:
+  prop("bench",Vector3(2.4,0,-3.1),1.3)
+  prop("planter",Vector3(.9,.48,-3.1),.7)
+  box(Vector3(3.2,.015,2),Vector3(-1,.025,1.0),"6c7471")
+  for x in [1,2.5,4]:
+   box(Vector3(1.05,1.3,.12),Vector3(x,2.35,-4.26),"765536")
+   box(Vector3(.88,1.13,.14),Vector3(x,2.35,-4.17),"c6b892")
+ else:
+  # Timber rack, slate samples, measured plans and a small cottage maquette.
+  for y in [.3,.65,1.0]:
+   for x in [1.4,1.75,2.1]:box(Vector3(.26,.22,2.1),Vector3(x,y,-3.1),"916d45")
+  for x in [3.1,3.75,4.4]:box(Vector3(.52,.36,.70),Vector3(x,.18,-3.0),"6c7779")
+  box(Vector3(1.2,.018,.72),Vector3(-1.6,.92,-1.4),"486b79")
+  for x in [-1.98,-1.6,-1.22]:box(Vector3(.012,.022,.60),Vector3(x,.93,-1.4),"e5ded0")
+  for z in [-1.65,-1.15]:box(Vector3(1.04,.022,.012),Vector3(-1.6,.93,z),"e5ded0")
+  prop("cottage",Vector3(.7,.92,-1.5),.22)
+  sign_text("ANGUS MCDOOGAL · BUILDER",Vector3(.2,2.45,-4.03),23)
+ keeper=preload("res://shop_keeper.gd").new();add_child(keeper);keeper.position=Vector3(-1.1,0,-2.55)
+ keeper.setup(world,index==3)
+ keeper.set_meta("keeper_name","Angus McDoogal" if index==3 else ["Animal keeper","Nursery keeper","Decorator"][index])
+ var key:=OmniLight3D.new();key.position=Vector3(-2.2,2.9,1.3);key.light_color=Color("ffdfa5")
+ key.light_energy=1.1;key.omni_range=10;key.shadow_enabled=true;add_child(key)
+ var fill:=OmniLight3D.new();fill.position=Vector3(-4,2.4,-3.5);fill.light_color=Color("bdcfdf")
+ fill.light_energy=.55;fill.omni_range=6;add_child(fill)
+func _process(_delta: float) -> void:
+ if not is_visible_in_tree() or not is_instance_valid(village.valley_cycle):return
+ var hour: float=fposmod(6.0+village.valley_cycle.elapsed/100.0,24.0)
+ var daylight: float=smoothstep(5.0,8.0,hour)*(1.0-smoothstep(17.0,21.0,hour))
+ window_material.albedo_color=Color("263752").lerp(Color("bdcfc7"),daylight)
+ window_material.emission=window_material.albedo_color*.3
+
+```
+
+## shop_keeper.gd
+
+```gd
+extends Node3D
+## The keeper greets arrivals, discusses the selected stock, then waits attentively.
+var visual: Node3D
+var animation_player: AnimationPlayer
+var state:="waiting"
+var seconds:=0.0
+var selected_item:=""
+var angus:=false
+var shop: Node
+var rig: Skeleton3D
+var arm_pairs: Array[Vector2i]=[]
+func setup(owner_shop: Node, is_angus: bool) -> void:
+ shop=owner_shop;angus=is_angus
+ name="Angus" if angus else "ShopKeeper"
+ visual=load("res://assets/npcs/angus.glb" if angus else "res://assets/npcs/arthur.glb").instantiate()
+ visual.scale=Vector3.ONE*(1.5/0.999512);add_child(visual)
+ animation_player=visual.find_child("AnimationPlayer",true,false)
+ animation_player.callback_mode_process=AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
+ var cleaner:=preload("res://cycling_npc.gd").new()
+ for library_name in animation_player.get_animation_library_list():
+  var original:=animation_player.get_animation_library(library_name)
+  var copy:=AnimationLibrary.new()
+  for clip_name in original.get_animation_list():
+   var clip:=original.get_animation(clip_name).duplicate() as Animation
+   cleaner._remove_root_motion(clip)
+   clip.loop_mode=Animation.LOOP_LINEAR
+   copy.add_animation(clip_name,clip)
+  animation_player.remove_animation_library(library_name);animation_player.add_animation_library(library_name,copy)
+ cleaner.free()
+ if angus:
+  rig=visual.find_children("*","Skeleton3D",true,false)[0]
+  for side in ["Left","Right"]:
+   var upper:=-1;var lower:=-1
+   for bone in rig.get_bone_count():
+    var bone_name:=str(rig.get_bone_name(bone))
+    if bone_name.ends_with(side+"Arm"):upper=bone
+    if bone_name.ends_with(side+"ForeArm"):lower=bone
+   if upper>=0 and lower>=0:arm_pairs.append(Vector2i(upper,lower))
+ change("waiting")
+func change(next: String) -> void:
+ state=next;seconds=0.0
+ var clip: String="Angus_Performance" if angus else ("Talking_1" if next=="greeting" else ("Talking_2" if next=="explaining" else "Happy_Idle"))
+ animation_player.play(clip,0.0 if angus else 0.3);animation_player.speed_scale=1.0;animation_player.advance(0.0)
+ if angus:animation_player.seek(1.0,true)
+func greet() -> void:
+ selected_item="";change("greeting")
+func browse(id: String) -> void:
+ if id==selected_item:return
+ selected_item=id
+ if state!="greeting":change("explaining")
+func _process(delta: float) -> void:
+ if not is_visible_in_tree() or not is_instance_valid(shop) or shop.paused:return
+ seconds+=delta
+ if state=="greeting" and seconds>3.5:change("explaining" if not selected_item.is_empty() else "waiting")
+ elif state=="explaining" and seconds>5.0:change("waiting")
+ # Angus has one supplied performance, so hold its settled pose after the opening reference frame when idle.
+ if angus and state=="waiting":
+  animation_player.seek(1.0,true)
+  _rest_arms()
+ else:animation_player.advance(delta)
+ var offset: Vector3=shop.camera.global_position-global_position
+ var heading:=atan2(offset.x,offset.z)
+ rotation.y=lerp_angle(rotation.y,heading,1.0-exp(-2.2*delta))
+
+func _rest_arms() -> void:
+ # The supplied performance has no idle clip. Relax the upper arms into an
+ # attentive counter-side stance, without editing or replacing the source rig.
+ for pair in arm_pairs:
+  var upper:=rig.get_bone_global_pose(pair.x)
+  var lower:=rig.get_bone_global_pose(pair.y)
+  var direction: Vector3=(lower.origin-upper.origin).normalized()
+  var target:=Vector3(signf(direction.x)*0.18,-1.0,0.08).normalized()
+  var correction:=Basis(Quaternion(direction,target))
+  var parent_basis:=rig.get_bone_global_pose(rig.get_bone_parent(pair.x)).basis.orthonormalized()
+  var local_basis:=parent_basis.inverse()*correction*upper.basis.orthonormalized()
+  rig.set_bone_pose_rotation(pair.x,local_basis.get_rotation_quaternion())
+
+```
+
+## shop_wood.gdshader
+
+```gdshader
+shader_type spatial;
+render_mode diffuse_burley, specular_schlick_ggx;
+uniform vec4 wood_tint : source_color = vec4(0.46,0.32,0.19,1.0);
+varying vec3 wood_position;
+float hash21(vec2 p) {return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+float grain_noise(vec2 p) {
+ vec2 i=floor(p), f=fract(p);f=f*f*(3.0-2.0*f);
+ return mix(mix(hash21(i),hash21(i+vec2(1,0)),f.x),mix(hash21(i+vec2(0,1)),hash21(i+vec2(1,1)),f.x),f.y);
+}
+void vertex(){wood_position=VERTEX;}
+void fragment(){
+ float grain=grain_noise(vec2(wood_position.x*45.0,wood_position.z*2.0+wood_position.y*1.5));
+ float bands=sin(wood_position.x*110.0+grain*3.0)*0.008;
+ ALBEDO=wood_tint.rgb*(0.96+grain*0.05+bands);
+ ROUGHNESS=0.9;SPECULAR=0.18;
+}
 
 ```
 
@@ -8792,8 +9219,8 @@ func _labels() -> Array:
  return MODE_LABELS if mode_page else LABELS
 
 func _refresh() -> void:
- title.text=_labels()[hovered]
- subtitle.text=(MODE_NOTES if mode_page else NOTES)[hovered]
+ title.text=_labels()[hovered].to_upper()
+ subtitle.text=(MODE_NOTES if mode_page else NOTES)[hovered].to_upper()
  queue_redraw()
 
 func _choose() -> void:
@@ -9664,7 +10091,7 @@ void fragment() {
 ```gd
 extends Node3D
 const Stock=preload("res://village_stock.gd")
-const SHOPS=["THE ANIMAL KEEPER","THE PLANT NURSERY","THE DECORATOR","THE BUILDER"]
+const SHOPS=["THE ANIMAL KEEPER","THE PLANT NURSERY","THE DECORATOR","MCDOOGAL CONSTRUCTION"]
 const SUBTITLES=["New companions for your garden","A little more green","Small comforts, made with care","A home in the valley"]
 const CHUNK_SIZE=2.0
 var chunk_count:=Vector2i(12,12)
@@ -9702,6 +10129,8 @@ var stock_list: VBoxContainer
 var receipt: Label
 var pause_shade: ColorRect
 var pause_panel: PanelContainer
+var shop_rooms: Array[Node3D]=[]
+var active_keeper: Node3D
 var showcase: Node3D
 var ambience: Node
 var purchase_buttons: Array[Button]=[]
@@ -9845,42 +10274,24 @@ func _build_street() -> void:
  ring.follow_feet(spirit.position,Vector2.ONE*0.7,0.0)
 
 func _build_room() -> void:
- Stock.box(interior,Vector3(12,.18,10),Color("584332"),Vector3(0,4,0))
- Stock.box(interior,Vector3(.2,4,10),Color("c7b68e"),Vector3(5.9,2,0))
- Stock.box(interior,Vector3(12,.15,10),Color("79543a"),Vector3(0,-.1,0))
- for x in range(-6,7): Stock.box(interior,Vector3(.018,.015,10),Color("443126"),Vector3(x,0,0))
- Stock.box(interior,Vector3(12,4,.2),Color("e0ceaa"),Vector3(0,2,-4.5))
- Stock.box(interior,Vector3(.2,4,10),Color("c7b68e"),Vector3(-5.9,2,0))
- for x in [-5,-2,2,5]: Stock.box(interior,Vector3(.2,4,.26),Color("493626"),Vector3(x,2,-4.3))
- Stock.box(interior,Vector3(12,.24,.3),Color("493626"),Vector3(0,3.65,-4.3))
- Stock.box(interior,Vector3(5,1.0,1.1),Color("705036"),Vector3(-1.3,.5,-1.4))
- Stock.box(interior,Vector3(5.2,.12,1.3),Color("b88b58"),Vector3(-1.3,1.06,-1.4))
- for y in [1.2,2.2]: Stock.box(interior,Vector3(4,.1,.6),Color("674831"),Vector3(-1.8,y,-4.0))
- for i in range(7):
-  var pot:=Stock.model("planter")
-  pot.scale=Vector3.ONE*.7
-  pot.position=Vector3(-3.4+i*.52,1.25,-4)
-  interior.add_child(pot)
- var light:=OmniLight3D.new()
- light.position=Vector3(-1,3,0)
- light.light_color=Color("ffd396")
- light.light_energy=1.2
- light.omni_range=12
- interior.add_child(light)
- showcase=Node3D.new()
- showcase.position=Vector3(-1.6,1.14,-1.4)
- interior.add_child(showcase)
+ interior.set_meta("weather_sheltered",true)
+ for index in SHOPS.size():
+  var room:=preload("res://shop_interior.gd").new()
+  interior.add_child(room);room.build(self,index)
+  room.hide();room.process_mode=Node.PROCESS_MODE_DISABLED;shop_rooms.append(room)
+ showcase=shop_rooms[0].showcase
 
 func _label(parent: Node, text: String, size: int=18) -> Label:
  var label:=Label.new()
  label.text=text
+ label.uppercase=true
  label.add_theme_font_size_override("font_size",size)
  parent.add_child(label)
  return label
 
 func _button(parent: Node, text: String, action: Callable) -> Button:
  var button:=Button.new()
- button.text=text
+ button.text=text.to_upper()
  button.pressed.connect(action)
  parent.add_child(button)
  return button
@@ -9929,7 +10340,9 @@ func _build_ui() -> void:
  shop_stack.add_theme_constant_override("separation",10)
  shop_panel.add_child(shop_stack)
  shop_title=_label(shop_stack,"",22)
+ shop_title.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
  shop_note=_label(shop_stack,"",15)
+ shop_note.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
  balance=_label(shop_stack,"",19)
  var stock_scroll:=ScrollContainer.new()
  stock_scroll.custom_minimum_size=Vector2(0,180)
@@ -9963,12 +10376,14 @@ func _build_ui() -> void:
  _label(pause_stack,"A MOMENT OF REST",24).add_theme_color_override("font_color",preload("res://cwtch_theme.gd").GOLD)
  _label(pause_stack,"The village can wait a little.",16)
  _button(pause_stack,"Continue exploring",func(): _pause(false))
+ _button(pause_stack,"SOUND OPTIONS",AudioOptions.open)
  _button(pause_stack,"Return to the garden",func(): host.return_from_village())
  _button(pause_stack,"Save & Quit",func(): host.save_and_quit())
  pause_panel.hide()
  pause_shade.hide()
 
 func _input_mode() -> void:
+ if AudioOptions.opened:AudioOptions.focus();return
  if current_shop>=0: ControllerInput.focus_first.call_deferred(shop_panel)
  elif paused: ControllerInput.focus_first.call_deferred(pause_panel)
 
@@ -10038,6 +10453,12 @@ func enter_shop(index: int, player_slot: int=0) -> void:
  if index<0 or index>=SHOPS.size(): return
  UISounds.play("open")
  current_shop=index
+ for i in shop_rooms.size():
+  shop_rooms[i].visible=i==index
+  shop_rooms[i].process_mode=Node.PROCESS_MODE_INHERIT if i==index else Node.PROCESS_MODE_DISABLED
+ showcase=shop_rooms[index].showcase
+ active_keeper=shop_rooms[index].keeper
+ active_keeper.greet()
  camera.environment=indoor_environment
  sun.hide()
  moon.hide()
@@ -10049,11 +10470,11 @@ func enter_shop(index: int, player_slot: int=0) -> void:
  paused=false
  pause_panel.hide()
  pause_shade.hide()
- camera.position=Vector3(1.3,2.4,-93.5)
- camera.look_at(to_global(Vector3(0,1.2,-102)))
+ camera.position=Vector3(1.0,1.8,-95.5)
+ camera.look_at(to_global(Vector3(0,1.25,-102)))
  Input.mouse_mode=Input.MOUSE_MODE_VISIBLE
  shop_title.text=SHOPS[index]
- shop_note.text=SUBTITLES[index]
+ shop_note.text=("ANGUS MCDOOGAL · YOUR LOCAL BUILDER" if index==3 else "YOUR "+str(active_keeper.get_meta("keeper_name")).to_upper()+" · "+SUBTITLES[index])
  receipt.text="Preview your purchase in the garden before paying.\nChoose its position and rotation, or cancel for free."
  for child in stock_list.get_children(): child.free()
  purchase_buttons.clear()
@@ -10073,7 +10494,8 @@ func enter_shop(index: int, player_slot: int=0) -> void:
 func _display(id: String) -> void:
  for child in showcase.get_children(): child.free()
  var model: Node3D
- if id=="hedgehog": model=host.garden.hedgehog.visual.duplicate(0)
+ if is_instance_valid(active_keeper):active_keeper.browse(id)
+ if id=="hedgehog": model=host.garden.wildlife.hedgehog.visual.duplicate(0)
  else: model=Stock.model(id)
  var bounds: AABB=preload("res://floating_tool.gd").bounds(model)
  var factor:=1.6/maxf(bounds.size.x,maxf(bounds.size.y,bounds.size.z))
@@ -10502,7 +10924,7 @@ func _create_visual() -> void:
   assert(animation_player.has_animation(clip),"Missing robin animation: "+clip)
   animation_player.get_animation(clip).loop_mode=Animation.LOOP_LINEAR
  animation_player.play("Idle")
- flight_wait=rng.randf_range(9.0,17.0)
+ flight_wait=12.0
  set_meta("animal_id","robin")
  set_meta("inspection_text","A robin is exploring the water's edge.")
 
@@ -10527,28 +10949,6 @@ func _entry() -> bool:
     found=true
  return found
 
-func _choose_destination() -> void:
- if rng.randf()<0.28:
-  rest_time=rng.randf_range(0.5,1.5)
-  walking=false
-  travel_speed=0.0
-  return
- super._choose_destination()
- # Prefer dry neighbours closer to the water, without stepping into ponds.
- if not walking or rng.randf()>0.75:return
- var waters: Array[Vector2i]=garden.wildlife.water_cells()
- if waters.is_empty():return
- var best:=INF
- for direction in DIRECTIONS:
-  var candidate: Vector2i=cell+direction
-  if not _can_reserve(candidate):continue
-  var distance:=INF
-  for water in waters:distance=minf(distance,Vector2(candidate).distance_squared_to(Vector2(water)))
-  if distance<best:
-   best=distance
-   next_cell=candidate
- destination=garden.cell_center(next_cell)
-
 func advance(delta: float) -> void:
  if garden.guide.visible or garden.tool_wheel.visible:
   animation_player.speed_scale=0.0
@@ -10565,9 +10965,9 @@ func advance(delta: float) -> void:
 
 func _animate_robin(delta: float) -> void:
  flight_wait=maxf(0.0,flight_wait-delta)
- if flight_time<=0.0 and flight_wait<=0.0 and motion_ratio>0.3 and rest_time<=0.0:
+ if flight_time<=0.0 and flight_wait<=0.0 and motion_ratio>0.3 and rest_time<=0.0 and garden.valley_cycle.rain_strength<0.5 and (visit_state!="inside" or brain.state not in ["rest","shelter"]):
   flight_time=FLIGHT_SECONDS
-  flight_wait=rng.randf_range(12.0,24.0)
+  flight_wait=18.0
  if flight_time>0.0:
   flight_time=maxf(0.0,flight_time-delta)
   # Short low flights follow the existing safe patrol route. No visit is awarded
@@ -10649,7 +11049,7 @@ func restore_visit(data: Dictionary) -> void:
 
 ```gd
 extends CharacterBody3D
-## A walking visitor. The imported animation is an in-place walk cycle.
+## Shared goal-driven movement, smooth steering and collision for garden NPCs.
 const MODEL = preload("res://assets/arthur.glb")
 const WALK_SOURCE = preload("res://assets/Meshy_AI_Subject_15561_biped_Animation_Walking_withSkin.glb")
 const SPEED := 0.48
@@ -10674,6 +11074,8 @@ var blocked_time := 0.0
 var directed_path: Array[Vector2i]=[]
 var commanded_goal:=Vector2i(-1,-1)
 var arrival_rest:=0.0
+var manual_order:=false
+var brain:=preload("res://npc_brain.gd").new()
 
 func setup(world: Node3D) -> void:
 	garden = world
@@ -10827,6 +11229,9 @@ func advance(delta: float) -> void:
 		walking=false
 		animation_player.speed_scale=0
 		return
+	if brain.tick(self,delta):
+		walking=false;motion_ratio=0.0;travel_speed=0.0
+		return
 	if position.distance_to(destination) < 0.001:
 		cell = next_cell
 		if not directed_path.is_empty():
@@ -10834,14 +11239,16 @@ func advance(delta: float) -> void:
 			destination=garden.cell_center(next_cell)
 		elif commanded_goal==cell:
 			commanded_goal=Vector2i(-1,-1)
-			arrival_rest=2.0
+			walking=false;motion_ratio=0.0
+			if manual_order:arrival_rest=8.0;manual_order=false
+			else:brain.arrived()
 			return
 		else:_choose_destination()
-	# A newly planted tile stops the visitor before it crosses that tile.
-	if not _walkable(next_cell):
+	# A newly planted tile stops the character before it crosses that tile.
+	if not _walkable(next_cell) or (next_cell!=cell and not _can_reserve(next_cell)):
 		if garden.contains_cell(commanded_goal):
-			if command_move(commanded_goal):return
-			directed_path.clear();commanded_goal=Vector2i(-1,-1)
+			if command_move(commanded_goal,manual_order):return
+			directed_path.clear();commanded_goal=Vector2i(-1,-1);manual_order=false;brain.retry_left=2.0
 		next_cell = cell
 		destination = garden.cell_center(cell)
 	var offset := destination - position
@@ -10870,8 +11277,8 @@ func advance(delta: float) -> void:
 		destination = garden.cell_center(cell)
 		blocked_time = 0.0
 		travel_speed = 0.0
-		if garden.contains_cell(commanded_goal) and not command_move(commanded_goal):
-			directed_path.clear();commanded_goal=Vector2i(-1,-1)
+		if garden.contains_cell(commanded_goal) and not command_move(commanded_goal,manual_order):
+			directed_path.clear();commanded_goal=Vector2i(-1,-1);manual_order=false;brain.retry_left=2.0
 
 func _can_reserve(candidate: Vector2i) -> bool:
 	if not _walkable(candidate): return false
@@ -10895,21 +11302,8 @@ func _walkable(candidate: Vector2i) -> bool:
 	return terrain != garden.Terrain.WATER and terrain != garden.Terrain.DEEP_WATER
 
 func _choose_destination() -> void:
-	var options: Array[Vector2i] = []
-	for direction in DIRECTIONS:
-		var candidate: Vector2i = cell + direction
-		if _can_reserve(candidate):
-			options.append(candidate)
-	if options.is_empty():
-		walking = false
-		return
-	# Prefer exploring to immediately retracing the last step.
-	if options.size() > 1:
-		options.erase(previous_cell)
-	previous_cell = cell
-	next_cell = options[rng.randi_range(0, options.size() - 1)]
-	destination = garden.cell_center(next_cell)
-	walking = true
+	walking=false
+	motion_ratio=0.0
 
 func route_to(goal: Vector2i) -> Array[Vector2i]:
 	var path: Array[Vector2i]=[]
@@ -10923,16 +11317,19 @@ func route_to(goal: Vector2i) -> Array[Vector2i]:
 		if here==goal:break
 		for direction in DIRECTIONS:
 			var next: Vector2i=here+direction
-			if previous.has(next) or not _walkable(next):continue
+			if previous.has(next) or not _can_reserve(next):continue
+			if absf(garden.cell_center(next).y-garden.cell_center(here).y)>0.4:continue
 			previous[next]=here;frontier.append(next)
 	if not previous.has(goal):return path
 	var at:=goal
 	while at!=start:path.push_front(at);at=previous[at]
 	if path.is_empty():path.append(goal)
 	return path
-func command_move(goal: Vector2i) -> bool:
+func command_move(goal: Vector2i, by_player: bool=true) -> bool:
 	var path:=route_to(goal)
 	if path.is_empty():return false
+	manual_order=by_player
+	brain.activity_left=0.0;brain.retry_left=0.0
 	directed_path=path;commanded_goal=goal;arrival_rest=0
 	cell=garden.local_to_cell(position);next_cell=cell;destination=garden.cell_center(cell)
 	blocked_time=0;travel_speed=0

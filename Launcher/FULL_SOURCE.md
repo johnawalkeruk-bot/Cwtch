@@ -19,7 +19,7 @@ public sealed class DownloadBar : Control {
  public DownloadBar() {DoubleBuffered=true; animation.Tick+=(s,e)=>{phase=(phase+4)%Math.Max(1,Width+100);Invalidate();};animation.Start();}
  protected override void OnPaint(PaintEventArgs e) {
   e.Graphics.Clear(Color.FromArgb(47,66,62));
-  using(var brush=new SolidBrush(Color.FromArgb(235,190,107))) {
+  using(var brush=new SolidBrush(Color.FromArgb(255,202,114))) {
    if(Indeterminate)e.Graphics.FillRectangle(brush,phase-100,0,100,Height);
    else e.Graphics.FillRectangle(brush,0,0,(int)(Width*Math.Max(0,Math.Min(1,Fraction))),Height);
   }
@@ -27,15 +27,22 @@ public sealed class DownloadBar : Control {
  protected override void Dispose(bool disposing){if(disposing)animation.Dispose();base.Dispose(disposing);}
 }
 public sealed class ValleyArtwork : Panel {
- public Image Logo;
+ public Image Logo, Landscape;
  public ValleyArtwork(){DoubleBuffered=true;}
  protected override void OnPaint(PaintEventArgs e){
   using(var sky=new LinearGradientBrush(ClientRectangle,Color.FromArgb(49,81,75),Color.FromArgb(19,37,35),90))e.Graphics.FillRectangle(sky,ClientRectangle);
+  if(Landscape!=null){
+   var source=new Rectangle(0,(int)(Landscape.Height*0.20),Landscape.Width,(int)(Landscape.Height*0.66));
+   float scale=Math.Max((float)Width/source.Width,(float)Height/source.Height);
+   int w=(int)(source.Width*scale),h=(int)(source.Height*scale);
+   e.Graphics.DrawImage(Landscape,new Rectangle((Width-w)/2,(Height-h)/2,w,h),source,GraphicsUnit.Pixel);
+   using(var veil=new SolidBrush(Color.FromArgb(190,16,41,31)))e.Graphics.FillRectangle(veil,ClientRectangle);
+  }
   e.Graphics.SmoothingMode=SmoothingMode.AntiAlias;
-  using(var ridge=new SolidBrush(Color.FromArgb(38,65,60)))e.Graphics.FillPolygon(ridge,new[]{new Point(0,380),new Point(120,260),new Point(200,320),new Point(330,180),new Point(Width,350),new Point(Width,Height),new Point(0,Height)});
+  if(Landscape==null)using(var ridge=new SolidBrush(Color.FromArgb(38,65,60)))e.Graphics.FillPolygon(ridge,new[]{new Point(0,380),new Point(120,260),new Point(200,320),new Point(330,180),new Point(Width,350),new Point(Width,Height),new Point(0,Height)});
   if(Logo!=null){e.Graphics.InterpolationMode=InterpolationMode.HighQualityBicubic;e.Graphics.DrawImage(Logo,new Rectangle(20,28,Width-40,Width-40));}
  }
- protected override void Dispose(bool disposing){if(disposing&&Logo!=null)Logo.Dispose();base.Dispose(disposing);}
+ protected override void Dispose(bool disposing){if(disposing){if(Logo!=null)Logo.Dispose();if(Landscape!=null)Landscape.Dispose();}base.Dispose(disposing);}
 }
 public class CwtchLauncher : Form {
  readonly string root=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"CWTCH");
@@ -45,22 +52,26 @@ public class CwtchLauncher : Form {
  readonly Label notesTitle=new Label();
  readonly TextBox notes=new TextBox();
  string game; bool busy;
- static readonly Color Gold=Color.FromArgb(235,190,107),Muted=Color.FromArgb(160,180,170),White=Color.FromArgb(238,241,231);
+ static readonly Color Gold=Color.FromArgb(255,202,114),Muted=Color.FromArgb(100,112,98),White=Color.FromArgb(34,57,47);
  public CwtchLauncher() {
   Text="CWTCH · Your slice of the valley";ClientSize=new Size(1100,640);StartPosition=FormStartPosition.CenterScreen;
   AutoScaleMode=AutoScaleMode.Dpi;Icon=Icon.ExtractAssociatedIcon(Application.ExecutablePath);
-  FormBorderStyle=FormBorderStyle.FixedSingle;MaximizeBox=false;BackColor=Color.FromArgb(19,30,28);Font=new Font("Segoe UI",10);
+  FormBorderStyle=FormBorderStyle.FixedSingle;MaximizeBox=false;BackColor=Color.FromArgb(243,238,226);Font=new Font("Segoe UI",10);
   var art=new ValleyArtwork();art.SetBounds(0,0,390,640);Controls.Add(art);
   string logo=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"logo.png");if(File.Exists(logo))art.Logo=Image.FromFile(logo);
+  string landscape=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"garden.png");if(File.Exists(landscape))art.Landscape=Image.FromFile(landscape);
+  string studio=Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"wgs.png");
+  if(File.Exists(studio)){var mark=new PictureBox{Image=Image.FromFile(studio),SizeMode=PictureBoxSizeMode.Zoom,BackColor=Color.Transparent};mark.SetBounds(26,525,100,90);art.Controls.Add(mark);mark.Disposed+=(s,e)=>mark.Image.Dispose();}
+  var studioName=MakeLabel("WALDAS GAME STUDIOS",9,Color.FromArgb(238,211,155));studioName.SetBounds(130,562,245,26);art.Controls.Add(studioName);
   var caption=MakeLabel("A LITTLE SPACE TO SLOW DOWN",10,Gold);caption.SetBounds(30,444,345,25);art.Controls.Add(caption);
-  var sub=MakeLabel("Your slice of the valley.",14,White);sub.SetBounds(30,475,345,32);art.Controls.Add(sub);
-  var eyebrow=MakeLabel("C W T C H   /   LAUNCHER",10,Gold);eyebrow.SetBounds(434,40,422,24);Controls.Add(eyebrow);
-  Configure(heading,"Welcome to the valley",25,White,434,84,430,47);
+  var sub=MakeLabel("YOUR SLICE OF THE VALLEY.",13,Color.FromArgb(247,234,208));sub.SetBounds(30,475,345,32);art.Controls.Add(sub);
+  var eyebrow=MakeLabel("C W T C H   /   YOUR GARDEN AWAITS",10,Muted);eyebrow.SetBounds(434,40,422,24);Controls.Add(eyebrow);
+  Configure(heading,"WELCOME TO THE VALLEY",23,White,434,84,622,47);heading.Font=new Font("Georgia",23);
   Configure(versionLabel,"INSTALLED   —   Not installed",10,Muted,434,145,422,24);
   Configure(latestLabel,"LATEST         —   Checking…",10,Muted,434,173,422,24);
-  Configure(notesTitle,"LATEST PATCH NOTES",10,Gold,434,212,622,24);
+  Configure(notesTitle,"LATEST PATCH NOTES",10,White,434,212,622,24);
   notes.SetBounds(434,243,622,179);notes.ReadOnly=true;notes.Multiline=true;notes.WordWrap=true;notes.TabStop=true;
-  notes.BorderStyle=BorderStyle.None;notes.BackColor=Color.FromArgb(27,43,38);notes.ForeColor=White;
+  notes.BorderStyle=BorderStyle.None;notes.BackColor=Color.FromArgb(255,250,240);notes.ForeColor=White;
   notes.Font=new Font("Segoe UI",10);notes.ScrollBars=ScrollBars.Vertical;
   notes.Text="Patch notes will appear when the latest release is found.";Controls.Add(notes);
   try{var cached=Read(Path.Combine(root,"patch-notes.json"));ShowNotes((string)cached["version"],(string)cached["notes"],true);}catch{}
@@ -68,7 +79,7 @@ public class CwtchLauncher : Form {
   progress.SetBounds(434,486,622,6);Controls.Add(progress);
   Configure(detail,"Connecting to the valley",10,Muted,434,506,622,40);
   StyleButton(play,"PLAY CWTCH",434,562,380,54,true);play.Enabled=false;
-  StyleButton(update,"Check for updates",828,562,228,54,false);
+  StyleButton(update,"CHECK FOR UPDATES",828,562,228,54,false);
   update.Click+=async(s,e)=>await UpdateGame();play.Click+=(s,e)=>Play();
   FormClosing+=(s,e)=>{if(busy){e.Cancel=true;detail.Text="Please let the update finish before closing.";}};
   try{Installed();}catch{versionLabel.Text="INSTALLED   —   Could not read version";}
@@ -77,7 +88,7 @@ public class CwtchLauncher : Form {
  void Configure(Label label,string text,float size,Color color,int x,int y,int w,int h){label.Text=text;label.Font=new Font("Segoe UI",size);label.ForeColor=color;label.SetBounds(x,y,w,h);Controls.Add(label);}
  void StyleButton(Button button,string text,int x,int y,int w,int h,bool primary){
   button.Text=text;button.SetBounds(x,y,w,h);button.FlatStyle=FlatStyle.Flat;button.FlatAppearance.BorderSize=0;
-  button.BackColor=primary?Gold:BackColor;button.ForeColor=primary?Color.FromArgb(25,39,33):Muted;
+  button.BackColor=primary?Gold:Color.FromArgb(34,57,47);button.ForeColor=primary?Color.FromArgb(25,39,33):Color.FromArgb(247,234,208);
   button.Font=new Font("Segoe UI",primary?12:10,primary?FontStyle.Bold:FontStyle.Regular);button.Cursor=Cursors.Hand;
   button.FlatAppearance.MouseOverBackColor=primary?Color.FromArgb(249,208,135):Color.FromArgb(35,50,44);Controls.Add(button);
  }
@@ -149,10 +160,10 @@ public class CwtchLauncher : Form {
  [STAThread] public static void Main(string[] args){
   Application.EnableVisualStyles();Application.SetCompatibleTextRenderingDefault(false);var form=new CwtchLauncher();
   if(args.Length==2&&args[0]=="--preview"){
-   form.versionLabel.Text="INSTALLED   —   v0.1.0";
-   form.OnProgress(new Dictionary<string,object>{{"stage","available"},{"version","v0.1.1"}});
+   form.versionLabel.Text="INSTALLED   —   DESIGN PREVIEW";
+   form.OnProgress(new Dictionary<string,object>{{"stage","available"},{"version","DESIGN PREVIEW"}});
    form.OnProgress(new Dictionary<string,object>{{"stage","downloading"},{"downloaded",260046848L},{"total",419430400L},{"speed",8388608L}});
-   form.ShowNotes("v0.1.1","A warm welcome to the valley\n\nArthur and the valley\n• Arthur welcomes you back with voiced dialogue and subtitles.\n• Daffodil borders decorate speech bubbles.\n\nInterface and weather\n• Cleaner menus and compact status panels.\n• Weather can linger, clear or build into a storm.",false);
+   form.ShowNotes("DESIGN PREVIEW","A familiar place to return to\n\nMenus and sound\n• Consistent uppercase menu labels.\n• Six sound controls from the garden and village pause menus.\n\nA launcher from the same valley\n• Forest green, parchment and gold to match the website.\n• Version details, latest patch notes and download progress remain available.",false);
    form.update.Enabled=false;form.Show();Application.DoEvents();
    using(var image=new Bitmap(form.Width,form.Height)){form.DrawToBitmap(image,new Rectangle(0,0,form.Width,form.Height));image.Save(args[1]);}
    form.Dispose();return;

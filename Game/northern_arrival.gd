@@ -46,6 +46,8 @@ func setup(world: Node3D) -> void:
      triangle_bands[band].append([a,b,c])
  _build_road()
  _build_vignettes()
+ var meadow_ai:=preload("res://meadow_animal_ai.gd").new()
+ meadow_ai.name="MeadowAnimalAI";add_child(meadow_ai);meadow_ai.setup(self)
  camera=Camera3D.new()
  camera.name="ArrivalCamera"
  camera.near=0.04

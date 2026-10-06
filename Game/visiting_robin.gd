@@ -25,7 +25,7 @@ func _create_visual() -> void:
   assert(animation_player.has_animation(clip),"Missing robin animation: "+clip)
   animation_player.get_animation(clip).loop_mode=Animation.LOOP_LINEAR
  animation_player.play("Idle")
- flight_wait=rng.randf_range(9.0,17.0)
+ flight_wait=12.0
  set_meta("animal_id","robin")
  set_meta("inspection_text","A robin is exploring the water's edge.")
 
@@ -50,28 +50,6 @@ func _entry() -> bool:
     found=true
  return found
 
-func _choose_destination() -> void:
- if rng.randf()<0.28:
-  rest_time=rng.randf_range(0.5,1.5)
-  walking=false
-  travel_speed=0.0
-  return
- super._choose_destination()
- # Prefer dry neighbours closer to the water, without stepping into ponds.
- if not walking or rng.randf()>0.75:return
- var waters: Array[Vector2i]=garden.wildlife.water_cells()
- if waters.is_empty():return
- var best:=INF
- for direction in DIRECTIONS:
-  var candidate: Vector2i=cell+direction
-  if not _can_reserve(candidate):continue
-  var distance:=INF
-  for water in waters:distance=minf(distance,Vector2(candidate).distance_squared_to(Vector2(water)))
-  if distance<best:
-   best=distance
-   next_cell=candidate
- destination=garden.cell_center(next_cell)
-
 func advance(delta: float) -> void:
  if garden.guide.visible or garden.tool_wheel.visible:
   animation_player.speed_scale=0.0
@@ -88,9 +66,9 @@ func advance(delta: float) -> void:
 
 func _animate_robin(delta: float) -> void:
  flight_wait=maxf(0.0,flight_wait-delta)
- if flight_time<=0.0 and flight_wait<=0.0 and motion_ratio>0.3 and rest_time<=0.0:
+ if flight_time<=0.0 and flight_wait<=0.0 and motion_ratio>0.3 and rest_time<=0.0 and garden.valley_cycle.rain_strength<0.5 and (visit_state!="inside" or brain.state not in ["rest","shelter"]):
   flight_time=FLIGHT_SECONDS
-  flight_wait=rng.randf_range(12.0,24.0)
+  flight_wait=18.0
  if flight_time>0.0:
   flight_time=maxf(0.0,flight_time-delta)
   # Short low flights follow the existing safe patrol route. No visit is awarded

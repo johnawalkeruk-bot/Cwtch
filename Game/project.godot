@@ -23,6 +23,7 @@ UISounds="*res://ui_sounds.gd"
 
 ControllerInput="*res://controller_input.gd"
 ControllerKeyboard="*res://controller_keyboard.gd"
+AudioOptions="*res://audio_options.gd"
 
 [display]
 

@@ -1,5 +1,5 @@
 extends CharacterBody3D
-## A walking visitor. The imported animation is an in-place walk cycle.
+## Shared goal-driven movement, smooth steering and collision for garden NPCs.
 const MODEL = preload("res://assets/arthur.glb")
 const WALK_SOURCE = preload("res://assets/Meshy_AI_Subject_15561_biped_Animation_Walking_withSkin.glb")
 const SPEED := 0.48
@@ -24,6 +24,8 @@ var blocked_time := 0.0
 var directed_path: Array[Vector2i]=[]
 var commanded_goal:=Vector2i(-1,-1)
 var arrival_rest:=0.0
+var manual_order:=false
+var brain:=preload("res://npc_brain.gd").new()
 
 func setup(world: Node3D) -> void:
 	garden = world
@@ -177,6 +179,9 @@ func advance(delta: float) -> void:
 		walking=false
 		animation_player.speed_scale=0
 		return
+	if brain.tick(self,delta):
+		walking=false;motion_ratio=0.0;travel_speed=0.0
+		return
 	if position.distance_to(destination) < 0.001:
 		cell = next_cell
 		if not directed_path.is_empty():
@@ -184,14 +189,16 @@ func advance(delta: float) -> void:
 			destination=garden.cell_center(next_cell)
 		elif commanded_goal==cell:
 			commanded_goal=Vector2i(-1,-1)
-			arrival_rest=2.0
+			walking=false;motion_ratio=0.0
+			if manual_order:arrival_rest=8.0;manual_order=false
+			else:brain.arrived()
 			return
 		else:_choose_destination()
-	# A newly planted tile stops the visitor before it crosses that tile.
-	if not _walkable(next_cell):
+	# A newly planted tile stops the character before it crosses that tile.
+	if not _walkable(next_cell) or (next_cell!=cell and not _can_reserve(next_cell)):
 		if garden.contains_cell(commanded_goal):
-			if command_move(commanded_goal):return
-			directed_path.clear();commanded_goal=Vector2i(-1,-1)
+			if command_move(commanded_goal,manual_order):return
+			directed_path.clear();commanded_goal=Vector2i(-1,-1);manual_order=false;brain.retry_left=2.0
 		next_cell = cell
 		destination = garden.cell_center(cell)
 	var offset := destination - position
@@ -220,8 +227,8 @@ func advance(delta: float) -> void:
 		destination = garden.cell_center(cell)
 		blocked_time = 0.0
 		travel_speed = 0.0
-		if garden.contains_cell(commanded_goal) and not command_move(commanded_goal):
-			directed_path.clear();commanded_goal=Vector2i(-1,-1)
+		if garden.contains_cell(commanded_goal) and not command_move(commanded_goal,manual_order):
+			directed_path.clear();commanded_goal=Vector2i(-1,-1);manual_order=false;brain.retry_left=2.0
 
 func _can_reserve(candidate: Vector2i) -> bool:
 	if not _walkable(candidate): return false
@@ -245,21 +252,8 @@ func _walkable(candidate: Vector2i) -> bool:
 	return terrain != garden.Terrain.WATER and terrain != garden.Terrain.DEEP_WATER
 
 func _choose_destination() -> void:
-	var options: Array[Vector2i] = []
-	for direction in DIRECTIONS:
-		var candidate: Vector2i = cell + direction
-		if _can_reserve(candidate):
-			options.append(candidate)
-	if options.is_empty():
-		walking = false
-		return
-	# Prefer exploring to immediately retracing the last step.
-	if options.size() > 1:
-		options.erase(previous_cell)
-	previous_cell = cell
-	next_cell = options[rng.randi_range(0, options.size() - 1)]
-	destination = garden.cell_center(next_cell)
-	walking = true
+	walking=false
+	motion_ratio=0.0
 
 func route_to(goal: Vector2i) -> Array[Vector2i]:
 	var path: Array[Vector2i]=[]
@@ -273,16 +267,19 @@ func route_to(goal: Vector2i) -> Array[Vector2i]:
 		if here==goal:break
 		for direction in DIRECTIONS:
 			var next: Vector2i=here+direction
-			if previous.has(next) or not _walkable(next):continue
+			if previous.has(next) or not _can_reserve(next):continue
+			if absf(garden.cell_center(next).y-garden.cell_center(here).y)>0.4:continue
 			previous[next]=here;frontier.append(next)
 	if not previous.has(goal):return path
 	var at:=goal
 	while at!=start:path.push_front(at);at=previous[at]
 	if path.is_empty():path.append(goal)
 	return path
-func command_move(goal: Vector2i) -> bool:
+func command_move(goal: Vector2i, by_player: bool=true) -> bool:
 	var path:=route_to(goal)
 	if path.is_empty():return false
+	manual_order=by_player
+	brain.activity_left=0.0;brain.retry_left=0.0
 	directed_path=path;commanded_goal=goal;arrival_rest=0
 	cell=garden.local_to_cell(position);next_cell=cell;destination=garden.cell_center(cell)
 	blocked_time=0;travel_speed=0

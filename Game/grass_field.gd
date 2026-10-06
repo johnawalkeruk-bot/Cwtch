@@ -81,7 +81,7 @@ func _process(delta: float) -> void:
 	wind_time += delta
 	material.set_shader_parameter("wind_time", wind_time)
 	material.set_shader_parameter("spirit_position", garden.cursor.global_position)
-	material.set_shader_parameter("visitor_position", garden.visitor.global_position)
+	material.set_shader_parameter("visitor_position", garden.player.global_position)
 	material.set_shader_parameter("chicken_position", garden.chicken.global_position)
 	material.set_shader_parameter("rain_strength", garden.valley_cycle.rain_strength)
 	material.set_shader_parameter("wetness", garden.valley_cycle.wetness)

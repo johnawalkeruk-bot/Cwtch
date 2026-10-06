@@ -1,6 +1,6 @@
 extends Node3D
 const Stock=preload("res://village_stock.gd")
-const SHOPS=["THE ANIMAL KEEPER","THE PLANT NURSERY","THE DECORATOR","THE BUILDER"]
+const SHOPS=["THE ANIMAL KEEPER","THE PLANT NURSERY","THE DECORATOR","MCDOOGAL CONSTRUCTION"]
 const SUBTITLES=["New companions for your garden","A little more green","Small comforts, made with care","A home in the valley"]
 const CHUNK_SIZE=2.0
 var chunk_count:=Vector2i(12,12)
@@ -38,6 +38,8 @@ var stock_list: VBoxContainer
 var receipt: Label
 var pause_shade: ColorRect
 var pause_panel: PanelContainer
+var shop_rooms: Array[Node3D]=[]
+var active_keeper: Node3D
 var showcase: Node3D
 var ambience: Node
 var purchase_buttons: Array[Button]=[]
@@ -181,42 +183,24 @@ func _build_street() -> void:
  ring.follow_feet(spirit.position,Vector2.ONE*0.7,0.0)
 
 func _build_room() -> void:
- Stock.box(interior,Vector3(12,.18,10),Color("584332"),Vector3(0,4,0))
- Stock.box(interior,Vector3(.2,4,10),Color("c7b68e"),Vector3(5.9,2,0))
- Stock.box(interior,Vector3(12,.15,10),Color("79543a"),Vector3(0,-.1,0))
- for x in range(-6,7): Stock.box(interior,Vector3(.018,.015,10),Color("443126"),Vector3(x,0,0))
- Stock.box(interior,Vector3(12,4,.2),Color("e0ceaa"),Vector3(0,2,-4.5))
- Stock.box(interior,Vector3(.2,4,10),Color("c7b68e"),Vector3(-5.9,2,0))
- for x in [-5,-2,2,5]: Stock.box(interior,Vector3(.2,4,.26),Color("493626"),Vector3(x,2,-4.3))
- Stock.box(interior,Vector3(12,.24,.3),Color("493626"),Vector3(0,3.65,-4.3))
- Stock.box(interior,Vector3(5,1.0,1.1),Color("705036"),Vector3(-1.3,.5,-1.4))
- Stock.box(interior,Vector3(5.2,.12,1.3),Color("b88b58"),Vector3(-1.3,1.06,-1.4))
- for y in [1.2,2.2]: Stock.box(interior,Vector3(4,.1,.6),Color("674831"),Vector3(-1.8,y,-4.0))
- for i in range(7):
-  var pot:=Stock.model("planter")
-  pot.scale=Vector3.ONE*.7
-  pot.position=Vector3(-3.4+i*.52,1.25,-4)
-  interior.add_child(pot)
- var light:=OmniLight3D.new()
- light.position=Vector3(-1,3,0)
- light.light_color=Color("ffd396")
- light.light_energy=1.2
- light.omni_range=12
- interior.add_child(light)
- showcase=Node3D.new()
- showcase.position=Vector3(-1.6,1.14,-1.4)
- interior.add_child(showcase)
+ interior.set_meta("weather_sheltered",true)
+ for index in SHOPS.size():
+  var room:=preload("res://shop_interior.gd").new()
+  interior.add_child(room);room.build(self,index)
+  room.hide();room.process_mode=Node.PROCESS_MODE_DISABLED;shop_rooms.append(room)
+ showcase=shop_rooms[0].showcase
 
 func _label(parent: Node, text: String, size: int=18) -> Label:
  var label:=Label.new()
  label.text=text
+ label.uppercase=true
  label.add_theme_font_size_override("font_size",size)
  parent.add_child(label)
  return label
 
 func _button(parent: Node, text: String, action: Callable) -> Button:
  var button:=Button.new()
- button.text=text
+ button.text=text.to_upper()
  button.pressed.connect(action)
  parent.add_child(button)
  return button
@@ -265,7 +249,9 @@ func _build_ui() -> void:
  shop_stack.add_theme_constant_override("separation",10)
  shop_panel.add_child(shop_stack)
  shop_title=_label(shop_stack,"",22)
+ shop_title.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
  shop_note=_label(shop_stack,"",15)
+ shop_note.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART
  balance=_label(shop_stack,"",19)
  var stock_scroll:=ScrollContainer.new()
  stock_scroll.custom_minimum_size=Vector2(0,180)
@@ -299,12 +285,14 @@ func _build_ui() -> void:
  _label(pause_stack,"A MOMENT OF REST",24).add_theme_color_override("font_color",preload("res://cwtch_theme.gd").GOLD)
  _label(pause_stack,"The village can wait a little.",16)
  _button(pause_stack,"Continue exploring",func(): _pause(false))
+ _button(pause_stack,"SOUND OPTIONS",AudioOptions.open)
  _button(pause_stack,"Return to the garden",func(): host.return_from_village())
  _button(pause_stack,"Save & Quit",func(): host.save_and_quit())
  pause_panel.hide()
  pause_shade.hide()
 
 func _input_mode() -> void:
+ if AudioOptions.opened:AudioOptions.focus();return
  if current_shop>=0: ControllerInput.focus_first.call_deferred(shop_panel)
  elif paused: ControllerInput.focus_first.call_deferred(pause_panel)
 
@@ -374,6 +362,12 @@ func enter_shop(index: int, player_slot: int=0) -> void:
  if index<0 or index>=SHOPS.size(): return
  UISounds.play("open")
  current_shop=index
+ for i in shop_rooms.size():
+  shop_rooms[i].visible=i==index
+  shop_rooms[i].process_mode=Node.PROCESS_MODE_INHERIT if i==index else Node.PROCESS_MODE_DISABLED
+ showcase=shop_rooms[index].showcase
+ active_keeper=shop_rooms[index].keeper
+ active_keeper.greet()
  camera.environment=indoor_environment
  sun.hide()
  moon.hide()
@@ -385,11 +379,11 @@ func enter_shop(index: int, player_slot: int=0) -> void:
  paused=false
  pause_panel.hide()
  pause_shade.hide()
- camera.position=Vector3(1.3,2.4,-93.5)
- camera.look_at(to_global(Vector3(0,1.2,-102)))
+ camera.position=Vector3(1.0,1.8,-95.5)
+ camera.look_at(to_global(Vector3(0,1.25,-102)))
  Input.mouse_mode=Input.MOUSE_MODE_VISIBLE
  shop_title.text=SHOPS[index]
- shop_note.text=SUBTITLES[index]
+ shop_note.text=("ANGUS MCDOOGAL · YOUR LOCAL BUILDER" if index==3 else "YOUR "+str(active_keeper.get_meta("keeper_name")).to_upper()+" · "+SUBTITLES[index])
  receipt.text="Preview your purchase in the garden before paying.\nChoose its position and rotation, or cancel for free."
  for child in stock_list.get_children(): child.free()
  purchase_buttons.clear()
@@ -409,7 +403,8 @@ func enter_shop(index: int, player_slot: int=0) -> void:
 func _display(id: String) -> void:
  for child in showcase.get_children(): child.free()
  var model: Node3D
- if id=="hedgehog": model=host.garden.hedgehog.visual.duplicate(0)
+ if is_instance_valid(active_keeper):active_keeper.browse(id)
+ if id=="hedgehog": model=host.garden.wildlife.hedgehog.visual.duplicate(0)
  else: model=Stock.model(id)
  var bounds: AABB=preload("res://floating_tool.gd").bounds(model)
  var factor:=1.6/maxf(bounds.size.x,maxf(bounds.size.y,bounds.size.z))

@@ -3,14 +3,13 @@ extends Control
 signal closed
 const INK := Color("483322")
 const ENTRIES := [
- ["People","Arthur","Arthur brings a steady pace to the garden. Between quiet walks he pauses to enjoy the valley, content to let the day unfold.","Arthur"],
- ["People","Meera","A familiar face among the garden paths. Meera wanders between the plots and the wild edge, taking in the changing light.","Meera"],
- ["People","Angus McDoogal","There is always a little movement where Angus stands. His lively gestures bring a welcome touch of company to a quiet afternoon.","Angus"],
- ["People","The visitor","A traveller passing through the valley. Stop for a moment and watch: even an unhurried garden has its small conversations.","WanderingVisitor"],
+ ["People","Arthur","Arthur watches the north entrance in the morning, checks the garden plots through the day and rests at night. In heavy rain he seeks cover.","Arthur"],
+ ["People","Meera","A familiar face among the garden paths. Meera checks the planted beds and flowers, rests at night and seeks shelter when heavy rain arrives.","Meera"],
+ ["People","Angus McDoogal","Angus runs McDoogal Construction in the village. Visit his workshop to plan a cottage for your garden.","res://assets/npcs/angus.glb"],
  ["Animals","Robin","A bright little visitor with a warm red breast. Robins visit when water covers at least 1% of the garden, then hop and pause along the dry banks.","Robin"],
  ["Animals","Peacock","A colourful garden companion, with an iridescent neck and a magnificent tail.","Peacock"],
- ["Animals","Chicken","A small, busy companion on the garden paths. Watch those quick steps and curious pauses as it explores the ground.","WanderingChicken"],
- ["Animals","Hedgehog","Low to the ground and never in a hurry. The hedgehog noses around the garden, stopping now and then before continuing its little journey.","Hedgehog"],
+ ["Animals","Chicken","Chickens forage on grass and loose soil, drink from dry banks and rest at night. They avoid planted beds and other residents.","WanderingChicken"],
+ ["Animals","Hedgehog","Hedgehogs visit at 1% grass and settle at 5%. They forage near the wild edge at night, rest by cover in daylight and seek shelter in heavy rain.","Hedgehog"],
  ["Animals","Badger","A sturdy visitor with a distinctive striped face. The badger takes slow turns around the plots and shares the paths with its neighbours.","Badger"],
  ["Animals","Dragon","A little valley wonder. Folded wings, a restless tail and gentle movements make this unusual garden guest hard to overlook.","Dragon"],
  ["Plants","Ash","Tall woodland shapes frame the valley beyond the garden. Turn this specimen to see the branching crown and the texture of its trunk.","res://assets/trees/ash_forest.glb"],
@@ -134,7 +133,7 @@ func _text(value: String, at: Vector2, dimensions: Vector2, font_size: int) -> L
 
 func _button(value: String, at: Vector2, dimensions: Vector2, action: Callable) -> Button:
 	var button:=Button.new()
-	button.text=value
+	button.text=value.to_upper()
 	button.focus_mode=Control.FOCUS_NONE
 	button.position=at
 	button.size=dimensions
@@ -209,7 +208,7 @@ func _category(value: String) -> void:
 	if category!=value:UISounds.play("select")
 	category=value
 	for tab in tabs:
-		tab.modulate=Color("ffe5ae") if tab.text==category else Color("b9aa8c")
+		tab.modulate=Color("ffe5ae") if tab.text==category.to_upper() else Color("b9aa8c")
 	entries.clear()
 	for i in ENTRIES.size():
 		if ENTRIES[i][0]==category:

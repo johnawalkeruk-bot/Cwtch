@@ -11,7 +11,6 @@ const ThirdPersonPlayer = preload("res://third_person_player.gd")
 const HeightTerrain = preload("res://height_terrain.gd")
 const PomMaterial = preload("res://pom_material.gd")
 const WelshSky = preload("res://welsh_sky.gd")
-const WanderingNPC = preload("res://animated_visitor.gd")
 const ChickenNPC = preload("res://chicken_npc.gd")
 const SelectionTarget = preload("res://selection_target.gd")
 const ValleyAmbience = preload("res://valley_ambience.gd")
@@ -38,7 +37,6 @@ var additional_visitors: Array[Node3D] = []
 var background_meadow: Node3D
 var valley_cycle: Node3D
 
-var visitor: Node3D
 var chicken: Node3D
 var placement: Node
 var selected_target: Area3D
@@ -104,11 +102,6 @@ func _ready() -> void:
 	await _loading_step("UNPACKING THE TOOLS")
 	ambience = ValleyAmbience.new()
 	add_child(ambience)
-	visitor = WanderingNPC.new()
-	visitor.name = "WanderingVisitor"
-	add_child(visitor)
-	visitor.setup(self)
-	SelectionTarget.attach(visitor, "Valley visitor", Vector3(0.65, 1.5, 0.65))
 	valley_cycle = ValleyCycle.new()
 	valley_cycle.name = "DayNightWeather"
 	add_child(valley_cycle)
@@ -133,13 +126,6 @@ func _ready() -> void:
 		SelectionTarget.attach(npc, entry[0], Vector3(0.65, 1.5, 0.65))
 		additional_visitors.append(npc)
 		await _loading_step("WELCOMING THE NEIGHBOURS")
-	var angus := preload("res://angus_npc.gd").new()
-	angus.name="Angus"
-	angus.cell=Vector2i(7,2)
-	add_child(angus)
-	angus.setup(self)
-	SelectionTarget.attach(angus,"Angus McDoogal",Vector3(0.8,1.5,0.8))
-	additional_visitors.append(angus)
 	await _loading_step("CALLING THE WILDLIFE")
 	wildlife=preload("res://garden_wildlife.gd").new()
 	add_child(wildlife)
@@ -204,7 +190,7 @@ func _create_cursor() -> void:
 func _toggle_ambience() -> void:
 	ambience_muted = not ambience_muted
 	ambience.muted = ambience_muted
-	ambience_button.text = "Ambient sounds · off" if ambience_muted else "Ambient sounds · on"
+	ambience_button.text = "AMBIENT SOUNDS · OFF" if ambience_muted else "AMBIENT SOUNDS · ON"
 
 func _create_view() -> void:
 	super._create_view()
@@ -610,9 +596,13 @@ func _create_garden_ui() -> void:
 		field_book.open(self))
 	pages.add_child(book_button)
 	ambience_button=Button.new()
-	ambience_button.text="Ambient sounds · on"
+	ambience_button.text="AMBIENT SOUNDS · ON"
 	ambience_button.pressed.connect(_toggle_ambience)
 	pages.add_child(ambience_button)
+	var sound_button:=Button.new()
+	sound_button.text="SOUND OPTIONS"
+	sound_button.pressed.connect(AudioOptions.open)
+	pages.add_child(sound_button)
 	var close := Button.new()
 	close.text="Return to the garden"
 	close.pressed.connect(_toggle_guide)
@@ -632,6 +622,7 @@ func _create_garden_ui() -> void:
 		quit_button.text="Save & Quit"
 		quit_button.pressed.connect(get_tree().current_scene.save_and_quit)
 		pages.add_child(quit_button)
+	preload("res://cwtch_theme.gd").uppercase_menu(guide)
 	var wheel_layer:=CanvasLayer.new()
 	wheel_layer.layer=20
 	add_child(wheel_layer)
@@ -706,6 +697,8 @@ func _refresh_ui() -> void:
 	notice.modulate.a=smoothstep(0,0.5,toast_timer)
 
 func _controller_prompts() -> void:
+	if AudioOptions.opened:
+		AudioOptions.focus();return
 	control_hint.text=""
 	guide_controls.text=""
 	if field_book.visible: ControllerInput.focus_first.call_deferred(field_book)

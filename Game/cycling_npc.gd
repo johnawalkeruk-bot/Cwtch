@@ -33,7 +33,7 @@ func _create_visual() -> void:
 		animation_player.remove_animation_library(library_name)
 		animation_player.add_animation_library(library_name, library)
 	move_speed = 0.48
-	steps_until_rest = rng.randi_range(4, 8)
+	steps_until_rest = 5
 	_play("Start_Walk")
 	animation_player.advance(0.0)
 
@@ -63,46 +63,16 @@ func _play(clip: StringName) -> void:
 	animation_player.play(clip, 0.25)
 	clip_remaining = animation_player.get_animation(clip).length
 
-func _choose_destination() -> void:
-	steps_until_rest -= 1
-	if steps_until_rest <= 0:
-		steps_until_rest = rng.randi_range(4, 8)
-		idle_remaining = rng.randf_range(2.0, 4.0)
-		walking = false
-		travel_speed = 0.0
-		if animation_player.has_animation("Happy_Idle"):
-			_play("Happy_Idle")
-		else:
-			_play("Start_Walk")
-			animation_player.seek(0.0, true)
-		return
-	super._choose_destination()
-	if not walking: return
-	var offset := destination - position
-	var turn := wrapf(atan2(offset.x, offset.z) - visual.rotation.y, -PI, PI)
-	if absf(turn) > 0.65:
-		_play("Left_Turn" if turn > 0.0 else "Right_Turn")
-	elif current_clip != "Walking":
-		_play("Start_Walk")
-
 func advance(delta: float) -> void:
+	if garden.guide.visible:return
 	if has_meta("arrival_waiting"):
-		_play("Happy_Idle")
-		animation_player.speed_scale=1.0
-		animation_player.advance(delta)
-		return
-	if garden.guide.visible: return
-	animation_player.speed_scale = 1.0
-	if idle_remaining > 0.0:
-		idle_remaining = maxf(0.0, idle_remaining-delta)
-		if current_clip == "Happy_Idle": animation_player.advance(delta)
-		if idle_remaining == 0.0: _play("Start_Walk")
-		return
+		_play("Happy_Idle");animation_player.speed_scale=1.0;animation_player.advance(delta);return
 	super.advance(delta)
-	if idle_remaining > 0.0: return
-	animation_player.speed_scale = 1.0
-	clip_remaining -= delta
-	if clip_remaining <= 0.0: _play("Walking")
-	# Footwork must continue during steering even while forward speed is low.
-	var rate := maxf(0.12, motion_ratio*move_speed/stride_speed) if current_clip == "Walking" else 1.0
-	animation_player.advance(delta * rate)
+	animation_player.speed_scale=1.0
+	var desired: StringName="Walking" if walking and motion_ratio>0.03 else "Happy_Idle"
+	if brain.state=="shelter" and not walking and animation_player.has_animation("Shivering"):desired="Shivering"
+	if not animation_player.has_animation(desired):
+		_play("Start_Walk");animation_player.seek(0.0,true);return
+	_play(desired)
+	var rate:=maxf(0.12,motion_ratio*move_speed/stride_speed) if desired=="Walking" else 1.0
+	animation_player.advance(delta*rate)

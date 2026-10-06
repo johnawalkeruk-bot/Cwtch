@@ -43,6 +43,7 @@ func _convert(source: Material) -> Material:
  return result
 
 func _scan(node: Node) -> void:
+ if node.has_meta("weather_sheltered"):return
  if not seen.has(node.get_instance_id()):
   if node is MeshInstance3D and node.mesh:
    if node.material_override:

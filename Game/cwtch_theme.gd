@@ -83,3 +83,11 @@ static func decorate_menu(node: PanelContainer) -> void:
 	for label in node.find_children("*","Label",true,false):label.add_theme_color_override("font_color",INK)
 	var petals:=preload("res://petal_frame.gd").new()
 	node.add_child(petals)
+
+static func uppercase_menu(node: Node) -> void:
+	# Display transformation only: never modify typed values or category IDs.
+	if node is Label:node.uppercase=true
+	if node is Button:node.text=node.text.to_upper()
+	if node is OptionButton:
+		for index in node.item_count:node.set_item_text(index,node.get_item_text(index).to_upper())
+	for child in node.get_children():uppercase_menu(child)

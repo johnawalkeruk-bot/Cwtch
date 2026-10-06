@@ -85,8 +85,8 @@ func _labels() -> Array:
  return MODE_LABELS if mode_page else LABELS
 
 func _refresh() -> void:
- title.text=_labels()[hovered]
- subtitle.text=(MODE_NOTES if mode_page else NOTES)[hovered]
+ title.text=_labels()[hovered].to_upper()
+ subtitle.text=(MODE_NOTES if mode_page else NOTES)[hovered].to_upper()
  queue_redraw()
 
 func _choose() -> void:

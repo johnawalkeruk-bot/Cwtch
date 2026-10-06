@@ -47,13 +47,15 @@ func setup(owner_node: Node, client: Node) -> void:
  claim_box=VBoxContainer.new();box.add_child(claim_box)
  claim_name=field(claim_box,"Choose your username");claim_name.max_length=20
  button(claim_box,"CLAIM USERNAME",func(): account.claim_username(claim_name.text))
- notice=Label.new();notice.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART;notice.custom_minimum_size.y=80;box.add_child(notice)
+ notice=Label.new();notice.uppercase=true;notice.autowrap_mode=TextServer.AUTOWRAP_WORD_SMART;notice.custom_minimum_size.y=80;box.add_child(notice)
  upload=button(box,"USE THIS COMPUTER'S GARDEN",func(): ask("upload"))
  download=button(box,"USE CLOUD GARDEN",func(): ask("download"))
  review=button(box,"REVIEW CLOUD / RETRY",func(): account.inspect())
  signout=button(box,"SIGN OUT",func(): account.logout())
  button(box,"BACK",func(): hide();host.menu_buttons.show();host.heading.show();host._focus_menu())
  confirmation=ConfirmationDialog.new();add_child(confirmation);confirmation.confirmed.connect(confirm)
+ confirmation.get_cancel_button().text="CANCEL"
+ confirmation.title="CONFIRM CLOUD SAVE"
  account.changed.connect(refresh)
  account.auth_finished.connect(func(ok: bool):
   if auth_feedback and is_visible_in_tree():UISounds.play("success" if ok else "error")
@@ -65,9 +67,9 @@ func setup(owner_node: Node, client: Node) -> void:
   if not visible:auth_feedback=false;upload_feedback=false)
  refresh();hide()
 func field(parent: Node, hint: String, secret:=false) -> LineEdit:
- var item:=LineEdit.new();item.placeholder_text=hint;item.secret=secret;parent.add_child(item);return item
+ var item:=LineEdit.new();item.placeholder_text=hint.to_upper();item.secret=secret;parent.add_child(item);return item
 func button(box: Node, caption: String, action: Callable) -> Button:
- var item:=Button.new();item.text=caption;item.custom_minimum_size.y=34;item.size_flags_horizontal=Control.SIZE_EXPAND_FILL
+ var item:=Button.new();item.text=caption.to_upper();item.custom_minimum_size.y=34;item.size_flags_horizontal=Control.SIZE_EXPAND_FILL
  item.pressed.connect(action);box.add_child(item);actions.append(item);return item
 func set_registration(value: bool) -> void:
  if registration!=value:UISounds.play("select")
