@@ -1043,7 +1043,7 @@ func _gold(text: String, y: float, font_size: int) -> void:
 
 ```gd
 extends RefCounted
-const VERSION="0.1.33"
+const VERSION="0.1.34"
 
 ```
 
@@ -1980,6 +1980,52 @@ void sky() {
 
 ```
 
+## crypto_npc.gd
+
+```gd
+extends "res://wandering_npc.gd"
+## Crypto uses the shared navigation/collision brain and his original rigged clips.
+const CRYPTO_MODEL = preload("res://assets/npcs/crypto.glb")
+var current_clip: StringName = &""
+
+func _create_visual() -> void:
+ visual = CRYPTO_MODEL.instantiate()
+ visual.name = "CryptoModel"
+ # The converted rig faces +Z with feet at ground level, matching shared steering.
+ add_child(visual)
+ collision_height = 1.35
+ collision_radius = 0.29
+ move_speed = 0.58
+ animation_player = visual.find_child("AnimationPlayer", true, false)
+ animation_player.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
+ for library_name in animation_player.get_animation_library_list():
+  var original := animation_player.get_animation_library(library_name)
+  var library := AnimationLibrary.new()
+  for animation_name in original.get_animation_list():
+   var clip := original.get_animation(animation_name).duplicate() as Animation
+   if animation_name in [&"Idle", &"Walk"]:clip.loop_mode = Animation.LOOP_LINEAR
+   library.add_animation(animation_name, clip)
+  animation_player.remove_animation_library(library_name)
+  animation_player.add_animation_library(library_name, library)
+ _play(&"Idle")
+ animation_player.advance(0.0)
+
+func _play(clip: StringName) -> void:
+ if current_clip == clip:return
+ current_clip = clip
+ animation_player.play(clip, 0.22)
+
+func advance(delta: float) -> void:
+ if garden.guide.visible:return
+ super.advance(delta)
+ var moving := walking and motion_ratio > 0.03
+ _play(&"Walk" if moving else &"Idle")
+ animation_player.speed_scale = 1.0
+ # In-place footwork follows actual travel; collisions cannot leave him marching.
+ animation_player.advance(delta * maxf(motion_ratio, 0.08) if moving else delta)
+
+```
+
 ## cursor.gdshader
 
 ```gdshader
@@ -2390,6 +2436,7 @@ const INK := Color("483322")
 const ENTRIES := [
  ["People","Arthur","Arthur watches the north entrance in the morning, checks the garden plots through the day and rests at night. In heavy rain he seeks cover.","Arthur"],
  ["People","Meera","A familiar face among the garden paths. Meera checks the planted beds and flowers, rests at night and seeks shelter when heavy rain arrives.","Meera"],
+ ["People","Crypto","A curious visitor from much farther away than the next valley. Crypto explores the garden and inspects its plots by day, seeks cover in heavy rain and rests at night.","Crypto"],
  ["People","Angus McDoogal","Angus runs McDoogal Construction in the village. Visit his workshop to plan a cottage for your garden.","res://assets/npcs/angus.glb"],
  ["Animals","Robin","A bright little visitor with a warm red breast. Robins visit when water covers at least 1% of the garden, then hop and pause along the dry banks.","Robin"],
  ["Animals","Peacock","A colourful garden companion, with an iridescent neck and a magnificent tail.","Peacock"],
@@ -3105,6 +3152,13 @@ func _ready() -> void:
 		SelectionTarget.attach(npc, entry[0], Vector3(0.65, 1.5, 0.65))
 		additional_visitors.append(npc)
 		await _loading_step("WELCOMING THE NEIGHBOURS")
+	var crypto := preload("res://crypto_npc.gd").new()
+	crypto.name = "Crypto"
+	crypto.cell = Vector2i(6, 2)
+	add_child(crypto)
+	crypto.setup(self)
+	SelectionTarget.attach(crypto, "Crypto", Vector3(0.7, 1.35, 0.7))
+	additional_visitors.append(crypto)
 	await _loading_step("CALLING THE WILDLIFE")
 	wildlife=preload("res://garden_wildlife.gd").new()
 	add_child(wildlife)
@@ -7789,6 +7843,7 @@ func priority(kind: String, hour: float, rain: float, water: bool) -> String:
  if sleeping or energy<0.2:return "rest"
  if kind=="arthur":return "welcome" if hour<9 else "inspect"
  if kind=="meera":return "plants"
+ if kind=="crypto":return "inspect"
  if thirst>=0.6 and water:return "drink"
  if kind=="robin":return "riverbank"
  if hunger>=0.5:return "forage"

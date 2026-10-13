@@ -21,6 +21,7 @@ func priority(kind: String, hour: float, rain: float, water: bool) -> String:
  if sleeping or energy<0.2:return "rest"
  if kind=="arthur":return "welcome" if hour<9 else "inspect"
  if kind=="meera":return "plants"
+ if kind=="crypto":return "inspect"
  if thirst>=0.6 and water:return "drink"
  if kind=="robin":return "riverbank"
  if hunger>=0.5:return "forage"

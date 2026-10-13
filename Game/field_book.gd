@@ -5,6 +5,7 @@ const INK := Color("483322")
 const ENTRIES := [
  ["People","Arthur","Arthur watches the north entrance in the morning, checks the garden plots through the day and rests at night. In heavy rain he seeks cover.","Arthur"],
  ["People","Meera","A familiar face among the garden paths. Meera checks the planted beds and flowers, rests at night and seeks shelter when heavy rain arrives.","Meera"],
+ ["People","Crypto","A curious visitor from much farther away than the next valley. Crypto explores the garden and inspects its plots by day, seeks cover in heavy rain and rests at night.","Crypto"],
  ["People","Angus McDoogal","Angus runs McDoogal Construction in the village. Visit his workshop to plan a cottage for your garden.","res://assets/npcs/angus.glb"],
  ["Animals","Robin","A bright little visitor with a warm red breast. Robins visit when water covers at least 1% of the garden, then hop and pause along the dry banks.","Robin"],
  ["Animals","Peacock","A colourful garden companion, with an iridescent neck and a magnificent tail.","Peacock"],

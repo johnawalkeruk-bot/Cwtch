@@ -126,6 +126,13 @@ func _ready() -> void:
 		SelectionTarget.attach(npc, entry[0], Vector3(0.65, 1.5, 0.65))
 		additional_visitors.append(npc)
 		await _loading_step("WELCOMING THE NEIGHBOURS")
+	var crypto := preload("res://crypto_npc.gd").new()
+	crypto.name = "Crypto"
+	crypto.cell = Vector2i(6, 2)
+	add_child(crypto)
+	crypto.setup(self)
+	SelectionTarget.attach(crypto, "Crypto", Vector3(0.7, 1.35, 0.7))
+	additional_visitors.append(crypto)
 	await _loading_step("CALLING THE WILDLIFE")
 	wildlife=preload("res://garden_wildlife.gd").new()
 	add_child(wildlife)

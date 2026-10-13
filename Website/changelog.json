@@ -8,6 +8,40 @@
       "sections": []
     },
     {
+      "id": "0.1.35",
+      "label": "v0.1.35",
+      "date": "2026-10-13",
+      "title": "An unusually long-distance neighbour",
+      "sections": [
+        {
+          "heading": "A visitor from beyond the valley",
+          "items": [
+            "Added Crypto to the garden with his extracted rig, textured model and original unarmed walking and idle animations. Movement blends smoothly between walking and standing.",
+            "Crypto uses local garden AI: he explores and inspects plots by day, seeks cover in heavy rain and rests at night. Routes avoid water, crops, placed objects and other NPC reservations, with physical collision and smooth steering.",
+            "Added a Crypto entry and 3D preview to the Field Guide. Existing saves remain compatible; Crypto appears when the garden loads and his daily routine restarts with the scene."
+          ]
+        }
+      ],
+      "blog": {
+        "intro": "The valley has acquired a neighbour whose journey makes the walk from the village look rather modest. Crypto has arrived, and his first assignment is to inspect the garden without standing on anyone else. Interplanetary travel: impressive. Respecting the flower beds: essential.",
+        "why": [
+          "Crypto uses the same local decision system as the other garden characters, so his wandering has a purpose. He checks the plots, responds to the clock and heads for cover when Welsh weather remembers its job. No online AI service is involved.",
+          "The original unarmed walk and idle performances were converted with the weighted skeleton intact. Animation follows actual movement, so stopping at another resident does not leave him marching enthusiastically into their personal space."
+        ],
+        "issues": [
+          "The first converter could list the assets but could not read this game’s compressed vertices. Using the current game-specific parser and matching animation decoder resolved the mesh and animation conversion errors.",
+          "Materials are adapted for CWTCH lighting, including normal maps and simpler eyes. The source game’s dynamic mood render texture is not reproduced, and this update does not add dialogue, combat or jetpack flight.",
+          "Crypto’s walking, animated bones, occupied-space checks, water avoidance, rain response, night routine and pause behaviour passed isolated game tests. Existing NPC and shopkeeper regression checks passed too. The model was also checked in the garden renderer. This update remains local for manual publishing."
+        ],
+        "screenshots": [
+          {
+            "path": "assets/blog/crypto-garden-oct13.png",
+            "caption": "Crypto in the local garden build, framed at a clear test position with Arthur and Meera behind him. Captured in Godot with the interface hidden."
+          }
+        ]
+      }
+    },
+    {
       "id": "0.1.34",
       "label": "v0.1.34",
       "date": "2026-10-06",
